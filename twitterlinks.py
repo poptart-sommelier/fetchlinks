@@ -126,11 +126,8 @@ def thread_unshorten(q, td_ref_dict):
 		q.task_done()
 
 # TODO
-# 0) clone good infosec twitter onto throwaway account so we can use plaintext creds
-# 0) this can be done by creating a list on the real account, then importing the list on throwaway.
 # 1) THREADING FOR UNSHORTEN_URL
-# 3) get this ported to AWS and running, maybe as plaintext for now, dumping to webroot for reading
-# 4) flask megatutorial, and start using flask + DB in AWS.
+# 2) flask megatutorial, and start using flask + DB in AWS.
 
 api = twitter_auth()
 
