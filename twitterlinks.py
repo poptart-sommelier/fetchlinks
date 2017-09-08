@@ -156,7 +156,7 @@ for x in all_tweetdeets:
 	# 	print("User: @" + x['rt_user'] + " | Name: " + x['rt_name'])
 	# 	print(x['rt_text'])
 	# 	print("RT URL: " + x['rt_url'])
-	# 	print("*************************************************\n")#
+	# 	print("*************************************************\n")##
 
 if set_cursor:
 	print("Oldest tweet was: " + set_cursor)
