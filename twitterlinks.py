@@ -3,7 +3,6 @@
 # references:
 # https://dev.twitter.com/rest/public/timelines
 # http://docs.tweepy.org/en/v3.5.0/api.html
-#
 
 import tweepy
 import unshorten_links
@@ -25,10 +24,6 @@ CONSUMER_KEY = creds['twitter_creds'][0]['CONSUMER_KEY']
 CONSUMER_SECRET = creds['twitter_creds'][0]['CONSUMER_SECRET']
 ACCESS_TOKEN = creds['twitter_creds'][0]['ACCESS_TOKEN']
 ACCESS_TOKEN_SECRET = creds['twitter_creds'][0]['ACCESS_TOKEN_SECRET']
-
-# Variables for Threading/Queuing
-fetch_threads = 5
-the_queue = Queue()
 
 def twitter_auth():
 	auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
@@ -145,15 +140,6 @@ all_tweetdeets.extend(get_status_info(statuses))
 # TODO: NOW WE HAVE ALL TWEETS IN A LIST OF DICTIONARIES. CREATE THREADED REQUESTS TO EXTEND ALL URLS
 # 1) if !is_retweet, call unshorten function with all expanded_urls as argument, using queue to return using .put
 # 2) if is_retweet, call unshorten function with all expanded_urls as argument, using queue to return using .put
-
-for i in range(fetch_threads):
-	worker = threading.Thread(target=thread_unshorten, args=(the_queue,td))
-	worker.setDaemon(True)
-	worker.start()
-
-for td in all_tweetdeets:
-	#TODO MOVE THE LOGIC FOR IS_RETWEET DOWN HERE
-	thread_unshorten(q, td)
 
 # TODO: ADD LOGGING, OUTPUT THIS AS LOG ENTRY WHEN IN DEBUG MODE
 for x in all_tweetdeets:
