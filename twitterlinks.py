@@ -9,15 +9,15 @@ import unshorten_links
 import os
 import json
 import datetime
+import logging
 
-# TODO: OUTPUT ALL OF THIS TO A FILE, STRUCTURED AS JSON
-# TODO: LAST_ACCESSED IS NOT BEING WRITTEN (MUST PARSE FROM STATUSES)
 # TODO: ADD LOGGING, OUTPUT THIS AS LOG ENTRY WHEN IN DEBUG MODE
 # TODO: THREADING FOR UNSHORTEN_URL
 # TODO: flask megatutorial, and start using flask + DB in AWS.
-# TODO: FUNCTION TO PRINT EVERYTHING NICELY
-# TODO: FUNCTION TO OUTPUT TO JSON
-# TODO: MAKE SURE WE GRAB ALL TWEETS @LINE 121,122 statuses= (LOOP UNTIL NO NEW RETURNED OR UNTIL API ERROR)
+# TODO: FUNCTION (PPRINT) TO PRINT EVERYTHING NICELY
+# TODO: ROTATE LOGS
+
+logging.basicConfig(filename='twitterlinks.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 LAST_ACCESSED_FILE = "./LAST_ACCESSED.txt"
 
@@ -50,8 +50,10 @@ def last_accessed_read():
 			else:
 				return 1
 	except IOError:
+		logging.info('Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.')
 		print("Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.")
 		with open(LAST_ACCESSED_FILE, "w") as f:
+
 			last_accessed_write("1")
 		return 1
 
@@ -60,6 +62,7 @@ def last_accessed_write(last_write):
 		with open(LAST_ACCESSED_FILE, "w") as f:
 			f.write(last_write)
 	except IOError:
+		logging.info('Error writing to file ./LAST_ACCESSED.txt')
 		print("Error writing to file ./LAST_ACCESSED.txt")
 
 def write_json_output(_all_tweetdeets):
@@ -143,9 +146,12 @@ while True:
 		statuses = []
 		statuses = api.home_timeline(count=NUMBER_OF_ITEMS, since_id=set_cursor, include_entites=True, include_rts=True, tweet_mode='extended')
 		all_tweetdeets.extend(get_status_info(statuses))
+		if statuses:
+			logging.info('Retrieved %s tweets', len(statuses))
 		# INSERT BREAK HERE TO ONLY RUN ONCE
 		break
 	except tweepy.TweepError as e:
+		logging.info(e)
 		print(e)
 		break
 
@@ -167,11 +173,14 @@ while True:
 
 
 if set_cursor:
+	logging.info('Cursor was previously: %s', str(set_cursor))
 	print("Cursor was previously: " + str(set_cursor))
 
 if all_tweetdeets:
+	logging.info('Cursor now set to: %s', str(all_tweetdeets[0]['status_id']))
 	print("Cursor now set to: " + str(all_tweetdeets[0]['status_id']))
 	last_accessed_write(str(all_tweetdeets[0]['status_id']))
 	write_json_output(all_tweetdeets)
 else:
+	logging.info('No new tweets')
 	print("No new tweets")
