@@ -6,18 +6,21 @@
 
 import tweepy
 import unshorten_links
-import os
 import json
 import datetime
 import logging
+from logging.handlers import RotatingFileHandler
 
-# TODO: ADD LOGGING, OUTPUT THIS AS LOG ENTRY WHEN IN DEBUG MODE
 # TODO: THREADING FOR UNSHORTEN_URL
 # TODO: flask megatutorial, and start using flask + DB in AWS.
-# TODO: FUNCTION (PPRINT) TO PRINT EVERYTHING NICELY
-# TODO: ROTATE LOGS
 
-logging.basicConfig(filename='twitterlinks.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+# logging.basicConfig(filename='twitterlinks.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+logger = logging.getLogger("LOG")
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s','%m/%d/%Y %I:%M:%S %p')
+handler = RotatingFileHandler('twitterlinks.log',maxBytes=1000000,backupCount=5)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 LAST_ACCESSED_FILE = "./LAST_ACCESSED.txt"
 
@@ -50,7 +53,7 @@ def last_accessed_read():
 			else:
 				return 1
 	except IOError:
-		logging.info('Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.')
+		logger.info('Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.')
 		print("Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.")
 		with open(LAST_ACCESSED_FILE, "w") as f:
 
@@ -62,7 +65,7 @@ def last_accessed_write(last_write):
 		with open(LAST_ACCESSED_FILE, "w") as f:
 			f.write(last_write)
 	except IOError:
-		logging.info('Error writing to file ./LAST_ACCESSED.txt')
+		logger.info('Error writing to file ./LAST_ACCESSED.txt')
 		print("Error writing to file ./LAST_ACCESSED.txt")
 
 def write_json_output(_all_tweetdeets):
@@ -138,7 +141,6 @@ api = twitter_auth()
 
 set_cursor = last_accessed_read()
 
-# WHILE NOT tweepy.RateLimitError, reinit statuses[], grab another 200 (set cursor to newest in last batch), unshorten everything, then loop.
 all_tweetdeets = []
 
 while True:
@@ -147,40 +149,23 @@ while True:
 		statuses = api.home_timeline(count=NUMBER_OF_ITEMS, since_id=set_cursor, include_entites=True, include_rts=True, tweet_mode='extended')
 		all_tweetdeets.extend(get_status_info(statuses))
 		if statuses:
-			logging.info('Retrieved %s tweets', len(statuses))
+			logger.info('Retrieved %s tweets', len(statuses))
 		# INSERT BREAK HERE TO ONLY RUN ONCE
 		break
 	except tweepy.TweepError as e:
-		logging.info(e)
+		logger.info(e)
 		print(e)
 		break
 
-# for x in all_tweetdeets:
-	# print(x)
-	# print("\n*************************************************")
-	# print(x['status_id'])
-	# print("User: @" + x['user'] + " | Name: " + x['name'])
-	# print(x['text'])
-	# # print("EXPANDING: " + url['expanded_url'])
-	# print("URL: " + x['unshortened_url'])
-	# #print("*************************************************\n")
-	# if x['is_retweet']:
-	# 	print("RETWEETED:")
-	# 	print("User: @" + x['rt_user'] + " | Name: " + x['rt_name'])
-	# 	print(x['rt_text'])
-	# 	print("RT URL: " + x['rt_url'])
-	# 	print("*************************************************\n")##
-
-
 if set_cursor:
-	logging.info('Cursor was previously: %s', str(set_cursor))
+	logger.info('Cursor was previously: %s', str(set_cursor))
 	print("Cursor was previously: " + str(set_cursor))
 
 if all_tweetdeets:
-	logging.info('Cursor now set to: %s', str(all_tweetdeets[0]['status_id']))
+	logger.info('Cursor now set to: %s', str(all_tweetdeets[0]['status_id']))
 	print("Cursor now set to: " + str(all_tweetdeets[0]['status_id']))
 	last_accessed_write(str(all_tweetdeets[0]['status_id']))
 	write_json_output(all_tweetdeets)
 else:
-	logging.info('No new tweets')
+	logger.info('No new tweets containing links')
 	print("No new tweets")
