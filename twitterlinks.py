@@ -5,11 +5,13 @@
 # http://docs.tweepy.org/en/v3.5.0/api.html
 
 import tweepy
-import unshorten_links
 import json
 import datetime
 import logging
 from logging.handlers import RotatingFileHandler
+import threading
+import queue
+import requests
 
 # TODO: THREADING FOR UNSHORTEN_URL
 # TODO: flask megatutorial, and start using flask + DB in AWS.
@@ -136,6 +138,20 @@ def get_status_info(statuses):
 
 	return(_all_tweetdeets)
 
+# THREADING
+def get_urls(i):
+	if all_tweetdeets[i]['tco_expandedurl']:
+		r = requests.get(''.join(all_tweetdeets[i]['tco_expandedurl']))
+		all_tweetdeets[i]['unshortened_url'] = r.url
+
+# THREADING
+def worker():
+	while True:
+		index = q.get()
+		if index == None:
+			break
+		get_urls(index)
+		q.task_done()
 
 api = twitter_auth()
 
@@ -157,6 +173,26 @@ while True:
 		print(e)
 		break
 
+# THREADING
+WORKER_THREADS = 50
+q = queue.Queue()
+threads = []
+
+for i in range(WORKER_THREADS):
+	t = threading.Thread(target=worker)
+	t.start()
+	threads.append(t)
+
+for i in range(len(all_tweetdeets)):
+	q.put(i)
+
+q.join()
+
+for i in range(WORKER_THREADS):
+	q.put(None)
+for t in threads:
+	t.join()
+
 if set_cursor:
 	logger.info('Cursor was previously: %s', str(set_cursor))
 	print("Cursor was previously: " + str(set_cursor))
@@ -169,3 +205,4 @@ if all_tweetdeets:
 else:
 	logger.info('No new tweets containing links')
 	print("No new tweets")
+
