@@ -205,4 +205,3 @@ if all_tweetdeets:
 else:
 	logger.info('No new tweets containing links')
 	print("No new tweets")
-
