@@ -145,16 +145,16 @@ def get_status_info(statuses):
 # THREADING
 def get_urls(i):
 	if all_tweetdeets[i]['tco_expandedurl']:
-		for u in all_tweetdeets[i]['tco_expandedurl']:
+		for ex_urls in all_tweetdeets[i]['tco_expandedurl']:
 			try:
-				r = requests.get(''.join(u))
+				r = requests.get(''.join(ex_urls))
 				all_tweetdeets[i]['unshortened_url'].append(r.url)
 			except requests.exceptions.ConnectionError as e:
 				logger.error(e)
 	if all_tweetdeets[i]['rt_tco_expandedurl']:
-		for u in all_tweetdeets[i]['rt_tco_expandedurl']:
+		for rt_ex_urls in all_tweetdeets[i]['rt_tco_expandedurl']:
 			try:
-				r = requests.get(''.join(u))
+				r = requests.get(''.join(rt_ex_urls))
 				all_tweetdeets[i]['rt_unshortened_url'].append(r.url)
 			except requests.exceptions.ConnectionError as e:
 				logger.error(e)
