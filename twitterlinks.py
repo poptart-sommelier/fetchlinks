@@ -15,12 +15,13 @@ import requests
 
 # TODO: THREADING FOR UNSHORTEN_URL
 # TODO: flask megatutorial, and start using flask + DB in AWS.
+# TODO: BUG - msg id: 983924421508255744 shows up in results but does not have a URL.
 
 # logging.basicConfig(filename='twitterlinks.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 logger = logging.getLogger("LOG")
 logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s','%m/%d/%Y %I:%M:%S %p')
-handler = RotatingFileHandler('twitterlinks.log',maxBytes=1000000,backupCount=5)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', '%m/%d/%Y %I:%M:%S %p')
+handler = RotatingFileHandler('twitterlinks.log', maxBytes=1000000, backupCount=5)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -95,7 +96,8 @@ def get_status_info(statuses):
 			'rt_name': '',
 			'rt_text': '',
 			'is_retweet': '',
-			'rt_tco_expandedurl': '',
+			'rt_tco_expandedurl': [],
+			'rt_unshortened_url': [],
 			'created_at': ''
 		}
 
@@ -113,10 +115,12 @@ def get_status_info(statuses):
 						#tweetdeets['unshortened_url'].append(unshorten_links.unshorten(url['expanded_url']))
 				except:
 					pass
+
 				# IS THIS A RETWEET?
 				if not hasattr(status, 'retweeted_status'):
-
 					tweetdeets['is_retweet'] = False
+				else:
+					tweetdeets['is_retweet'] = True
 
 				try:
 					if status.retweeted_status.entities['urls']:
@@ -141,8 +145,19 @@ def get_status_info(statuses):
 # THREADING
 def get_urls(i):
 	if all_tweetdeets[i]['tco_expandedurl']:
-		r = requests.get(''.join(all_tweetdeets[i]['tco_expandedurl']))
-		all_tweetdeets[i]['unshortened_url'] = r.url
+		for u in all_tweetdeets[i]['tco_expandedurl']:
+			try:
+				r = requests.get(''.join(u))
+				all_tweetdeets[i]['unshortened_url'].append(r.url)
+			except requests.exceptions.ConnectionError as e:
+				logger.error(e)
+	if all_tweetdeets[i]['rt_tco_expandedurl']:
+		for u in all_tweetdeets[i]['rt_tco_expandedurl']:
+			try:
+				r = requests.get(''.join(u))
+				all_tweetdeets[i]['rt_unshortened_url'].append(r.url)
+			except requests.exceptions.ConnectionError as e:
+				logger.error(e)
 
 # THREADING
 def worker():
@@ -160,6 +175,7 @@ set_cursor = last_accessed_read()
 all_tweetdeets = []
 
 while True:
+	thing = 0
 	try:
 		statuses = []
 		statuses = api.home_timeline(count=NUMBER_OF_ITEMS, since_id=set_cursor, include_entites=True, include_rts=True, tweet_mode='extended')
@@ -167,14 +183,16 @@ while True:
 		if statuses:
 			logger.info('Retrieved %s tweets', len(statuses))
 		# INSERT BREAK HERE TO ONLY RUN ONCE
-		break
+		thing += 1
+		if thing == 2:
+			break
 	except tweepy.TweepError as e:
 		logger.info(e)
 		print(e)
 		break
 
 # THREADING
-WORKER_THREADS = 50
+WORKER_THREADS = 25
 q = queue.Queue()
 threads = []
 
