@@ -5,6 +5,9 @@ import json
 import urllib3
 from requests_oauthlib import OAuth1
 
+# TODO: THREAD URL UNSHORTEN (TEST LEN FIRST WITH urllib3 to reduce lookups)
+# TODO: API CALLS SHOULD HAVE A PARAMETER THAT LIMITS THE NUMBER OF CALLS (FOR TESTING). I.E DON'T LOOP UNTIL THROTTLED
+
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
 
@@ -20,7 +23,7 @@ ACCESS_TOKEN_SECRET = creds['twitter_creds'][0]['ACCESS_TOKEN_SECRET']
 
 AUTH = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
-HOME_TIMELINE_URL = 'https://api.twitter.com/1.1/statuses/home_timeline.json?tweet_mode=extended&count=200&include_rts=True&include_entities=True&since_id='
+HOME_TIMELINE_URL = 'https://api.twitter.com/1.1/statuses/home_timeline.json?tweet_mode=extended&count=200&include_rts=True&include_entities=True'
 
 def parse_retweet(json_response):
 	urls = [url['expanded_url'] for url in json_response['retweeted_status']['entities']['urls']]
@@ -30,7 +33,9 @@ def parse_retweet(json_response):
 			'screen_name': json_response['retweeted_status']['user']['screen_name'],
 			'user': json_response['retweeted_status']['user']['name'],
 			'full_text': json_response['retweeted_status']['full_text'],
-			'urls': [url['expanded_url'] for url in json_response['retweeted_status']['entities']['urls']]
+			'id': json_response['retweeted_status']['id_str'],
+			'tweet_direct_link': 'https://twitter.com/' + json_response['retweeted_status']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str'],
+			'urls': urls
 		}
 		return r_dict
 
@@ -46,12 +51,15 @@ def parse_tweet(json_response):
 			'screen_name': json_response['user']['screen_name'],
 			'user': json_response['user']['name'],
 			'full_text': json_response['full_text'],
-			'urls': [url['expanded_url'] for url in json_response['entities']['urls']]
+			'id': json_response['id_str'],
+			'tweet_direct_link': 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str'],
+			'urls': urls
 		}
 		return r_dict
 
 	else:
 		return None
+
 
 def get_last_tweet_id():
 	try:
@@ -66,8 +74,7 @@ def get_last_tweet_id():
 		# logger.info('Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.')
 		print('Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.')
 
-		with open(LAST_ACCESSED_FILE, 'w') as f:
-			set_last_tweet_id('1')
+		set_last_tweet_id('1')
 
 		return 1
 
@@ -82,22 +89,43 @@ def set_last_tweet_id(last_write):
 		print('Error writing to file ./LAST_ACCESSED.txt')
 
 
-def get_tweets(since_id=1):
+def is_shortened(url):
+	# shortened paths look like this:
+	# https://bit.ly/AjIOdjl/
+	# use urllib to measure the following:
+	# host length
+	# does it have a path
+	# how long is the path (shortened paths only have 6-8 characters-ish)
+	# does the path have more than one '/'
+	# we can eliminate a lot of urls that way, then unshorten the rest
+	pass
+
+
+def unshorten_url(url):
+	# threaded function to unshorten urls
+	pass
+
+
+def get_tweets(since_id=1, max_id=None):
 	tweets = []
 
-	req_path = HOME_TIMELINE_URL + str(since_id)
+	if max_id:
+		req_path = HOME_TIMELINE_URL + '&since_id=' + str(since_id) + '&max_id=' + str(max_id)
+	else:
+		req_path = HOME_TIMELINE_URL + '&since_id=' + str(since_id)
+
 	r = requests.get(req_path, auth=AUTH)
 
 	if r.status_code == 200:
 		json_resp = r.json()
 
 		first_last_ids = {
-			'latest_id': max([i['id'] for i in r.json()]),
-			'oldest_id': min([i['id'] for i in r.json()])
+			'latest_id': max([j['id'] for j in r.json()]),
+			'oldest_id': min([j['id'] for j in r.json()])
 		}
 		print(first_last_ids)
 
-		set_last_tweet_id(first_last_ids['latest_id'])
+# 		set_last_tweet_id(first_last_ids['latest_id'])
 
 		for jr in json_resp:
 			# Is a retweet
@@ -111,19 +139,36 @@ def get_tweets(since_id=1):
 				if t:
 					tweets.append(t)
 
-		return tweets
+		return tweets, first_last_ids, r.status_code
 
 	else:
-		return False
+		return None, None, None
 
 all_tweets = []
 
-# while True:
-for i in range(1):
-	all_t = get_tweets(get_last_tweet_id())
-	if all_t:
-		all_tweets.extend(all_t)
-	else:
-		continue
+temp_tweets = []
 
-print(all_tweets)
+last_tweet_id = get_last_tweet_id()
+
+temp_tweets, first_last, status_code = get_tweets(last_tweet_id)
+
+all_tweets.extend(temp_tweets)
+
+if status_code == 200:
+# set_last_tweet_id(first_last['latest_id'])
+	# use 'while' for normal function
+	# while True:
+	# use 'for' to restrict number of api calls.
+	for i in range(2):
+		temp_tweets, first_last, status_code = get_tweets(last_tweet_id, first_last['oldest_id'])
+		# while since_id < max_id - 1
+		if status_code == 200:
+			if first_last['latest_id'] - 1 > int(last_tweet_id):
+				all_tweets.extend(temp_tweets)
+			else:
+				break
+		else:
+			set_last_tweet_id(first_last['latest_id'])
+			break
+
+print(json.dumps(all_tweets))
