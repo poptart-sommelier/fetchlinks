@@ -9,7 +9,7 @@ import datetime
 import collections
 
 # TODO: Add logging
-# TODO: IMPLEMENT URL UNSHORTEN AND THREAD IT
+# TODO: IMPLEMENT URL UNSHORTEN AND THREAD IT.
 
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
