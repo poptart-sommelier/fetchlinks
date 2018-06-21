@@ -9,7 +9,7 @@ import datetime
 import collections
 
 # TODO: Add logging
-# TODO: THREAD URL UNSHORTEN (TEST LEN FIRST WITH urllib3 to reduce lookups)
+# TODO: IMPLEMENT URL UNSHORTEN AND THREAD IT
 
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
@@ -124,14 +124,6 @@ def set_last_tweet_id(last_write):
 
 
 def is_shortened(url):
-	# shortened paths look like this:
-	# https://bit.ly/AjIOdjl
-	# use urllib to measure the following:
-	# host length
-	# does it have a path
-	# how long is the path (shortened paths only have 6-8 characters-ish)
-	# does the path have more than one '/'
-	# we can eliminate a lot of urls that way, then unshorten the rest
 	parsed_url = urllib3.util.parse_url(url)
 
 	cntr = collections.Counter(parsed_url.path)
