@@ -2,11 +2,10 @@
 
 import requests
 import json
-import urllib3
 from requests_oauthlib import OAuth1
 import operator
 import datetime
-import collections
+import unshorten_links
 
 # TODO: Add logging
 # TODO: IMPLEMENT URL UNSHORTEN AND THREAD IT.
@@ -41,6 +40,7 @@ def parse_retweet(json_response):
 			'id': json_response['retweeted_status']['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str'],
 			'urls': urls,
+			'unshort_urls': [None] * len(urls),
 			'tweet_type': 'retweet'
 		}
 		return r_dict
@@ -60,6 +60,7 @@ def parse_quoted_tweet(json_response):
 			'id': json_response['quoted_status']['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str'],
 			'urls': urls,
+			'unshort_urls': [None] * len(urls),
 			'tweet_type': 'quoted tweet'
 		}
 		return r_dict
@@ -79,6 +80,7 @@ def parse_tweet(json_response):
 			'id': json_response['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str'],
 			'urls': urls,
+			'unshort_urls': [None] * len(urls),
 			'tweet_type': 'standard tweet'
 		}
 		return r_dict
@@ -123,26 +125,7 @@ def set_last_tweet_id(last_write):
 		print('Error writing to file ./LAST_ACCESSED.txt')
 
 
-def is_shortened(url):
-	parsed_url = urllib3.util.parse_url(url)
 
-	cntr = collections.Counter(parsed_url.path)
-
-	if cntr['/'] > 1:
-		return False
-	if 'sans.org/u/' not in url:
-		return None
-	if len(parsed_url.host) > 12:
-		return False
-	if parsed_url.path and len(parsed_url.path) > 12:
-		return False
-	if parsed_url.path == '/' or parsed_url.path == None:
-		return False
-
-
-def unshorten_url(url):
-	# threaded function to unshorten urls
-	pass
 
 
 def get_tweets(since_id=1, max_id=None):
@@ -188,6 +171,7 @@ def get_tweets(since_id=1, max_id=None):
 	else:
 		return None, None, None
 
+
 def go(api_calls):
 	all_tweets = []
 	temp_tweets = []
@@ -218,13 +202,10 @@ def go(api_calls):
 
 	all_tweets.sort(key=operator.itemgetter('id'))
 
-#	print(json.dumps(all_tweets))
+	all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
 
-	for x in all_tweets:
-		for u in x['urls']:
-			print(u)
-			print(is_shortened(u))
+	print(json.dumps(all_tweets_unshort))
 
-	write_json_output(all_tweets)
+	write_json_output(all_tweets_unshort)
 
 go(0)
