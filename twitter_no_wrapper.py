@@ -8,7 +8,6 @@ import datetime
 import unshorten_links
 
 # TODO: Add logging
-# TODO: IMPLEMENT URL UNSHORTEN AND THREAD IT.
 
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
@@ -28,6 +27,7 @@ AUTH = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 JSON_OUTPUT_DIR = './'
 
 HOME_TIMELINE_URL = 'https://api.twitter.com/1.1/statuses/home_timeline.json?tweet_mode=extended&count=200&include_rts=True&include_entities=True'
+
 
 def parse_retweet(json_response):
 	urls = [url['expanded_url'] for url in json_response['retweeted_status']['entities']['urls']]
@@ -125,9 +125,6 @@ def set_last_tweet_id(last_write):
 		print('Error writing to file ./LAST_ACCESSED.txt')
 
 
-
-
-
 def get_tweets(since_id=1, max_id=None):
 	tweets = []
 
@@ -180,16 +177,15 @@ def go(api_calls):
 
 	temp_tweets, first_last, status_code = get_tweets(last_tweet_id)
 
-	if (temp_tweets):
+	if temp_tweets:
 		last_tweet_id_new = first_last['latest_id']
 		all_tweets.extend(temp_tweets)
 		# use 'while' for normal function
 		# while True:
 		# use 'for' to restrict number of api calls.
-		if (last_tweet_id != first_last['oldest_id'] - 1):
-			for i in range(api_calls):
+		for i in range(api_calls):
+			if last_tweet_id < first_last['oldest_id'] - 1:
 				temp_tweets, first_last, status_code = get_tweets(last_tweet_id, first_last['oldest_id'])
-				# while since_id < max_id - 1
 				if status_code == 200:
 					if first_last['latest_id'] - 1 > int(last_tweet_id):
 						all_tweets.extend(temp_tweets)
@@ -197,6 +193,8 @@ def go(api_calls):
 						break
 				else:
 					break
+			else:
+				break
 
 		set_last_tweet_id(last_tweet_id_new)
 
@@ -208,4 +206,4 @@ def go(api_calls):
 
 	write_json_output(all_tweets_unshort)
 
-go(0)
+go(10)

@@ -11,6 +11,7 @@ import urllib3
 
 THREADS = 10
 
+
 def is_shortened(url):
 	parsed_url = urllib3.util.parse_url(url)
 
@@ -56,22 +57,3 @@ def unshorten_start(all_tweets_dict_list):
 	results = pool.map(unshorten, all_tweets_dict_list)
 
 	return results
-
-
-# we only want this to run if it is called directly off the command line
-if __name__ == "__main__":
-	if len(sys.argv) < 2:
-		print("Please enter URL to unshorten")
-		exit()
-	else:
-		try:
-			unshorturlinfo = unshorten(sys.argv[1])
-		except:
-			print("Something went wrong...")
-			pass
-
-	print("Unshortened URL:")
-	print(unshorturlinfo)
-	print("")
-
-
