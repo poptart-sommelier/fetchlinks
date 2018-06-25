@@ -8,6 +8,18 @@ import datetime
 import unshorten_links
 
 # TODO: Add logging
+# TODO: explain this (happened with 10 API calls) should keep going back further, but stops at 1009889141138575360:
+# {'latest_id': 1011099358417358848, 'oldest_id': 1010657343883890689}
+# {'latest_id': 1010657343883890689, 'oldest_id': 1010278946519175168}
+# {'latest_id': 1010278946519175168, 'oldest_id': 1010123594335227905}
+# {'latest_id': 1010123594335227905, 'oldest_id': 1009889141138575360}
+# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
+# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
+# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
+# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
+# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
+# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
+# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
 
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
