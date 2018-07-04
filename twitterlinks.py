@@ -13,9 +13,14 @@ import threading
 import queue
 import requests
 
-# TODO: THREADING FOR UNSHORTEN_URL
 # TODO: flask megatutorial, and start using flask + DB in AWS.
-# TODO: BUG - msg id: 983924421508255744 shows up in results but does not have a URL.
+# TODO: REMOVE TWEEPY, USE API DIRECTLY - SEE JUPYTER NOTEBOOK
+# TODO: THREADING FOR UNSHORTEN_URL - but eliminate obvious non-short (really long paths? longer hostnames? anything with a slash in the path?)
+# TODO: CONT. - DROP IF NO PATH, OR IF PATH HAS AN EXTRA SLASH IN IT
+# TODO: ---- ABOVE SHOULD BE DONE USING urllib3.util.parse_url
+# TODO: PROBABLY JUST REWRITE IT, SHORTER/BETTER.
+# TODO: API CALLS SHOULD HAVE A PARAMETER THAT LIMITS THE NUMBER OF CALLS (FOR TESTING). I.E DON'T LOOP UNTIL THROTTLED
+#
 
 # logging.basicConfig(filename='twitterlinks.log', level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 logger = logging.getLogger("LOG")
@@ -170,22 +175,26 @@ def worker():
 
 api = twitter_auth()
 
-set_cursor = last_accessed_read()
+cursor_bookmark = last_accessed_read()
 
 all_tweetdeets = []
 
 while True:
 	thing = 0
 	try:
-		statuses = []
-		statuses = api.home_timeline(count=NUMBER_OF_ITEMS, since_id=set_cursor, include_entites=True, include_rts=True, tweet_mode='extended')
+# 		statuses = []
+		# TODO:
+		# this is not working as intended. - we are getting the same 200 items over and over until we hit the max
+		# 1) the lookup should be a function
+		# 2) first lookup uses since_id - aka only show me things that happened between last time and now
+		# 3) then we have to loop, using 'max_id', to say 'ok, you gave me 5pm back to 4pm, now my max is 4pm, give me 4pm to 3pm, etc...
+		# 4) statuses (an object of api.home_timeline), has the properties max_id and since_d, statuses.max_id, etc... use that to loop
+		statuses = api.home_timeline(count=NUMBER_OF_ITEMS, since_id=cursor_bookmark, include_entites=True, include_rts=True, tweet_mode='extended')
 		all_tweetdeets.extend(get_status_info(statuses))
 		if statuses:
 			logger.info('Retrieved %s tweets', len(statuses))
 		# INSERT BREAK HERE TO ONLY RUN ONCE
-		thing += 1
-		if thing == 2:
-			break
+		break
 	except tweepy.TweepError as e:
 		logger.info(e)
 		print(e)
@@ -211,9 +220,9 @@ for i in range(WORKER_THREADS):
 for t in threads:
 	t.join()
 
-if set_cursor:
-	logger.info('Cursor was previously: %s', str(set_cursor))
-	print("Cursor was previously: " + str(set_cursor))
+if cursor_bookmark:
+	logger.info('Cursor was previously: %s', str(cursor_bookmark))
+	print("Cursor was previously: " + str(cursor_bookmark))
 
 if all_tweetdeets:
 	logger.info('Cursor now set to: %s', str(all_tweetdeets[0]['status_id']))

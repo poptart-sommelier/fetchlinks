@@ -8,19 +8,9 @@ import datetime
 import unshorten_links
 
 # TODO: Add logging
+# TODO: Evaluate - This could be streaming instead of polling - http://blog.keyrus.co.uk/streaming_data_from_twitter_using_python.html
 # TODO: explain this (happened with 10 API calls) should keep going back further, but stops at 1009889141138575360:
-# {'latest_id': 1011099358417358848, 'oldest_id': 1010657343883890689}
-# {'latest_id': 1010657343883890689, 'oldest_id': 1010278946519175168}
-# {'latest_id': 1010278946519175168, 'oldest_id': 1010123594335227905}
-# {'latest_id': 1010123594335227905, 'oldest_id': 1009889141138575360}
-# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
-# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
-# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
-# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
-# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
-# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
-# {'latest_id': 1009889141138575360, 'oldest_id': 1009889141138575360}
-
+mcten/status/1013306001599156225
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
 
@@ -175,7 +165,7 @@ def get_tweets(since_id=1, max_id=None):
 				if t:
 					tweets.append(t)
 
-		return tweets, first_last_ids, r.status_code
+		return tweets, first_last_ids, r.status_code, r.headers['x-rate-limit-remaining']
 
 	else:
 		return None, None, None
@@ -187,7 +177,7 @@ def go(api_calls):
 
 	last_tweet_id = get_last_tweet_id()
 
-	temp_tweets, first_last, status_code = get_tweets(last_tweet_id)
+	temp_tweets, first_last, status_code, rate_limit_remaining = get_tweets(last_tweet_id)
 
 	if temp_tweets:
 		last_tweet_id_new = first_last['latest_id']
@@ -195,9 +185,9 @@ def go(api_calls):
 		# use 'while' for normal function
 		# while True:
 		# use 'for' to restrict number of api calls.
-		for i in range(api_calls):
-			if last_tweet_id < first_last['oldest_id'] - 1:
-				temp_tweets, first_last, status_code = get_tweets(last_tweet_id, first_last['oldest_id'])
+		for i in range(api_calls - 1):
+			if last_tweet_id < first_last['oldest_id'] - 1 and int(rate_limit_remaining) > 0:
+				temp_tweets, first_last, status_code, rate_limit_remaining = get_tweets(last_tweet_id, first_last['oldest_id'])
 				if status_code == 200:
 					if first_last['latest_id'] - 1 > int(last_tweet_id):
 						all_tweets.extend(temp_tweets)
@@ -218,4 +208,4 @@ def go(api_calls):
 
 	write_json_output(all_tweets_unshort)
 
-go(10)
+go(5)
