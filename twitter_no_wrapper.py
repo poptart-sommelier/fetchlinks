@@ -9,8 +9,7 @@ import unshorten_links
 
 # TODO: Add logging
 # TODO: Evaluate - This could be streaming instead of polling - http://blog.keyrus.co.uk/streaming_data_from_twitter_using_python.html
-# TODO: explain this (happened with 10 API calls) should keep going back further, but stops at 1009889141138575360:
-mcten/status/1013306001599156225
+
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
 
