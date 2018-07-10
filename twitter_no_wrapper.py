@@ -185,7 +185,10 @@ def go(api_calls):
 		# while True:
 		# use 'for' to restrict number of api calls.
 		for i in range(api_calls - 1):
-			if last_tweet_id < first_last['oldest_id'] - 1 and int(rate_limit_remaining) > 0:
+			if last_tweet_id < first_last['oldest_id'] - 1 and \
+							int(rate_limit_remaining) > 0 and \
+							first_last['latest_id'] > first_last['oldest_id']:
+
 				temp_tweets, first_last, status_code, rate_limit_remaining = get_tweets(last_tweet_id, first_last['oldest_id'])
 				if status_code == 200:
 					if first_last['latest_id'] - 1 > int(last_tweet_id):
@@ -207,4 +210,4 @@ def go(api_calls):
 
 	write_json_output(all_tweets_unshort)
 
-go(5)
+go(10)

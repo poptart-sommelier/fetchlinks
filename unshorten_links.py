@@ -38,10 +38,14 @@ def is_shortened(url):
 def unshorten(tweet):
 	for index, url in enumerate(tweet['urls']):
 		if is_shortened(url):
-			r = requests.get(url)
-			if r.status_code == 200:
-				unshortened_url = r.url
-				tweet['unshort_urls'][index] = unshortened_url
+			try:
+				r = requests.get(url)
+				if r.status_code == 200:
+					unshortened_url = r.url
+					tweet['unshort_urls'][index] = unshortened_url
+			except Exception as e:
+				print(e)
+				print("Url:" + url)
 		else:
 			continue
 
