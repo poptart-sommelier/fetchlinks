@@ -68,8 +68,10 @@ def prep_json_for_db(json_data):
 
 
 def start():
-	db_rows = prep_json_for_db(read_json_file())
-	db_insert(db_rows)
+	for file in get_new_files(JSON_FILE_LOCATION):
+		json_from_file = read_json_file(file)
+		db_rows = prep_json_for_db(json_from_file)
+		db_insert(db_rows)
 
 start()
 
