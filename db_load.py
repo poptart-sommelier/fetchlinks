@@ -4,7 +4,7 @@ import glob
 import os
 from pathlib import Path
 
-# TODO: Create script to generate DB, table, permissions
+# TODO: Create script to generate DB, table, permissions, etc.
 
 JSON_FILE_LOCATION '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/'
 JSON_BACKUP_DIR '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/OLD/'

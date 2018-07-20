@@ -2,6 +2,8 @@ import json
 import requests
 from requests_oauthlib import OAuth1
 
+# MAIN PART OF THIS IS USING 'requests.get(stream=True)
+
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
 
 json_data = open(CRED_PATH).read()
