@@ -8,7 +8,6 @@ import datetime
 import unshorten_links
 
 # TODO: Add logging
-# TODO: Evaluate - This could be streaming instead of polling - http://blog.keyrus.co.uk/streaming_data_from_twitter_using_python.html
 
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
@@ -31,7 +30,7 @@ HOME_TIMELINE_URL = 'https://api.twitter.com/1.1/statuses/home_timeline.json?twe
 
 
 def parse_retweet(json_response):
-	urls = [url['expanded_url'] for url in json_response['retweeted_status']['entities']['urls']]
+	urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['retweeted_status']['entities']['urls']]
 
 	if len(urls) > 0:
 		r_dict = {
@@ -41,7 +40,6 @@ def parse_retweet(json_response):
 			'id': json_response['retweeted_status']['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str'],
 			'urls': urls,
-			'unshort_urls': [None] * len(urls),
 			'tweet_type': 'retweet'
 		}
 		return r_dict
@@ -51,7 +49,7 @@ def parse_retweet(json_response):
 
 
 def parse_quoted_tweet(json_response):
-	urls = [url['expanded_url'] for url in json_response['quoted_status']['entities']['urls']]
+	urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['quoted_status']['entities']['urls']]
 
 	if len(urls) > 0:
 		r_dict = {
@@ -61,7 +59,6 @@ def parse_quoted_tweet(json_response):
 			'id': json_response['quoted_status']['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str'],
 			'urls': urls,
-			'unshort_urls': [None] * len(urls),
 			'tweet_type': 'quoted tweet'
 		}
 		return r_dict
@@ -71,7 +68,7 @@ def parse_quoted_tweet(json_response):
 
 
 def parse_tweet(json_response):
-	urls = [url['expanded_url'] for url in json_response['entities']['urls']]
+	urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['entities']['urls']]
 
 	if len(urls) > 0:
 		r_dict = {
@@ -81,7 +78,6 @@ def parse_tweet(json_response):
 			'id': json_response['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str'],
 			'urls': urls,
-			'unshort_urls': [None] * len(urls),
 			'tweet_type': 'standard tweet'
 		}
 		return r_dict
@@ -210,4 +206,4 @@ def go(api_calls):
 
 	write_json_output(all_tweets_unshort)
 
-go(10)
+go(1)
