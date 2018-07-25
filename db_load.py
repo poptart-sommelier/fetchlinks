@@ -5,14 +5,16 @@ import os
 from pathlib import Path
 
 # TODO: Create script to generate DB, table, permissions, etc.
+# TODO: PROPERLY IMPLEMENT FINDING NEW FILES AND LOADING THEM.
+# RIGHT NOW THIS ONLY WORKS WITH HARDCODED JSONFILE
 
-JSON_FILE_LOCATION '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/'
-JSON_BACKUP_DIR '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/OLD/'
-JSONFILE = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/json_output_2018-07-08_105145.json'
+JSON_FILE_LOCATION = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/'
+JSON_BACKUP_DIR = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/OLD/'
+JSONFILE = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/json_output_2018-07-24_112519.json'
 
 
 def read_json_file(JSONFILE):
-	with open (JSONFILE, 'r') as f:
+	with open(JSONFILE, 'r') as f:
 		all_json_data = json.load(f)
 	return all_json_data
 
@@ -57,23 +59,30 @@ def prep_json_for_db(json_data):
 		unshorturl_list = []
 
 		for url in j['urls']:
-			if url is not None:
-				url_list.append(url)
-		for unshorturl in j['unshort_urls']:
-			if unshorturl is not None:
-				unshorturl_list.append(unshorturl)
+			if url['url'] is not None:
+				url_list.append(json.dumps(url))
+				if url['unshort_url'] is not None:
+					unshorturl_list.append(url['unshort_url'])
+				else:
+					unshorturl_list.append(url['url'])
 
-		list_of_rows_for_db.append(( j['tweet_direct_link'], '|'.join(url_list), j['full_text'], j['id'], j['user'],
-				j['screen_name'], '|'.join(unshorturl_list), j['tweet_type'] ))
+		list_of_rows_for_db.append((j['tweet_direct_link'], '|'.join(url_list), j['full_text'], j['id'], j['user'],
+				j['screen_name'], '|'.join(unshorturl_list), j['tweet_type']))
 
 	return list_of_rows_for_db
 
 
 def start():
-	for file in get_new_files(JSON_FILE_LOCATION):
-		json_from_file = read_json_file(file)
-		db_rows = prep_json_for_db(json_from_file)
-		db_insert(db_rows)
+	# USE THIS FOR PROD
+	# for file in get_new_files(JSON_FILE_LOCATION):
+	# 	json_from_file = read_json_file(file)
+	# 	db_rows = prep_json_for_db(json_from_file)
+	# 	db_insert(db_rows)
+
+	# USE THIS FOR TESTING
+	json_from_file = read_json_file(JSONFILE)
+	db_rows = prep_json_for_db(json_from_file)
+	db_insert(db_rows)
 
 start()
 

@@ -177,9 +177,6 @@ def go(api_calls):
 	if temp_tweets:
 		last_tweet_id_new = first_last['latest_id']
 		all_tweets.extend(temp_tweets)
-		# use 'while' for normal function
-		# while True:
-		# use 'for' to restrict number of api calls.
 		for i in range(api_calls - 1):
 			if last_tweet_id < first_last['oldest_id'] - 1 and \
 							int(rate_limit_remaining) > 0 and \
