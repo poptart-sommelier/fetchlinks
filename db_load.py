@@ -10,7 +10,7 @@ from pathlib import Path
 
 JSON_FILE_LOCATION = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/'
 JSON_BACKUP_DIR = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/OLD/'
-JSONFILE = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/json_output_2018-07-25_124242.json'
+JSONFILE = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/json_output_2018-07-25_220620.json'
 
 
 def read_json_file(JSONFILE):

@@ -88,7 +88,7 @@ def parse_tweet(json_response):
 
 def write_json_output(_all_tweets):
 
-	json_output = JSON_OUTPUT_DIR + "json_output_" + str(datetime.datetime.now().strftime("%Y-%m-%d_%I%M%S")) + ".json"
+	json_output = JSON_OUTPUT_DIR + "json_output_" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")) + ".json"
 
 	with open(json_output, 'w') as j:
 		json.dump(_all_tweets, j)
@@ -203,4 +203,4 @@ def go(api_calls):
 
 	write_json_output(all_tweets_unshort)
 
-go(3)
+go(9)
