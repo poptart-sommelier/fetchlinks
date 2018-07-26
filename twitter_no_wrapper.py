@@ -203,4 +203,4 @@ def go(api_calls):
 
 	write_json_output(all_tweets_unshort)
 
-go(1)
+go(3)
