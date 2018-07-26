@@ -6,7 +6,8 @@ Remaining work:
 4) cron job to delete archives older than X days (30?)
 5) double check flask app, make sure nothing too confidential
 6) move flask app to docker container
-7) architecture:
+7) pagination for flask app (100 per page?)
+8) architecture:
 a) scraper, db loader run in one container
 b) mysql in container
 c) flask app in container
