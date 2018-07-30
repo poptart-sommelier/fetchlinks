@@ -3,36 +3,54 @@ import MySQLdb
 import glob
 import os
 from pathlib import Path
+import logging
+from logging.handlers import RotatingFileHandler
 
 # TODO: Create script to generate DB, table, permissions, etc.
 # TODO: PROPERLY IMPLEMENT FINDING NEW FILES AND LOADING THEM.
-# RIGHT NOW THIS ONLY WORKS WITH HARDCODED JSONFILE
+# RIGHT NOW THIS ONLY WORKS WITH HARDCODED jsonfile
 
-JSON_FILE_LOCATION = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/'
-JSON_BACKUP_DIR = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/OLD/'
-JSONFILE = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/json_output_2018-07-25_220620.json'
+JSON_FILE_LOCATION = './JSON/'
+JSON_WILDCARD = '*.json'
+JSON_BACKUP_DIR = './OLD_JSON/'
+LOG_LOCATION = './LOGS/'
+LOG_NAME = 'db_load.log'
+# jsonfile = '/home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/json_output_2018-07-26_221746.json'
+
+logger = logging.getLogger("LOG")
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', '%m/%d/%Y %I:%M:%S %p')
+handler = RotatingFileHandler(LOG_LOCATION + LOG_NAME, maxBytes=1000000, backupCount=5)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
-def read_json_file(JSONFILE):
-	with open(JSONFILE, 'r') as f:
-		all_json_data = json.load(f)
-	return all_json_data
+def read_json_file(jsonfile):
+	try:
+		with open(jsonfile, 'r') as f:
+			all_json_data = json.load(f)
+		return all_json_data
+	except (IOError, OSError) as e:
+		logger.error('Cannot read {0}. System error: {1}'.format(jsonfile, e))
+		return None
 
 
 def get_new_files(JSON_FILE_LOCATION):
-	newfiles = glob.glob(JSON_FILE_LOCATION)
+	newfiles = glob.glob(JSON_FILE_LOCATION + JSON_WILDCARD)
 	return newfiles
 
 
-def move_file(JSONFILE, JSON_BACKUP_DIR):
-	file_loc = Path(JSONFILE)
+def move_file(jsonfile, JSON_BACKUP_DIR):
+	file_loc = Path(jsonfile)
 	file_name = file_loc.name
 	new_file_loc = JSON_BACKUP_DIR + file_name
 	try:
-		os.rename(JSONFILE, new_file_loc)
-		return True, '%s moved to %s'.format(JSONFILE, new_file_loc)
+		os.rename(jsonfile, new_file_loc)
+		logger.info('{0} moved to {1}'.format(jsonfile, new_file_loc))
+		return True
 	except Exception as e:
-		return False, e
+		logger.error('Could not move {0}. System error: {1}'.format(jsonfile, e))
+		return False
 
 
 def db_insert(tweetlist):
@@ -46,7 +64,7 @@ def db_insert(tweetlist):
 		cur.executemany(db_command, tweetlist)
 		db.commit()
 	except Exception as e:
-		print(e)
+		logger.error('Could not load tweets. DB error: {0}'.format(e))
 		db.rollback()
 
 
@@ -74,15 +92,20 @@ def prep_json_for_db(json_data):
 
 def start():
 	# USE THIS FOR PROD
-	# for file in get_new_files(JSON_FILE_LOCATION):
-	# 	json_from_file = read_json_file(file)
-	# 	db_rows = prep_json_for_db(json_from_file)
-	# 	db_insert(db_rows)
+	for file in get_new_files(JSON_FILE_LOCATION):
+		json_from_file = read_json_file(file)
+		if json_from_file:
+			db_rows = prep_json_for_db(json_from_file)
+			db_insert(db_rows)
+			move_file(file, JSON_BACKUP_DIR)
+		else:
+			logger.error('Could not read JSON file')
+			continue
 
 	# USE THIS FOR TESTING
-	json_from_file = read_json_file(JSONFILE)
-	db_rows = prep_json_for_db(json_from_file)
-	db_insert(db_rows)
+	# json_from_file = read_json_file(jsonfile)
+	# db_rows = prep_json_for_db(json_from_file)
+	# db_insert(db_rows)
 
 start()
 

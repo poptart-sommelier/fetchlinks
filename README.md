@@ -1,12 +1,12 @@
 Remaining work:
 
-1) Error logging for success/failure
-2) orchestration script that wraps scraper and db loader
-3) db loader should read all files in a dir, load them all, move them to a storage dir and archive them
-4) cron job to delete archives older than X days (30?)
-5) double check flask app, make sure nothing too confidential
-6) move flask app to docker container
-7) pagination for flask app (100 per page?)
+
+1) Add dates to tweets
+2) Error logging for success/failure - WORKING - DB_LOAD, MISSING - TWITTER_NO_WRAPPER
+3) orchestration script that wraps scraper and db loader
+5) cron job to delete archives older than X days (30?)
+6) double check flask app, make sure nothing too confidential
+7) move flask app to docker container
 8) architecture:
 a) scraper, db loader run in one container
 b) mysql in container

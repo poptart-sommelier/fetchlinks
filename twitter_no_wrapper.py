@@ -6,6 +6,7 @@ from requests_oauthlib import OAuth1
 import operator
 import datetime
 import unshorten_links
+import os
 
 # TODO: Add logging
 
@@ -24,7 +25,7 @@ ACCESS_TOKEN_SECRET = creds['twitter_creds'][0]['ACCESS_TOKEN_SECRET']
 
 AUTH = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
-JSON_OUTPUT_DIR = './'
+JSON_OUTPUT_DIR = './JSON/'
 
 HOME_TIMELINE_URL = 'https://api.twitter.com/1.1/statuses/home_timeline.json?tweet_mode=extended&count=200&include_rts=True&include_entities=True'
 
@@ -40,7 +41,9 @@ def parse_retweet(json_response):
 			'id': json_response['retweeted_status']['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str'],
 			'urls': urls,
-			'tweet_type': 'retweet'
+			'tweet_type': 'retweet',
+			'date_created': json_response['retweeted_status']['created_at']
+
 		}
 		return r_dict
 
@@ -59,7 +62,8 @@ def parse_quoted_tweet(json_response):
 			'id': json_response['quoted_status']['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str'],
 			'urls': urls,
-			'tweet_type': 'quoted tweet'
+			'tweet_type': 'quoted tweet',
+			'date_created': json_response['quoted_status']['created_at']
 		}
 		return r_dict
 
@@ -78,7 +82,8 @@ def parse_tweet(json_response):
 			'id': json_response['id_str'],
 			'tweet_direct_link': 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str'],
 			'urls': urls,
-			'tweet_type': 'standard tweet'
+			'tweet_type': 'standard tweet',
+			'date_created': json_response['created_at']
 		}
 		return r_dict
 
@@ -88,7 +93,15 @@ def parse_tweet(json_response):
 
 def write_json_output(_all_tweets):
 
-	json_output = JSON_OUTPUT_DIR + "json_output_" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")) + ".json"
+	if os.path.exists(JSON_OUTPUT_DIR):
+		json_output = JSON_OUTPUT_DIR + "json_output_" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")) + ".json"
+	else:
+		try:
+			os.mkdir(JSON_OUTPUT_DIR)
+			json_output = JSON_OUTPUT_DIR + "json_output_" + str(datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")) + ".json"
+		except (IOError, OSError) as exception:
+			print(exception)
+			raise SystemExit
 
 	with open(json_output, 'w') as j:
 		json.dump(_all_tweets, j)
