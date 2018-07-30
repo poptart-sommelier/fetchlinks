@@ -54,7 +54,7 @@ def move_file(jsonfile, JSON_BACKUP_DIR):
 
 
 def db_insert(tweetlist):
-	db_command = """INSERT INTO tweets (tweet_direct_link, urls, full_text, id, user, screen_name, unshort_urls, tweet_type) values (%s, %s, %s, %s, %s, %s, %s, %s)"""
+	db_command = """INSERT INTO tweets (tweet_direct_link, urls, full_text, id, user, screen_name, unshort_urls, tweet_type, date_created) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
 	db = MySQLdb.connect(host="127.0.0.1", port=33600, user="rich", passwd="testpassword", db="twitter", use_unicode=True, charset="utf8mb4")
 
@@ -78,14 +78,14 @@ def prep_json_for_db(json_data):
 
 		for url in j['urls']:
 			if url['url'] is not None:
-				url_list.append(json.dumps(url))
+				url_list.append(url)
 				if url['unshort_url'] is not None:
 					unshorturl_list.append(url['unshort_url'])
 				else:
 					unshorturl_list.append(url['url'])
 
-		list_of_rows_for_db.append((j['tweet_direct_link'], '|'.join(url_list), j['full_text'], j['id'], j['user'],
-				j['screen_name'], '|'.join(unshorturl_list), j['tweet_type']))
+		list_of_rows_for_db.append((j['tweet_direct_link'], json.dumps(url_list), j['full_text'], j['id'], j['user'],
+				j['screen_name'], '|'.join(unshorturl_list), j['tweet_type'], j['date_created']))
 
 	return list_of_rows_for_db
 
