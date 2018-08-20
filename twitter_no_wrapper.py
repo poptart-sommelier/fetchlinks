@@ -18,10 +18,10 @@ LAST_ACCESSED_FILE = './LAST_ACCESSED.txt'
 json_data = open(CRED_PATH).read()
 creds = json.loads(json_data)
 
-CONSUMER_KEY = creds['twitter_creds'][0]['CONSUMER_KEY']
-CONSUMER_SECRET = creds['twitter_creds'][0]['CONSUMER_SECRET']
-ACCESS_TOKEN = creds['twitter_creds'][0]['ACCESS_TOKEN']
-ACCESS_TOKEN_SECRET = creds['twitter_creds'][0]['ACCESS_TOKEN_SECRET']
+CONSUMER_KEY = creds['twitter_creds']['CONSUMER_KEY']
+CONSUMER_SECRET = creds['twitter_creds']['CONSUMER_SECRET']
+ACCESS_TOKEN = creds['twitter_creds']['ACCESS_TOKEN']
+ACCESS_TOKEN_SECRET = creds['twitter_creds']['ACCESS_TOKEN_SECRET']
 
 AUTH = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
