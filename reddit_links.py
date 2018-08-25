@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 
 CRED_PATH = '/home/rich/.creds/reddit_api.json'
 
@@ -41,7 +42,7 @@ def make_request(reddit, token, after=None):
 
     return new_posts
 
-# TODO: Parse 'selftext' for urls and add them. condition should be if not reddit and selftext_urls = None
+
 def parse_json(json_response):
     if not json_response['data']['url'].startswith('https://www.reddit.com/'):
         r_dict = {
@@ -49,14 +50,33 @@ def parse_json(json_response):
             'title': json_response['data']['title'],
             'id': json_response['data']['id'],
             'direct_link': 'https://www.reddit.com' + json_response['data']['permalink'],
-            'url': json_response['data']['url'],
+            'urls': [json_response['data']['url']],
             'subreddit': json_response['data']['subreddit_name_prefixed'],
             'date_created': json_response['data']['created_utc']
         }
 
         return r_dict
+
     else:
-        return None
+        selftext_urls = []
+        if json_response['data']['selftext_html'] is not None:
+            selftext_urls = re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
+
+        r_dict = {
+            'user': json_response['data']['author'],
+            'title': json_response['data']['title'],
+            'id': json_response['data']['id'],
+            'direct_link': 'https://www.reddit.com' + json_response['data']['permalink'],
+            'url': selftext_urls,
+            'subreddit': json_response['data']['subreddit_name_prefixed'],
+            'date_created': json_response['data']['created_utc']
+        }
+
+        if selftext_urls is not None:
+            return r_dict
+
+        else:
+            return None
 
 
 all_posts = []
@@ -71,7 +91,6 @@ for sr in SUBREDDITS:
         post = parse_json(r)
         if post:
             all_posts.append(post)
-
 
 
 print(json.dumps(all_posts))
