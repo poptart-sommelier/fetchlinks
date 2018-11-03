@@ -9,6 +9,7 @@ import unshorten_links
 import os
 
 # TODO: Add logging
+# TODO: Generate unique IDs (based on unshortened url) for all entries
 
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'

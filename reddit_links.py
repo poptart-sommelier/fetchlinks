@@ -2,6 +2,10 @@ import requests
 import json
 import re
 
+# TODO: LIMIT API CALL -> NEWER THAN UTC TIME?
+# TODO: /r/all.json?before=yyy WHERE yyy = first instance of data.children[0].data.name
+# TODO: generate unique ids for all entries based on unshortened link
+
 CRED_PATH = '/home/rich/.creds/reddit_api.json'
 
 json_data = open(CRED_PATH).read()
@@ -27,14 +31,14 @@ def auth():
     return access_token
 
 
-def make_request(reddit, token, after=None):
+def make_request(reddit, token, before=None):
     # Build the URL
-    if not after:
+    if not before:
         url = QUERY_PART1 + reddit + QUERY_PART2
         params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '25'}
     else:
         url = QUERY_PART1 + reddit + QUERY_PART2
-        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '25', 'after': after}
+        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '25', 'before': before}
 
     api_res = requests.get(url=url, params=params, headers={'authorization': 'Bearer ' + token, 'User-agent': USER_AGENT})
 
