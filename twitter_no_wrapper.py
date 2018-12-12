@@ -14,6 +14,7 @@ import os
 NUMBER_OF_ITEMS = 200
 CRED_PATH = '/home/rich/.creds/twitter_api.json'
 
+# TODO: This needs to be put into the database
 LAST_ACCESSED_FILE = './LAST_ACCESSED.txt'
 
 json_data = open(CRED_PATH).read()
@@ -26,7 +27,7 @@ ACCESS_TOKEN_SECRET = creds['twitter_creds']['ACCESS_TOKEN_SECRET']
 
 AUTH = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
-JSON_OUTPUT_DIR = './JSON/'
+JSON_OUTPUT_DIR = './data/JSON/'
 
 HOME_TIMELINE_URL = 'https://api.twitter.com/1.1/statuses/home_timeline.json?tweet_mode=extended&count=200&include_rts=True&include_entities=True'
 

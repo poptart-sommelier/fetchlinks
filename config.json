@@ -1,0 +1,29 @@
+{
+    "reddit": {
+        "subreddits": [
+            "Netsec",
+            "Malware",
+            "Antiforensics",
+            "Computerforensics",
+            "ReverseEngineering"
+        ],
+        "credential_location": "/home/rich/.creds/reddit_api.json"
+    },
+    "twitter": {
+        "credential_location": "/home/rich/.creds/twitter_api.json"
+    },
+    "rss": {
+        "feeds": [
+            "https://www.endgame.com/blog-rss.xml",
+            "https://isc.sans.edu/rssfeed.xml"
+        ]
+    },
+    "log_location": "./data/logs",
+    "db_info": {
+        "host": "127.0.0.1",
+        "port": "33600",
+        "credential_location": "/home/rich/.creds/db_credentials.json"
+    },
+    "file_output_location": "./data",
+    "log_level": "INFO"
+}

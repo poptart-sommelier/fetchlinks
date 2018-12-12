@@ -1,6 +1,7 @@
 import requests
 import json
 import re
+import hashlib
 
 # TODO: LIMIT API CALL -> NEWER THAN UTC TIME?
 # TODO: /r/all.json?before=yyy WHERE yyy = first instance of data.children[0].data.name
@@ -18,6 +19,11 @@ SUBREDDITS = ['Netsec', 'Malware', 'Antiforensics', 'Computerforensics', 'Revers
 QUERY_PART1 = 'https://oauth.reddit.com/r/'
 QUERY_PART2 = '/new/.json'
 USER_AGENT = 'Get_Links Agent'
+
+
+def build_hash(link):
+    hash = hashlib.sha256(link.encode())
+    return hash.hexdigest()
 
 
 def auth():
@@ -50,12 +56,13 @@ def make_request(reddit, token, before=None):
 def parse_json(json_response):
     if not json_response['data']['url'].startswith('https://www.reddit.com/'):
         r_dict = {
-            'user': json_response['data']['author'],
+            'author': json_response['data']['author'],
             'title': json_response['data']['title'],
-            'id': json_response['data']['id'],
+            'description': None,
+            'uid': build_hash(json_response['data']['url']),
             'direct_link': 'https://www.reddit.com' + json_response['data']['permalink'],
             'urls': [json_response['data']['url']],
-            'subreddit': json_response['data']['subreddit_name_prefixed'],
+            'source': 'reddit/' + json_response['data']['subreddit_name_prefixed'],
             'date_created': json_response['data']['created_utc']
         }
 
@@ -67,12 +74,13 @@ def parse_json(json_response):
             selftext_urls = re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
 
         r_dict = {
-            'user': json_response['data']['author'],
+            'author': json_response['data']['author'],
             'title': json_response['data']['title'],
-            'id': json_response['data']['id'],
+            'description': None,
+            'uid': ''.join(sorted(selftext_urls)),
             'direct_link': 'https://www.reddit.com' + json_response['data']['permalink'],
-            'url': selftext_urls,
-            'subreddit': json_response['data']['subreddit_name_prefixed'],
+            'urls': selftext_urls,
+            'source': 'reddit/' + json_response['data']['subreddit_name_prefixed'],
             'date_created': json_response['data']['created_utc']
         }
 
@@ -83,18 +91,23 @@ def parse_json(json_response):
             return None
 
 
-all_posts = []
+def main():
+    all_posts = []
 
-token = auth()
+    token = auth()
 
-for sr in SUBREDDITS:
-    resp = make_request(sr, token)
-    print(json.dumps(resp))
+    for sr in SUBREDDITS:
+        resp = make_request(sr, token)
+        # print(json.dumps(resp))
 
-    for r in resp['data']['children']:
-        post = parse_json(r)
-        if post:
-            all_posts.append(post)
+        for r in resp['data']['children']:
+            post = parse_json(r)
+            if post:
+                all_posts.append(post)
+
+    # print(json.dumps(all_posts))
+    return all_posts
 
 
-print(json.dumps(all_posts))
+if __name__ == '__main__':
+    main()

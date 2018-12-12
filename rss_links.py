@@ -4,7 +4,6 @@ import multiprocessing
 import itertools
 import hashlib
 
-# TODO: design as module
 # TODO: read DB unique guids and pull back list, then check against that list for all entries
 # TODO: to ensure we don't pull data we already have, use etag and modified (see below code example)
 # TODO: all state written to database
