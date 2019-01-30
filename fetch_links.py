@@ -9,13 +9,19 @@
 #TODO: CONFIG IS READ IN HERE AND SETTINGS ARE PASSED ON TO EACH MODULE
 #TODO: CONFIG: cred file location, all rss feeds to pull, all subreddits to parse.
 
+#TODO: TO GET STARTED AGAIN:
+#TODO: DB SET UP IN DOCKER
+#TODO: TEST EACH SCRIPT AND MAKE SURE THEY RUN
+#TODO: LOOK AT CONFIG
+#TODO: DB STRUCTURE
+
 #DB STRUCTURE:
 #TITLE, DESCRIPTION, AUTHOR, SOURCE, UID, URLS, DATE_CREATED
 
 import json
-# import twitter_no_wrapper
+import twitter_no_wrapper
 import reddit_links
-# import rss_links
+import rss_links
 
 CONFIG_LOCATION = 'data/config/config.json'
 
@@ -24,6 +30,9 @@ CONFIG_LOCATION = 'data/config/config.json'
 # Read in credentials file, assign to proper variables
 
 # Instantiate DB connection
+# And exit if we can't connect
+
+# Read in state from previous run - last twitter id, etc...
 
 # Instantiate Logging
 
@@ -34,9 +43,9 @@ def parse_config(config_file):
     pass
 
 
-with open(CONFIG_LOCATION, 'r') as config_file:
-    config = config_file.read()
+# with open(CONFIG_LOCATION, 'r') as config_file:
+#     config = config_file.read()
 
-print(json.dumps(reddit_links.main()))
+print(json.dumps(reddit_links.go()))
 
 print()

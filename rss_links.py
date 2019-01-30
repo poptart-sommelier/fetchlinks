@@ -3,82 +3,81 @@ import json
 import multiprocessing
 import itertools
 import hashlib
+# import db_load
 
-# TODO: read DB unique guids and pull back list, then check against that list for all entries
+# Importing Datastructure class
+# from structure_data import Datastructure
+
 # TODO: to ensure we don't pull data we already have, use etag and modified (see below code example)
-# TODO: all state written to database
-# TODO: should we be taking the first paragraph of the article or something? (matches with twitter...)
+# TODO: list of rss feeds should be stored in a config file
 # TODO: dump all rss from feedly, create config file
+# TODO: error handling
+# TODO: proper logging
 
 THREADS = 10
+# THIS SHOULD BE READ FROM A CONFIG
+FEED_LIST = ['https://www.endgame.com/blog-rss.xml', 'https://isc.sans.edu/rssfeed.xml']
 
-def getfeeds(rssfeedlist):
+
+def go(rssfeedlist=FEED_LIST):
     pool = multiprocessing.Pool(processes=THREADS)
 
     results = pool.map(parsefeed, rssfeedlist)
 
-    return results
+    # results is a list of lists which all contain dictionaries.
+    # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
+    processed_results = list(itertools.chain.from_iterable(results))
 
-
-def get_last_status(url):
-    # TODO: Read etag/lastmodified for url from file or database and return
-    return None, None
-
-
-def set_last_status(url, etag, modified):
-    # store the etag and modified
-    # last_etag = feed.etag
-    # last_modified = feed.modified
-    pass
+    return processed_results
 
 
 def parsefeed(url):
-    try:
-        etag, modified = get_last_status(url)
-    except:
-        # TODO: write to log file - could not connect to DB
-        etag = None
-        modified = None
-
-    feed = feedparser.parse(url, etag=etag, modified=modified)
-
-    set_last_status(url, feed.etag, feed.modified)
+    feed = feedparser.parse(url, etag=None, modified=None)
 
     print(feed.status)
 
     if feed.status == 304:
         return None
 
-    json_result = build_json_from_feed(feed)
+    result_dict = build_dict_from_feed(feed)
 
-    return json_result
+    return result_dict
 
 
-def build_json_from_feed(feed):
-    json_list = []
+def build_dict_from_feed(feed):
+    feed_dict_list = []
+
+    feed_dict = {
+        'source': '',
+        'author': '',
+        'title': '',
+        'description': '',
+        'direct_link': '',
+        'urls': [],
+        'date_created': '',
+        'unique_id': ''
+    }
 
     for entry in feed.entries:
-        f_dict = {
-            'source': 'RSS',
-            'author': feed.href,
-            'title': entry.title,
-            'url': entry.link,
-            'date_created': entry.published,
-            'unique_id': build_hash(entry.link)
-        }
+        feed_dict['source'] = 'RSS'
+        feed_dict['author'] = feed.href,
+        feed_dict['title'] = entry.title,
+        feed_dict['urls'] = [entry.link],
+        feed_dict['date_created'] = entry.published,
+        feed_dict['unique_id'] = build_hash(entry.link)
 
-        json_list.append(f_dict)
+        feed_dict_list.append(feed_dict)
 
-    return json_list
+    return feed_dict_list
 
 
 def build_hash(link):
-    hash = hashlib.sha256(link.encode())
-    return hash.hexdigest()
+    sha256_hash = hashlib.sha256(link.encode())
+    return sha256_hash.hexdigest()
 
-# getfeeds() returns a list of lists which all contain json.
-# we want one list with all the json, so we use itertools.chain.from_iterable to join/flatten all the lists
-res = list(itertools.chain.from_iterable(getfeeds(['https://www.endgame.com/blog-rss.xml', 'https://isc.sans.edu/rssfeed.xml'])))
 
-print(json.dumps(res))
-print()
+if __name__ == '__main__':
+    fetched_results = go(FEED_LIST)
+
+    print(json.dumps(fetched_results))
+    print()

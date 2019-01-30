@@ -5,6 +5,7 @@ import sys
 import multiprocessing
 import collections
 import urllib3
+import structure_data
 
 #   TODO:
 #   test this to make sure that it follows both normal redirects (r.status_code OR r.history) as well as check BODY for any meta tag redirects/refreshes
@@ -35,14 +36,15 @@ def is_shortened(url):
 
 	return True
 
+
 def unshorten(tweet):
-	for index, url in enumerate(tweet['urls']):
+	for index, url in enumerate(tweet.data_structure['urls']):
 		if is_shortened(url['url']):
 			try:
 				r = requests.get(url['url'])
 				if r.status_code == 200:
 					unshortened_url = r.url
-					tweet['urls'][index]['unshort_url'] = unshortened_url
+					tweet.data_structure['urls'][index]['unshort_url'] = unshortened_url
 			except Exception as e:
 				print(e)
 				print("Url:" + url)
@@ -50,6 +52,7 @@ def unshorten(tweet):
 			continue
 
 	return tweet
+
 
 def unshorten_start(all_tweets_dict_list):
 	# parse tweet for urls key
