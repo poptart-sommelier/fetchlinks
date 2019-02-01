@@ -71,7 +71,7 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
         parsed_reddit_data.data_structure['unique_id'] = build_hash(json_response['data']['url'])
 
-        return parsed_reddit_data.data_structure
+        return parsed_reddit_data
 
     else:
         selftext_urls = []
@@ -95,7 +95,7 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
         parsed_reddit_data.data_structure['unique_id'] = build_hash(''.join(sorted([url['url'] for url in selftext_urls])))
 
-        return parsed_reddit_data.data_structure
+        return parsed_reddit_data
 
 
 def go():

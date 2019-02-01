@@ -34,8 +34,6 @@ def go(rssfeedlist=FEED_LIST):
 def parsefeed(url):
     feed = feedparser.parse(url, etag=None, modified=None)
 
-    # print(feed.status)
-
     if feed.status == 304:
         return None
 
@@ -48,33 +46,16 @@ def build_dict_from_feed(feed):
     parsed_feed_entries_list = []
     parsed_rss_feed_data = structure_data.Datastructure()
 
-    # feed_dict = {
-    #     'source': '',
-    #     'author': '',
-    #     'title': '',
-    #     'description': '',
-    #     'direct_link': '',
-    #     'urls': [],
-    #     'date_created': '',
-    #     'unique_id': ''
-    # }
-
     for entry in feed.entries:
-        # feed_dict['source'] = 'RSS'
-        # feed_dict['author'] = feed.href,
-        # feed_dict['title'] = entry.title,
-        # feed_dict['urls'] = [entry.link],
-        # feed_dict['date_created'] = entry.published,
-        # feed_dict['unique_id'] = build_hash(entry.link)
-
         parsed_rss_feed_data.data_structure['source'] = 'RSS'
         parsed_rss_feed_data.data_structure['author'] = feed.href
-        parsed_rss_feed_data.data_structure['title'] = entry.title,
-        parsed_rss_feed_data.data_structure['description'] = None,
-        parsed_rss_feed_data.data_structure['direct_link'] = None,
-        parsed_rss_feed_data.data_structure['urls'] = [entry.link],
+        parsed_rss_feed_data.data_structure['title'] = entry.title
+        parsed_rss_feed_data.data_structure['description'] = None
+        parsed_rss_feed_data.data_structure['direct_link'] = None
+        parsed_rss_feed_data.data_structure['urls'] = [{'url': entry.link, 'unshort_url': None}]
         parsed_rss_feed_data.data_structure['date_created'] = entry.published
-        parsed_rss_feed_data.data_structure['unique_id'] = build_hash(''.join(sorted(parsed_rss_feed_data.data_structure['urls'])))
+        parsed_rss_feed_data.data_structure['unique_id'] = build_hash(''.join(
+            sorted([url['url'] for url in parsed_rss_feed_data.data_structure['urls']])))
 
         parsed_feed_entries_list.append(parsed_rss_feed_data)
 
