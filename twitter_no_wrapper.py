@@ -138,6 +138,20 @@ def set_last_tweet_id(last_write):
         print('Error writing to file ./LAST_ACCESSED.txt')
 
 
+def build_unique_ids(all_tweets):
+    for tweet in all_tweets:
+        url_list = []
+        for urls in tweet.data_structure['urls']:
+            if urls['unshort_url'] is None:
+                url_list.append(urls['url'])
+            else:
+                url_list.append(urls['unshort_url'])
+
+        tweet.data_structure['unique_id'] = build_hash(''.join(sorted(url_list)))
+
+    return
+
+
 def get_tweets(since_id=1, first_last=None):
     tweets = []
     keep_going = False
@@ -215,6 +229,8 @@ def go(api_calls_limit):
     set_last_tweet_id(last_tweet_id_new)
 
     all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
+
+    build_unique_ids(all_tweets_unshort)
 
     # print(json.dumps([x.data_structure for x in all_tweets_unshort]))
 

@@ -47,5 +47,7 @@ def parse_config(config_file):
 #     config = config_file.read()
 
 print(json.dumps(reddit_links.go()))
-
-print()
+# print(json.dumps(twitter_no_wrapper.go(1)))
+# print(json.dumps(rss_links.go()))
+#
+# print()

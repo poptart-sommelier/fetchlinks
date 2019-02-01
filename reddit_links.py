@@ -4,7 +4,7 @@ import re
 import hashlib
 
 # Importing Datastructure class
-# from structure_data import Datastructure
+import structure_data
 
 # TODO: LIMIT API CALL -> NEWER THAN UTC TIME?
 # TODO: /r/all.json?before=yyy WHERE yyy = first instance of data.children[0].data.name
@@ -59,28 +59,19 @@ def make_request(reddit, token, before=None):
 
 
 def parse_json(json_response):
-    # Detection for reddit posts with no links
-    feed_dict = {
-        'source': '',
-        'author': '',
-        'title': '',
-        'description': '',
-        'direct_link': '',
-        'urls': [],
-        'date_created': '',
-        'unique_id': ''
-    }
-    if not json_response['data']['url'].startswith('https://www.reddit.com/'):
-        feed_dict['source'] = 'reddit/' + json_response['data']['subreddit_name_prefixed']
-        feed_dict['author'] = json_response['data']['author']
-        feed_dict['title'] = json_response['data']['title']
-        feed_dict['description'] = None
-        feed_dict['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
-        feed_dict['urls'] = [json_response['data']['url']]
-        feed_dict['date_created'] = json_response['data']['created_utc']
-        feed_dict['unique_id'] = build_hash(json_response['data']['url'])
+    parsed_reddit_data = structure_data.Datastructure()
 
-        return feed_dict
+    if not json_response['data']['url'].startswith('https://www.reddit.com/'):
+        parsed_reddit_data.data_structure['source'] = 'reddit/' + json_response['data']['subreddit_name_prefixed']
+        parsed_reddit_data.data_structure['author'] = json_response['data']['author']
+        parsed_reddit_data.data_structure['title'] = json_response['data']['title']
+        parsed_reddit_data.data_structure['description'] = None
+        parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
+        parsed_reddit_data.data_structure['urls'] = [json_response['data']['url']]
+        parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
+        parsed_reddit_data.data_structure['unique_id'] = build_hash(json_response['data']['url'])
+
+        return parsed_reddit_data.data_structure
 
     else:
         selftext_urls = []
@@ -89,16 +80,16 @@ def parse_json(json_response):
             if selftext_urls is None:
                 return None
 
-        feed_dict['source'] = 'reddit' + json_response['data']['subreddit_name_prefixed']
-        feed_dict['author'] = json_response['data']['author']
-        feed_dict['title'] = json_response['data']['title']
-        feed_dict['description'] = None
-        feed_dict['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
-        feed_dict['urls'] = selftext_urls
-        feed_dict['date_created'] = json_response['data']['created_utc']
-        feed_dict['unique_id'] = build_hash(''.join(sorted(selftext_urls)))
+        parsed_reddit_data.data_structure['source'] = 'reddit' + json_response['data']['subreddit_name_prefixed']
+        parsed_reddit_data.data_structure['author'] = json_response['data']['author']
+        parsed_reddit_data.data_structure['title'] = json_response['data']['title']
+        parsed_reddit_data.data_structure['description'] = None
+        parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
+        parsed_reddit_data.data_structure['urls'] = selftext_urls
+        parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
+        parsed_reddit_data.data_structure['unique_id'] = build_hash(''.join(sorted(selftext_urls)))
 
-        return feed_dict
+        return parsed_reddit_data.data_structure
 
 
 def go():
@@ -115,7 +106,6 @@ def go():
             if post:
                 all_posts.append(post)
 
-    print(json.dumps(all_posts))
     return all_posts
 
 

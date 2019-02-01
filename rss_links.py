@@ -6,7 +6,7 @@ import hashlib
 # import db_load
 
 # Importing Datastructure class
-# from structure_data import Datastructure
+import structure_data
 
 # TODO: to ensure we don't pull data we already have, use etag and modified (see below code example)
 # TODO: list of rss feeds should be stored in a config file
@@ -34,7 +34,7 @@ def go(rssfeedlist=FEED_LIST):
 def parsefeed(url):
     feed = feedparser.parse(url, etag=None, modified=None)
 
-    print(feed.status)
+    # print(feed.status)
 
     if feed.status == 304:
         return None
@@ -45,30 +45,40 @@ def parsefeed(url):
 
 
 def build_dict_from_feed(feed):
-    feed_dict_list = []
+    parsed_feed_entries_list = []
+    parsed_rss_feed_data = structure_data.Datastructure()
 
-    feed_dict = {
-        'source': '',
-        'author': '',
-        'title': '',
-        'description': '',
-        'direct_link': '',
-        'urls': [],
-        'date_created': '',
-        'unique_id': ''
-    }
+    # feed_dict = {
+    #     'source': '',
+    #     'author': '',
+    #     'title': '',
+    #     'description': '',
+    #     'direct_link': '',
+    #     'urls': [],
+    #     'date_created': '',
+    #     'unique_id': ''
+    # }
 
     for entry in feed.entries:
-        feed_dict['source'] = 'RSS'
-        feed_dict['author'] = feed.href,
-        feed_dict['title'] = entry.title,
-        feed_dict['urls'] = [entry.link],
-        feed_dict['date_created'] = entry.published,
-        feed_dict['unique_id'] = build_hash(entry.link)
+        # feed_dict['source'] = 'RSS'
+        # feed_dict['author'] = feed.href,
+        # feed_dict['title'] = entry.title,
+        # feed_dict['urls'] = [entry.link],
+        # feed_dict['date_created'] = entry.published,
+        # feed_dict['unique_id'] = build_hash(entry.link)
 
-        feed_dict_list.append(feed_dict)
+        parsed_rss_feed_data.data_structure['source'] = 'RSS'
+        parsed_rss_feed_data.data_structure['author'] = feed.href
+        parsed_rss_feed_data.data_structure['title'] = entry.title,
+        parsed_rss_feed_data.data_structure['description'] = None,
+        parsed_rss_feed_data.data_structure['direct_link'] = None,
+        parsed_rss_feed_data.data_structure['urls'] = [entry.link],
+        parsed_rss_feed_data.data_structure['date_created'] = entry.published
+        parsed_rss_feed_data.data_structure['unique_id'] = build_hash(''.join(sorted(parsed_rss_feed_data.data_structure['urls'])))
 
-    return feed_dict_list
+        parsed_feed_entries_list.append(parsed_rss_feed_data)
+
+    return parsed_feed_entries_list
 
 
 def build_hash(link):
