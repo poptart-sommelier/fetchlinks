@@ -67,7 +67,7 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['title'] = json_response['data']['title']
         parsed_reddit_data.data_structure['description'] = None
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
-        parsed_reddit_data.data_structure['urls'] = [json_response['data']['url']]
+        parsed_reddit_data.data_structure['urls'] = [{'url': json_response['data']['url'], 'unshort_url': None}]
         parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
         parsed_reddit_data.data_structure['unique_id'] = build_hash(json_response['data']['url'])
 
@@ -75,9 +75,15 @@ def parse_json(json_response):
 
     else:
         selftext_urls = []
-        if json_response['data']['selftext_html'] is not None:
-            selftext_urls = re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
-            if selftext_urls is None:
+        if not json_response['data']['selftext_html']:
+            return None
+
+        else:
+            selftext_urls = [{'url': url, 'unshort_url': None} for url in
+                             re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
+                             if '.' in url]
+
+            if len(selftext_urls) < 1:
                 return None
 
         parsed_reddit_data.data_structure['source'] = 'reddit' + json_response['data']['subreddit_name_prefixed']
@@ -87,7 +93,7 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
         parsed_reddit_data.data_structure['urls'] = selftext_urls
         parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
-        parsed_reddit_data.data_structure['unique_id'] = build_hash(''.join(sorted(selftext_urls)))
+        parsed_reddit_data.data_structure['unique_id'] = build_hash(''.join(sorted([url['url'] for url in selftext_urls])))
 
         return parsed_reddit_data.data_structure
 
