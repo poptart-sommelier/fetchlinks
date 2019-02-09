@@ -6,6 +6,9 @@ import hashlib
 # Importing Datastructure class
 import structure_data
 
+import logging
+logger = logging.getLogger(__name__)
+
 # TODO: LIMIT API CALL -> NEWER THAN UTC TIME?
 # TODO: /r/all.json?before=yyy WHERE yyy = first instance of data.children[0].data.name
 # TODO: error handling

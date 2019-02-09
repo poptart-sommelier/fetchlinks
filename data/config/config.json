@@ -24,5 +24,6 @@
         "port": "33600",
         "credential_location": "/home/rich/.creds/db_credentials.json"
     },
-    "file_output_location": "./data"
+    "file_output_location": "./data",
+    "log_level": "INFO"
 }

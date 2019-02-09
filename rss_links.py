@@ -8,6 +8,9 @@ import hashlib
 # Importing Datastructure class
 import structure_data
 
+import logging
+logger = logging.getLogger(__name__)
+
 # TODO: to ensure we don't pull data we already have, use etag and modified (see below code example)
 # TODO: list of rss feeds should be stored in a config file
 # TODO: dump all rss from feedly, create config file
@@ -27,6 +30,8 @@ def go(rssfeedlist=FEED_LIST):
     # results is a list of lists which all contain dictionaries.
     # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
     processed_results = list(itertools.chain.from_iterable(results))
+
+    logger.info("rss")
 
     return processed_results
 

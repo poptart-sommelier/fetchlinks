@@ -1,53 +1,79 @@
-#TODO: FLOW OF EXECUTION
-#TODO: RUN TWITTERLINKS, REDDITLINKS, RSSLINKS
-#TODO: THEY ALL RETURN THEIR OWN JSON STRUCTURE
-#TODO: EACH MUST GENERATE UNIQUE ID FOR EACH LINK (HASH TITLE+DATE+SOURCE?)
-#TODO: DETERMINE FIELDS, THEN INSERT EVERYTHING INTO DB, CHECKING FOR DUPLICATES VIA UNIQUE ID
+# TODO: TO GET STARTED AGAIN:
+# TODO: CONFIG PARSER
+# TODO: PASS ALL CONFIGS TO MODULES
+# TODO: CONFIG: all rss feeds to pull
+# TODO: CLONE TWITTER ACCOUNT
+# TODO: STAND UP DOCKER CONTAINER WITH MYSQLDB
 
-#TODO: DB SHOULD BE INSTANTIATED HERE AND PASSED TO ALL FUNCTIONS
-#TODO: STAND UP DOCKER CONTAINER WITH MYSQLDB
-#TODO: CONFIG IS READ IN HERE AND SETTINGS ARE PASSED ON TO EACH MODULE
-#TODO: CONFIG: cred file location, all rss feeds to pull, all subreddits to parse.
+# TODO: STARTUP CHECKS - DOES DATA DIR EXIST,
+# TODO: DB SET UP IN DOCKER
+# TODO: THEN INSERT EVERYTHING INTO DB, CHECKING FOR DUPLICATES VIA UNIQUE ID
+# TODO: SET UP LOGGING
 
-#TODO: TO GET STARTED AGAIN:
-#TODO: DB SET UP IN DOCKER
-#TODO: TEST EACH SCRIPT AND MAKE SURE THEY RUN
-#TODO: LOOK AT CONFIG
-#TODO: DB STRUCTURE
-
-#DB STRUCTURE:
-#TITLE, DESCRIPTION, AUTHOR, SOURCE, UID, URLS, DATE_CREATED
-
+# Standard libraries
 import json
+import os
+import logging
+import logging.config
+# from logging.handlers import RotatingFileHandler
+
+# Custom libraries
 import twitter_no_wrapper
 import reddit_links
 import rss_links
 
-CONFIG_LOCATION = 'data/config/config.json'
+DATA = 'data/'
+APP_CONFIG_LOCATION = 'data/config/config.json'
+LOG_CONFIG_LOCATION = 'data/config/log_config.json'
+LOG_LOCATION = 'data/logs/fetch_links.log'
 
-# Check if ./data exists, if not, create it.
+# Instantiate Logging
 
+# Read config file
 # Read in credentials file, assign to proper variables
 
 # Instantiate DB connection
 # And exit if we can't connect
 
-# Read in state from previous run - last twitter id, etc...
+# Read DB for state from previous run - last twitter id, etc...
 
-# Instantiate Logging
+# Call each module, log object, and config data
+# Write returned data to DB
 
-# Call each module, passing in db_conn, log object, and config data
+def parse_config():
+    with open(APP_CONFIG_LOCATION, 'r') as config_file:
+        config = config_file.read()
+
+    return json.loads(config)
 
 
-def parse_config(config_file):
-    pass
+def go():
+    links = []
+
+    # Sanity checks
+    if not os.path.exists(DATA) or not os.path.exists(APP_CONFIG_LOCATION) or not os.path.exists(LOG_CONFIG_LOCATION):
+        print('missing some or all of the following directories: \n'
+              'data/, data/config/, data/logs/')
+        exit()
+
+    # load log_config.json file
+    with open(LOG_CONFIG_LOCATION) as json_log_file:
+        log_config = json.load(json_log_file)
+
+    # configure logging
+    logging.config.dictConfig(log_config['logging'])
+
+    # get a logger
+    logger = logging.getLogger(__name__)
+
+    config = parse_config()
+
+    # links.extend(reddit_links.go())
+    # links.extend(twitter_no_wrapper.go(1))
+    links.extend(rss_links.go())
+
+    logger.info("TESTING")
+    print()
 
 
-# with open(CONFIG_LOCATION, 'r') as config_file:
-#     config = config_file.read()
-
-print(json.dumps(reddit_links.go()))
-# print(json.dumps(twitter_no_wrapper.go(1)))
-# print(json.dumps(rss_links.go()))
-#
-# print()
+go()
