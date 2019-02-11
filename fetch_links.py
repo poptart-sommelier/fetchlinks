@@ -15,7 +15,6 @@ import json
 import os
 import logging
 import logging.config
-# from logging.handlers import RotatingFileHandler
 
 # Custom libraries
 import twitter_no_wrapper
@@ -40,6 +39,7 @@ LOG_LOCATION = 'data/logs/fetch_links.log'
 # Call each module, log object, and config data
 # Write returned data to DB
 
+
 def parse_config():
     with open(APP_CONFIG_LOCATION, 'r') as config_file:
         config = config_file.read()
@@ -47,7 +47,7 @@ def parse_config():
     return json.loads(config)
 
 
-def go():
+def main():
     links = []
 
     # Sanity checks
@@ -68,12 +68,11 @@ def go():
 
     config = parse_config()
 
-    # links.extend(reddit_links.go())
-    # links.extend(twitter_no_wrapper.go(1))
-    links.extend(rss_links.go())
+    # links.extend(reddit_links.main(config['reddit']))
+    links.extend(twitter_no_wrapper.main(config['twitter'], 1))
+    # links.extend(rss_links.main(config['rss']))
 
-    logger.info("TESTING")
     print()
 
 
-go()
+main()

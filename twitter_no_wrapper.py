@@ -19,23 +19,24 @@ logger = logging.getLogger(__name__)
 # TODO: Generate unique IDs (based on unshortened url) for all entries
 # TODO: Store all state in a DB
 
-NUMBER_OF_ITEMS = 200
-CRED_PATH = '/home/rich/.creds/twitter_api.json'
-
-# TODO: This needs to be put into the database
+# TODO: This needs to be in a database
 LAST_ACCESSED_FILE = './LAST_ACCESSED.txt'
 
-json_data = open(CRED_PATH).read()
-creds = json.loads(json_data)
 
-CONSUMER_KEY = creds['twitter_creds']['CONSUMER_KEY']
-CONSUMER_SECRET = creds['twitter_creds']['CONSUMER_SECRET']
-ACCESS_TOKEN = creds['twitter_creds']['ACCESS_TOKEN']
-ACCESS_TOKEN_SECRET = creds['twitter_creds']['ACCESS_TOKEN_SECRET']
+def auth(credential_location):
+    try:
+        with open(credential_location, 'r') as json_data:
+            creds = json.load(json_data)
+    except IOError:
+        logger.error('Could not load twitter credentials from: ' + credential_location)
+        exit()
 
-AUTH = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+    consumer_key = creds['twitter_creds']['CONSUMER_KEY']
+    consumer_secret = creds['twitter_creds']['CONSUMER_SECRET']
+    access_token = creds['twitter_creds']['ACCESS_TOKEN']
+    access_token_secret = creds['twitter_creds']['ACCESS_TOKEN_SECRET']
 
-HOME_TIMELINE_URL = 'https://api.twitter.com/1.1/statuses/home_timeline.json?tweet_mode=extended&count=200&include_rts=True&include_entities=True'
+    return OAuth1(consumer_key, consumer_secret, access_token, access_token_secret)
 
 
 def build_hash(link):
@@ -154,16 +155,25 @@ def build_unique_ids(all_tweets):
     return
 
 
-def get_tweets(since_id=1, first_last=None):
+def get_tweets(authentication, since_id=1, first_last=None):
     tweets = []
     keep_going = False
 
-    if first_last:
-        req_path = HOME_TIMELINE_URL + '&since_id=' + str(since_id) + '&max_id=' + str(first_last['oldest_id'])
-    else:
-        req_path = HOME_TIMELINE_URL + '&since_id=' + str(since_id)
+    host = 'https://api.twitter.com'
+    endpoint = '/1.1/statuses/home_timeline.json'
+    url_params = {'tweet_mode': 'extended',
+                  'count': '200',
+                  'include_rts': 'True',
+                  'include_entities': 'True'
+                  }
 
-    r = requests.get(req_path, auth=AUTH)
+    if first_last:
+        url_params['since_id'] = str(since_id)
+        url_params['max_id'] = str(first_last['oldest_id'])
+    else:
+        url_params['since_id'] = str(since_id)
+
+    r = requests.get(host + endpoint, params=url_params, auth=authentication)
 
     json_resp = r.json()
 
@@ -205,14 +215,16 @@ def get_tweets(since_id=1, first_last=None):
         return None, None, None
 
 
-def go(api_calls_limit):
+def main(config, api_calls_limit):
     all_tweets = []
     temp_tweets = []
     keep_going = False
 
+    authentication = auth(config['credential_location'])
+
     last_tweet_id = get_last_tweet_id()
 
-    temp_tweets, first_last, keep_going = get_tweets(last_tweet_id)
+    temp_tweets, first_last, keep_going = get_tweets(authentication, last_tweet_id)
 
     if temp_tweets:
         last_tweet_id_new = first_last['latest_id']
@@ -222,7 +234,7 @@ def go(api_calls_limit):
 
     if keep_going:
         for i in range(api_calls_limit - 1):
-            temp_tweets, first_last, keep_going = get_tweets(last_tweet_id, first_last)
+            temp_tweets, first_last, keep_going = get_tweets(authentication, last_tweet_id, first_last)
             if keep_going is True:
                 all_tweets.extend(temp_tweets)
             else:
@@ -237,7 +249,3 @@ def go(api_calls_limit):
     # print(json.dumps([x.data_structure for x in all_tweets_unshort]))
 
     return all_tweets_unshort
-
-
-if __name__ == '__main__':
-    go(1)

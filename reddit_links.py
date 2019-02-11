@@ -14,18 +14,7 @@ logger = logging.getLogger(__name__)
 # TODO: error handling
 # TODO: proper logging
 
-CRED_PATH = '/home/rich/.creds/reddit_api.json'
-
-json_data = open(CRED_PATH).read()
-creds = json.loads(json_data)
-
-APP_CLIENT_ID = creds['reddit_creds']['APP_CLIENT_ID']
-APP_CLIENT_SECRET = creds['reddit_creds']['APP_CLIENT_SECRET']
-
-SUBREDDITS = ['Netsec', 'Malware', 'Antiforensics', 'Computerforensics', 'ReverseEngineering']
-QUERY_PART1 = 'https://oauth.reddit.com/r/'
-QUERY_PART2 = '/new/.json'
-USER_AGENT = 'Get_Links Agent'
+# SUBREDDITS = ['Netsec', 'Malware', 'Antiforensics', 'Computerforensics', 'ReverseEngineering']
 
 
 def build_hash(link):
@@ -33,28 +22,42 @@ def build_hash(link):
     return sha256_hash.hexdigest()
 
 
-def auth():
+def auth(credential_location):
+    try:
+        with open(credential_location, 'r') as json_data:
+            creds = json.load(json_data)
+    except IOError:
+        logger.error('Could not load Reddit credentials from: ' + credential_location)
+        exit()
+
+    app_client_id = creds['reddit_creds']['APP_CLIENT_ID']
+    app_client_secret = creds['reddit_creds']['APP_CLIENT_SECRET']
+
     # Get an access token
     authentication = requests.post('https://www.reddit.com/api/v1/access_token',
                                    headers={'User-agent': 'get_links_lol'},
                                    data={'grant_type': 'client_credentials'},
-                                   auth=(APP_CLIENT_ID, APP_CLIENT_SECRET))
+                                   auth=(app_client_id, app_client_secret))
 
     access_token = authentication.json()['access_token']
     return access_token
 
 
 def make_request(reddit, token, before=None):
+    query_part1 = 'https://oauth.reddit.com/r/'
+    query_part2 = '/new/.json'
+    user_agent = 'Get_Links Agent'
+
     # Build the URL
     if not before:
-        url = QUERY_PART1 + reddit + QUERY_PART2
+        url = query_part1 + reddit + query_part2
         params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '25'}
     else:
-        url = QUERY_PART1 + reddit + QUERY_PART2
+        url = query_part1 + reddit + query_part2
         params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '25', 'before': before}
 
     api_res = requests.get(url=url, params=params, headers={'authorization': 'Bearer ' + token,
-                                                            'User-agent': USER_AGENT})
+                                                            'User-agent': user_agent})
 
     new_posts = api_res.json()
 
@@ -101,12 +104,12 @@ def parse_json(json_response):
         return parsed_reddit_data
 
 
-def go():
+def main(config):
     all_posts = []
 
-    token = auth()
+    token = auth(config['credential_location'])
 
-    for sr in SUBREDDITS:
+    for sr in config['subreddits']:
         resp = make_request(sr, token)
         # print(json.dumps(resp))
 
@@ -119,4 +122,4 @@ def go():
 
 
 if __name__ == '__main__':
-    go()
+    main()

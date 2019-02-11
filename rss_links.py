@@ -19,21 +19,6 @@ logger = logging.getLogger(__name__)
 
 THREADS = 10
 # THIS SHOULD BE READ FROM A CONFIG
-FEED_LIST = ['https://www.endgame.com/blog-rss.xml', 'https://isc.sans.edu/rssfeed.xml']
-
-
-def go(rssfeedlist=FEED_LIST):
-    pool = multiprocessing.Pool(processes=THREADS)
-
-    results = pool.map(parsefeed, rssfeedlist)
-
-    # results is a list of lists which all contain dictionaries.
-    # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
-    processed_results = list(itertools.chain.from_iterable(results))
-
-    logger.info("rss")
-
-    return processed_results
 
 
 def parsefeed(url):
@@ -72,8 +57,20 @@ def build_hash(link):
     return sha256_hash.hexdigest()
 
 
+def main(config):
+    pool = multiprocessing.Pool(processes=THREADS)
+
+    results = pool.map(parsefeed, config['feeds'])
+
+    # results is a list of lists which all contain dictionaries.
+    # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
+    processed_results = list(itertools.chain.from_iterable(results))
+
+    return processed_results
+
+
 if __name__ == '__main__':
-    fetched_results = go(FEED_LIST)
+    fetched_results = main(['https://www.endgame.com/blog-rss.xml', 'https://isc.sans.edu/rssfeed.xml'])
 
     print(json.dumps(fetched_results))
     print()
