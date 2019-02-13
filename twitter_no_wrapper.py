@@ -53,7 +53,6 @@ def parse_retweet(json_response):
     if len(urls) > 0:
         parsed_tweet_data.data_structure['source'] = 'twitter'
         parsed_tweet_data.data_structure['author'] = json_response['retweeted_status']['user']['screen_name'] + ': ' + json_response['retweeted_status']['user']['name']
-        parsed_tweet_data.data_structure['title'] = None
         parsed_tweet_data.data_structure['description'] = json_response['retweeted_status']['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
@@ -76,7 +75,6 @@ def parse_quoted_tweet(json_response):
 
         parsed_tweet_data.data_structure['source'] = 'twitter'
         parsed_tweet_data.data_structure['author'] = json_response['quoted_status']['user']['screen_name'] + ': ' + json_response['quoted_status']['user']['name']
-        parsed_tweet_data.data_structure['title'] = None
         parsed_tweet_data.data_structure['description'] = json_response['quoted_status']['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
@@ -98,7 +96,6 @@ def parse_tweet(json_response):
     if len(urls) > 0:
         parsed_tweet_data.data_structure['source'] = 'twitter'
         parsed_tweet_data.data_structure['author'] = json_response['user']['screen_name'] + ': ' + json_response['user']['name']
-        parsed_tweet_data.data_structure['title'] = None
         parsed_tweet_data.data_structure['description'] = json_response['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str']
         parsed_tweet_data.data_structure['urls'] = urls

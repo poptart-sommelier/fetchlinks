@@ -70,8 +70,7 @@ def parse_json(json_response):
     if not json_response['data']['url'].startswith('https://www.reddit.com/'):
         parsed_reddit_data.data_structure['source'] = 'reddit/' + json_response['data']['subreddit_name_prefixed']
         parsed_reddit_data.data_structure['author'] = json_response['data']['author']
-        parsed_reddit_data.data_structure['title'] = json_response['data']['title']
-        parsed_reddit_data.data_structure['description'] = None
+        parsed_reddit_data.data_structure['description'] = json_response['data']['title']
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
         parsed_reddit_data.data_structure['urls'] = [{'url': json_response['data']['url'], 'unshort_url': None}]
         parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
@@ -94,8 +93,7 @@ def parse_json(json_response):
 
         parsed_reddit_data.data_structure['source'] = 'reddit' + json_response['data']['subreddit_name_prefixed']
         parsed_reddit_data.data_structure['author'] = json_response['data']['author']
-        parsed_reddit_data.data_structure['title'] = json_response['data']['title']
-        parsed_reddit_data.data_structure['description'] = None
+        parsed_reddit_data.data_structure['description'] = json_response['data']['title']
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
         parsed_reddit_data.data_structure['urls'] = selftext_urls
         parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
