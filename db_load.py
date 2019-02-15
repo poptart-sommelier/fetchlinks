@@ -12,7 +12,7 @@ def db_insert(entry_list):
     db_command = """INSERT INTO fetchlinks.links (source, author, description, direct_link, urls, date_created, 
                     unique_id) values (%s, %s, %s, %s, %s, %s, %s)"""
 
-    db = MySQLdb.connect(host="127.0.0.1", port=33600, user="rich", passwd="thepassword", db="fetchlinks",
+    db = MySQLdb.connect(host="127.0.0.1", port=33600, user="root", passwd="thepassword", db="fetchlinks",
                          use_unicode=True, charset="utf8mb4")
 
     cur = db.cursor()
