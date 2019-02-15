@@ -31,19 +31,19 @@ def dict_to_row(fetched_data):
     for entry in fetched_data:
         url_list = []
 
-        for url in entry['urls']:
+        for url in entry.data_structure['urls']:
             if not url['unshort_url']:
                 url_list.append(url['unshort_url'])
             else:
                 url_list.append(url['url'])
 
-        list_of_rows_for_db.append([entry['source'],
-                                    entry['author'],
-                                    entry['description'],
-                                    entry['direct_link'],
-                                    '|'.join([url['unshort_url'] if url['unshort_url'] else url['url'] for url in entry['urls']]),
-                                    entry['date_created'],
-                                    entry['unique_id']])
+        list_of_rows_for_db.append([entry.data_structure['source'],
+                                    entry.data_structure['author'],
+                                    entry.data_structure['description'],
+                                    entry.data_structure['direct_link'],
+                                    '|'.join([url['unshort_url'] if url['unshort_url'] else url['url'] for url in entry.data_structure['urls']]),
+                                    entry.data_structure['date_created'],
+                                    entry.data_structure['unique_id']])
 
     return list_of_rows_for_db
 

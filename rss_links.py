@@ -34,9 +34,10 @@ def parsefeed(url):
 
 def build_dict_from_feed(feed):
     parsed_feed_entries_list = []
-    parsed_rss_feed_data = structure_data.Datastructure()
 
     for entry in feed.entries:
+        parsed_rss_feed_data = structure_data.Datastructure()
+
         parsed_rss_feed_data.data_structure['source'] = 'RSS'
         parsed_rss_feed_data.data_structure['author'] = feed.href
         parsed_rss_feed_data.data_structure['description'] = entry.title
@@ -59,7 +60,8 @@ def build_hash(link):
 def main(config):
     pool = multiprocessing.Pool(processes=THREADS)
 
-    results = pool.map(parsefeed, config['feeds'])
+    # results = pool.map(parsefeed, config['feeds'])
+    results = pool.map(parsefeed, config)
 
     # results is a list of lists which all contain dictionaries.
     # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
@@ -71,5 +73,4 @@ def main(config):
 if __name__ == '__main__':
     fetched_results = main(['https://www.endgame.com/blog-rss.xml', 'https://isc.sans.edu/rssfeed.xml'])
 
-    print(json.dumps(fetched_results))
     print()
