@@ -20,6 +20,7 @@ import logging.config
 import twitter_no_wrapper
 import reddit_links
 import rss_links
+import db_load
 
 DATA = 'data/'
 APP_CONFIG_LOCATION = 'data/config/config.json'
@@ -69,8 +70,10 @@ def main():
     config = parse_config()
 
     # links.extend(reddit_links.main(config['reddit']))
-    links.extend(twitter_no_wrapper.main(config['twitter'], 1))
-    # links.extend(rss_links.main(config['rss']))
+    # links.extend(twitter_no_wrapper.main(config['twitter'], 1))
+    links.extend(rss_links.main(config['rss']))
+
+    db_load.main(links)
 
     print()
 

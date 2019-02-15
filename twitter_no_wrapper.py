@@ -48,7 +48,6 @@ def parse_retweet(json_response):
     parsed_tweet_data = structure_data.Datastructure()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['retweeted_status']['entities']['urls']]
-    urls_list = [u for u in json_response['retweeted_status']['entities']['urls']]
 
     if len(urls) > 0:
         parsed_tweet_data.data_structure['source'] = 'twitter'
@@ -57,7 +56,6 @@ def parse_retweet(json_response):
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
         parsed_tweet_data.data_structure['date_created'] = json_response['retweeted_status']['created_at']
-        # parsed_tweet_data.data_structure['unique_id'] = build_hash(''.join(sorted(urls_list)))
 
         return parsed_tweet_data
 
@@ -69,7 +67,6 @@ def parse_quoted_tweet(json_response):
     parsed_tweet_data = structure_data.Datastructure()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['quoted_status']['entities']['urls']]
-    urls_list = [u for u in json_response['quoted_status']['entities']['urls']]
 
     if len(urls) > 0:
 
@@ -79,7 +76,6 @@ def parse_quoted_tweet(json_response):
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
         parsed_tweet_data.data_structure['date_created'] = json_response['quoted_status']['created_at']
-        # parsed_tweet_data.data_structure['unique_id'] = build_hash(''.join(sorted(urls_list)))
 
         return parsed_tweet_data
 
@@ -91,7 +87,6 @@ def parse_tweet(json_response):
     parsed_tweet_data = structure_data.Datastructure()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['entities']['urls']]
-    urls_list = [u for u in json_response['entities']['urls']]
 
     if len(urls) > 0:
         parsed_tweet_data.data_structure['source'] = 'twitter'
@@ -100,7 +95,6 @@ def parse_tweet(json_response):
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
         parsed_tweet_data.data_structure['date_created'] = json_response['created_at']
-        # parsed_tweet_data.data_structure['unique_id'] = build_hash(''.join(sorted(urls_list)))
 
         return parsed_tweet_data
 
@@ -242,7 +236,5 @@ def main(config, api_calls_limit):
     all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
 
     build_unique_ids(all_tweets_unshort)
-
-    # print(json.dumps([x.data_structure for x in all_tweets_unshort]))
 
     return all_tweets_unshort

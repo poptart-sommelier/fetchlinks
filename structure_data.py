@@ -3,7 +3,6 @@ class Datastructure:
         self.data_structure = {
             'source': '',
             'author': '',
-            'title': '',
             'description': '',
             'direct_link': '',
             'urls': [],
