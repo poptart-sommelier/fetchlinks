@@ -60,8 +60,7 @@ def build_hash(link):
 def main(config):
     pool = multiprocessing.Pool(processes=THREADS)
 
-    # results = pool.map(parsefeed, config['feeds'])
-    results = pool.map(parsefeed, config)
+    results = pool.map(parsefeed, config['feeds'])
 
     # results is a list of lists which all contain dictionaries.
     # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
