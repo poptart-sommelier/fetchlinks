@@ -2,6 +2,8 @@
 # TODO: CLONE TWITTER ACCOUNT
 
 # TODO: CHECK FOR DUPLICATE INSERTS USING UNIQUE_ID
+# TODO: SAVE TWITTER ID STATE IN DB
+# TODO: db_load is ignoring insert duplicates, but not logging the warnings
 
 # Standard libraries
 import json
@@ -56,7 +58,7 @@ def main():
 
     links.extend(reddit_links.main(config['reddit']))
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    links.extend(twitter_links.main(config['twitter'], 1))
+    # links.extend(twitter_links.main(config['twitter'], 1))
     links.extend(rss_links.main(config['rss']))
 
     db_load.main(links)
