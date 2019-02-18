@@ -3,10 +3,8 @@
 import requests
 import json
 from requests_oauthlib import OAuth1
-import operator
 import datetime
 import unshorten_links
-import os
 import hashlib
 
 # Importing Datastructure class
@@ -39,6 +37,11 @@ def auth(credential_location):
     return OAuth1(consumer_key, consumer_secret, access_token, access_token_secret)
 
 
+def convert_date_twitter_to_mysql(twitter_date):
+    date_object = datetime.datetime.strptime(twitter_date, '%a %b %d %H:%M:%S +0000 %Y')
+    return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+
+
 def build_hash(link):
     sha256_hash = hashlib.sha256(link.encode())
     return sha256_hash.hexdigest()
@@ -51,11 +54,14 @@ def parse_retweet(json_response):
 
     if len(urls) > 0:
         parsed_tweet_data.data_structure['source'] = 'twitter'
-        parsed_tweet_data.data_structure['author'] = json_response['retweeted_status']['user']['screen_name'] + ': ' + json_response['retweeted_status']['user']['name']
+        parsed_tweet_data.data_structure['author'] = json_response['retweeted_status']['user']['screen_name']\
+                                                     + ': ' + json_response['retweeted_status']['user']['name']
         parsed_tweet_data.data_structure['description'] = json_response['retweeted_status']['full_text']
-        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str']
+        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/'\
+                                                          + json_response['retweeted_status']['user']['screen_name']\
+                                                          + '/status/' + json_response['retweeted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = json_response['retweeted_status']['created_at']
+        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(['retweeted_status']['created_at'])
 
         return parsed_tweet_data
 
@@ -75,7 +81,7 @@ def parse_quoted_tweet(json_response):
         parsed_tweet_data.data_structure['description'] = json_response['quoted_status']['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = json_response['quoted_status']['created_at']
+        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(['quoted_status']['created_at'])
 
         return parsed_tweet_data
 
@@ -94,7 +100,7 @@ def parse_tweet(json_response):
         parsed_tweet_data.data_structure['description'] = json_response['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = json_response['created_at']
+        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(['created_at'])
 
         return parsed_tweet_data
 

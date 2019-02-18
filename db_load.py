@@ -1,7 +1,4 @@
-import json
 import MySQLdb
-import glob
-import os
 import logging
 import structure_data
 
@@ -12,8 +9,13 @@ def db_insert(entry_list):
     db_command = """INSERT INTO fetchlinks.links (source, author, description, direct_link, urls, date_created, 
                     unique_id) values (%s, %s, %s, %s, %s, %s, %s)"""
 
-    db = MySQLdb.connect(host="127.0.0.1", port=33600, user="root", passwd="thepassword", db="fetchlinks",
-                         use_unicode=True, charset="utf8mb4")
+    try:
+        db = MySQLdb.connect(host="127.0.0.1", port=33600, user="root", passwd="thepassword", db="fetchlinks",
+                             use_unicode=True, charset="utf8mb4")
+    except Exception as e:
+        logger.error("Could not connect to database!")
+        logger.error(e)
+        exit(1)
 
     cur = db.cursor()
 
@@ -41,7 +43,8 @@ def dict_to_row(fetched_data):
                                     entry.data_structure['author'],
                                     entry.data_structure['description'],
                                     entry.data_structure['direct_link'],
-                                    '|'.join([url['unshort_url'] if url['unshort_url'] else url['url'] for url in entry.data_structure['urls']]),
+                                    '|'.join([url['unshort_url'] if url['unshort_url'] else url['url']
+                                              for url in entry.data_structure['urls']]),
                                     entry.data_structure['date_created'],
                                     entry.data_structure['unique_id']])
 

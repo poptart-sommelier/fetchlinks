@@ -2,6 +2,7 @@ import requests
 import json
 import re
 import hashlib
+import datetime
 
 # Importing Datastructure class
 import structure_data
@@ -64,6 +65,11 @@ def make_request(reddit, token, before=None):
     return new_posts
 
 
+def convert_date_reddit_to_mysql(reddit_date):
+    date_object = datetime.datetime.utcfromtimestamp(int(reddit_date))
+    return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+
+
 def parse_json(json_response):
     parsed_reddit_data = structure_data.Datastructure()
 
@@ -73,7 +79,7 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['description'] = json_response['data']['title']
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
         parsed_reddit_data.data_structure['urls'] = [{'url': json_response['data']['url'], 'unshort_url': None}]
-        parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
+        parsed_reddit_data.data_structure['date_created'] = convert_date_reddit_to_mysql(['data']['created_utc'])
         parsed_reddit_data.data_structure['unique_id'] = build_hash(json_response['data']['url'])
 
         return parsed_reddit_data
@@ -96,7 +102,7 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['description'] = json_response['data']['title']
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
         parsed_reddit_data.data_structure['urls'] = selftext_urls
-        parsed_reddit_data.data_structure['date_created'] = json_response['data']['created_utc']
+        parsed_reddit_data.data_structure['date_created'] = convert_date_reddit_to_mysql(['data']['created_utc'])
         parsed_reddit_data.data_structure['unique_id'] = build_hash(''.join(sorted([url['url'] for url in selftext_urls])))
 
         return parsed_reddit_data

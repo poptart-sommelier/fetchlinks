@@ -69,8 +69,9 @@ def main():
 
     config = parse_config()
 
-    links.extend(reddit_links.main(config['reddit']))
-    links.extend(twitter_no_wrapper.main(config['twitter'], 1))
+    # links.extend(reddit_links.main(config['reddit']))
+    # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
+    # links.extend(twitter_no_wrapper.main(config['twitter'], 1))
     links.extend(rss_links.main(config['rss']))
 
     db_load.main(links)

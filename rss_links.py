@@ -1,9 +1,8 @@
 import feedparser
-import json
 import multiprocessing
 import itertools
 import hashlib
-# import db_load
+import datetime
 
 # Importing Datastructure class
 import structure_data
@@ -32,18 +31,23 @@ def parsefeed(url):
     return result_dict
 
 
+def convert_date_rss_to_mysql(rss_date):
+    date_object = datetime.datetime.strptime(rss_date[0:25], '%a, %d %b %Y %H:%M:%S')
+    return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+
+
 def build_dict_from_feed(feed):
     parsed_feed_entries_list = []
 
     for entry in feed.entries:
         parsed_rss_feed_data = structure_data.Datastructure()
 
-        parsed_rss_feed_data.data_structure['source'] = 'RSS'
+        parsed_rss_feed_data.data_structure['source'] = 'rss'
         parsed_rss_feed_data.data_structure['author'] = feed.href
         parsed_rss_feed_data.data_structure['description'] = entry.title
         parsed_rss_feed_data.data_structure['direct_link'] = None
         parsed_rss_feed_data.data_structure['urls'] = [{'url': entry.link, 'unshort_url': None}]
-        parsed_rss_feed_data.data_structure['date_created'] = entry.published
+        parsed_rss_feed_data.data_structure['date_created'] = convert_date_rss_to_mysql(entry.published)
         parsed_rss_feed_data.data_structure['unique_id'] = build_hash(''.join(
             sorted([url['url'] for url in parsed_rss_feed_data.data_structure['urls']])))
 
