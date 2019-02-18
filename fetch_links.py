@@ -1,14 +1,7 @@
-# TODO: TO GET STARTED AGAIN:
-# TODO: CONFIG PARSER
-# TODO: PASS ALL CONFIGS TO MODULES
 # TODO: CONFIG: all rss feeds to pull
 # TODO: CLONE TWITTER ACCOUNT
-# TODO: STAND UP DOCKER CONTAINER WITH MYSQLDB
 
-# TODO: STARTUP CHECKS - DOES DATA DIR EXIST,
-# TODO: DB SET UP IN DOCKER
-# TODO: THEN INSERT EVERYTHING INTO DB, CHECKING FOR DUPLICATES VIA UNIQUE ID
-# TODO: SET UP LOGGING
+# TODO: CHECK FOR DUPLICATE INSERTS USING UNIQUE_ID
 
 # Standard libraries
 import json
@@ -17,7 +10,7 @@ import logging
 import logging.config
 
 # Custom libraries
-import twitter_no_wrapper
+import twitter_links
 import reddit_links
 import rss_links
 import db_load
@@ -26,14 +19,6 @@ DATA = 'data/'
 APP_CONFIG_LOCATION = 'data/config/config.json'
 LOG_CONFIG_LOCATION = 'data/config/log_config.json'
 LOG_LOCATION = 'data/logs/fetch_links.log'
-
-# Instantiate Logging
-
-# Read config file
-# Read in credentials file, assign to proper variables
-
-# Instantiate DB connection
-# And exit if we can't connect
 
 # Read DB for state from previous run - last twitter id, etc...
 
@@ -71,7 +56,7 @@ def main():
 
     links.extend(reddit_links.main(config['reddit']))
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    links.extend(twitter_no_wrapper.main(config['twitter'], 1))
+    links.extend(twitter_links.main(config['twitter'], 1))
     links.extend(rss_links.main(config['rss']))
 
     db_load.main(links)

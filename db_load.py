@@ -2,11 +2,14 @@ import MySQLdb
 import logging
 import structure_data
 
+# we can't see mysqldb warnings, unless we raise them to errors and catch them in a log.
+# we are doing this to catch ignored inserts for duplicate unique_ids
+
 logger = logging.getLogger(__name__)
 
 
 def db_insert(entry_list):
-    db_command = """INSERT INTO fetchlinks.links (source, author, description, direct_link, urls, date_created, 
+    db_command = """INSERT IGNORE INTO fetchlinks.links (source, author, description, direct_link, urls, date_created, 
                     unique_id) values (%s, %s, %s, %s, %s, %s, %s)"""
 
     try:
@@ -22,9 +25,11 @@ def db_insert(entry_list):
     try:
         cur.executemany(db_command, entry_list)
         db.commit()
-    except Exception as e:
+    except MySQLdb.Error as e:
         logger.error('Could not load tweets. DB error: {0}'.format(e))
         db.rollback()
+    except MySQLdb.Warning as e:
+        logger.warning(e)
 
 
 def dict_to_row(fetched_data):
