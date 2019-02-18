@@ -38,7 +38,7 @@ def auth(credential_location):
 
 
 def convert_date_twitter_to_mysql(twitter_date):
-    date_object = datetime.datetime.strptime(twitter_date, '%a %b %d %H:%M:%S +0000 %Y')
+    date_object = datetime.datetime.strptime(twitter_date, '%a %b %d %H:%M:%S %z %Y')
     return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
 
 
@@ -61,7 +61,7 @@ def parse_retweet(json_response):
                                                           + json_response['retweeted_status']['user']['screen_name']\
                                                           + '/status/' + json_response['retweeted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(['retweeted_status']['created_at'])
+        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['retweeted_status']['created_at'])
 
         return parsed_tweet_data
 
@@ -81,7 +81,7 @@ def parse_quoted_tweet(json_response):
         parsed_tweet_data.data_structure['description'] = json_response['quoted_status']['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(['quoted_status']['created_at'])
+        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['quoted_status']['created_at'])
 
         return parsed_tweet_data
 
@@ -100,7 +100,7 @@ def parse_tweet(json_response):
         parsed_tweet_data.data_structure['description'] = json_response['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(['created_at'])
+        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['created_at'])
 
         return parsed_tweet_data
 

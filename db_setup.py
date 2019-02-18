@@ -32,7 +32,7 @@ cursor.execute("CREATE TABLE IF NOT EXISTS links (title varchar(2000), descripti
                "source VARCHAR(100), uid VARCHAR(100), urls VARCHAR(2000), direct_link VARCHAR(2000), "
                "date_created VARCHAR(100));")
 
-cursor.execute("ALTER TABLE tweets CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;")
+cursor.execute("ALTER TABLE links CONVER TO CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;")
 
 # Commit and close
 db.commit()
