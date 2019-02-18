@@ -1,14 +1,10 @@
 #!/usr/bin/python3.5
 
 import requests
-import sys
 import multiprocessing
 import collections
 import urllib3
 import structure_data
-
-#   TODO:
-#   test this to make sure that it follows both normal redirects (r.status_code OR r.history) as well as check BODY for any meta tag redirects/refreshes
 
 THREADS = 10
 
