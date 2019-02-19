@@ -6,6 +6,7 @@ from requests_oauthlib import OAuth1
 import datetime
 import unshorten_links
 import hashlib
+import db_interact
 
 # Importing Datastructure class
 import structure_data
@@ -108,36 +109,6 @@ def parse_tweet(json_response):
         return None
 
 
-# TODO: PULL THIS FROM DB
-def get_last_tweet_id():
-    try:
-        with open(LAST_ACCESSED_FILE, 'r') as f:
-            last_read = f.read()
-            if last_read.isdigit():
-                return int(last_read)
-            else:
-                return 1
-
-    except IOError:
-        # logger.info('Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.')
-        print('Cannot locate ./LAST_ACCESSED.txt. Creating a blank one now.')
-
-        set_last_tweet_id('1')
-
-        return 1
-
-
-# TODO: STORE THIS IN DB
-def set_last_tweet_id(last_write):
-    try:
-        with open(LAST_ACCESSED_FILE, 'w') as f:
-            f.write(str(last_write))
-
-    except IOError:
-        # logger.info('Error writing to file ./LAST_ACCESSED.txt')
-        print('Error writing to file ./LAST_ACCESSED.txt')
-
-
 def build_unique_ids(all_tweets):
     for tweet in all_tweets:
         url_list = []
@@ -219,7 +190,7 @@ def main(config, api_calls_limit):
 
     authentication = auth(config['credential_location'])
 
-    last_tweet_id = get_last_tweet_id()
+    last_tweet_id = db_interact.db_get_last_tweet_id()
 
     temp_tweets, first_last, keep_going = get_tweets(authentication, last_tweet_id)
 
@@ -237,10 +208,12 @@ def main(config, api_calls_limit):
             else:
                 break
 
-    set_last_tweet_id(last_tweet_id_new)
+    db_interact.db_set_last_tweet_id(last_tweet_id_new)
 
     all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
 
     build_unique_ids(all_tweets_unshort)
+
+    logger.info('Returning {} entries.'.format(len(all_tweets_unshort)))
 
     return all_tweets_unshort

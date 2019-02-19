@@ -124,6 +124,8 @@ def main(config):
             if post:
                 all_posts.append(post)
 
+    logger.info('Returning {} entries.'.format(len(all_posts)))
+
     return all_posts
 
 

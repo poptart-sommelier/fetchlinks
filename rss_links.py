@@ -70,6 +70,8 @@ def main(config):
     # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
     processed_results = list(itertools.chain.from_iterable(results))
 
+    logger.info('Returning {} entries.'.format(len(processed_results)))
+
     return processed_results
 
 
