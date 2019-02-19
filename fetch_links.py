@@ -1,8 +1,10 @@
 # TODO: CONFIG: all rss feeds to pull
 # TODO: CLONE TWITTER ACCOUNT
 
-# TODO: SAVE TWITTER ID STATE IN DB
 # TODO: DB_LOAD IS IGNORING INSERT DUPLICATES, BUT NOT LOGGING THE WARNINGS
+# TODO: TABLE FOR LINKS, TABLE FOR ENTRIES
+# TODO: LINK ENTRIES TO LINKS WITH UNIQUE KEY (HASH OF URL)
+# TODO: PREVENT DUPLICATE ENTRIES BY LOOKING UP UNIQUE HASH OF KEY FIRST
 
 # Standard libraries
 import json
@@ -55,15 +57,13 @@ def main():
 
     config = parse_config()
 
-    # links.extend(reddit_links.main(config['reddit']))
+    links.extend(reddit_links.main(config['reddit']))
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    # links.extend(twitter_links.main(config['twitter'], 1))
-    # links.extend(rss_links.main(config['rss']))
+    links.extend(twitter_links.main(config['twitter'], 3))
+    links.extend(rss_links.main(config['rss']))
 
-    # db_interact.db_insert(links)
+    db_interact.db_insert(links)
 
-    # db_interact.db_set_last_tweet_id('12345', '2019-01-14 12:15:56')
-    print(db_interact.db_get_last_tweet_id())
     print()
 
 

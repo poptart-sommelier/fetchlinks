@@ -191,6 +191,7 @@ def main(config, api_calls_limit):
     authentication = auth(config['credential_location'])
 
     last_tweet_id = db_interact.db_get_last_tweet_id()
+    logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, last_tweet_id))
 
     temp_tweets, first_last, keep_going = get_tweets(authentication, last_tweet_id)
 
