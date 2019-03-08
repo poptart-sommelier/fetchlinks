@@ -83,7 +83,8 @@ def parse_json(json_response):
                                                       'unshort_unique_id': None}]
         parsed_reddit_data.data_structure['date_created'] = \
             convert_date_reddit_to_mysql(json_response['data']['created_utc'])
-        parsed_reddit_data.data_structure['unique_id'] = build_hash(json_response['data']['url'])
+        parsed_reddit_data.data_structure['unique_id_string'] = ','.join([url['unique_id'] for
+                                                                   url in parsed_reddit_data.data_structure['urls']])
 
         return parsed_reddit_data
 
@@ -107,7 +108,8 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['urls'] = selftext_urls
         parsed_reddit_data.data_structure['date_created'] = \
             convert_date_reddit_to_mysql(json_response['data']['created_utc'])
-        parsed_reddit_data.data_structure['unique_id'] = build_hash(''.join(sorted([url['url'] for url in selftext_urls])))
+        parsed_reddit_data.data_structure['unique_id_string'] = ','.join([url['unique_id'] for
+                                                                   url in parsed_reddit_data.data_structure['urls']])
 
         return parsed_reddit_data
 

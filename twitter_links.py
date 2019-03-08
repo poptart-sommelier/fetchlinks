@@ -105,16 +105,16 @@ def parse_tweet(json_response):
         return None
 
 
-def build_unique_ids(all_tweets):
+def build_unique_id_string(all_tweets):
     for tweet in all_tweets:
-        url_list = []
+        unique_id_list = []
         for urls in tweet.data_structure['urls']:
             if urls['unshort_url'] is None:
-                url_list.append(urls['url'])
+                unique_id_list.append(urls['unique_id'])
             else:
-                url_list.append(urls['unshort_url'])
+                unique_id_list.append(urls['unshort_unique_id'])
 
-        tweet.data_structure['unique_id'] = build_hash(''.join(sorted(url_list)))
+        tweet.data_structure['unique_id_string'] = ','.join(unique_id_list)
 
     return
 
@@ -186,7 +186,8 @@ def main(config, api_calls_limit):
 
     authentication = auth(config['credential_location'])
 
-    last_tweet_id = db_interact.db_get_last_tweet_id()
+    # last_tweet_id = db_interact.db_get_last_tweet_id()
+    last_tweet_id = 1
 
     logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, last_tweet_id))
 
@@ -206,11 +207,11 @@ def main(config, api_calls_limit):
             else:
                 break
 
-    db_interact.db_set_last_tweet_id(last_tweet_id_new)
+    # db_interact.db_set_last_tweet_id(last_tweet_id_new)
 
     all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
 
-    build_unique_ids(all_tweets_unshort)
+    build_unique_id_string(all_tweets_unshort)
 
     logger.info('Returning {} entries.'.format(len(all_tweets_unshort)))
 

@@ -7,5 +7,5 @@ class Datastructure:
             'direct_link': '',
             'urls': [],
             'date_created': '',
-            'unique_id': ''
+            'unique_id_string': ''
         }
