@@ -14,13 +14,6 @@ import structure_data
 import logging
 logger = logging.getLogger(__name__)
 
-# TODO: Add logging
-# TODO: Generate unique IDs (based on unshortened url) for all entries
-# TODO: Store all state in a DB
-
-# TODO: This needs to be in a database
-LAST_ACCESSED_FILE = './LAST_ACCESSED.txt'
-
 
 def auth(credential_location):
     try:
@@ -51,7 +44,8 @@ def build_hash(link):
 def parse_retweet(json_response):
     parsed_tweet_data = structure_data.Datastructure()
 
-    urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['retweeted_status']['entities']['urls']]
+    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
+             'unshort_unique_id': None} for url in json_response['retweeted_status']['entities']['urls']]
 
     if len(urls) > 0:
         parsed_tweet_data.data_structure['source'] = 'twitter'
@@ -73,7 +67,8 @@ def parse_retweet(json_response):
 def parse_quoted_tweet(json_response):
     parsed_tweet_data = structure_data.Datastructure()
 
-    urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['quoted_status']['entities']['urls']]
+    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
+             'unshort_unique_id': None} for url in json_response['quoted_status']['entities']['urls']]
 
     if len(urls) > 0:
 
@@ -93,7 +88,8 @@ def parse_quoted_tweet(json_response):
 def parse_tweet(json_response):
     parsed_tweet_data = structure_data.Datastructure()
 
-    urls = [{'url': url['expanded_url'], 'unshort_url': None} for url in json_response['entities']['urls']]
+    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
+             'unshort_unique_id': None} for url in json_response['entities']['urls']]
 
     if len(urls) > 0:
         parsed_tweet_data.data_structure['source'] = 'twitter'
@@ -191,6 +187,7 @@ def main(config, api_calls_limit):
     authentication = auth(config['credential_location'])
 
     last_tweet_id = db_interact.db_get_last_tweet_id()
+
     logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, last_tweet_id))
 
     temp_tweets, first_last, keep_going = get_tweets(authentication, last_tweet_id)

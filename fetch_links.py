@@ -1,5 +1,8 @@
 # TODO: PRIORITY:
-# TODO: #1 TABLE FOR LINKS, TABLE FOR ENTRIES
+# TODO: WHAT TO DO NOW
+# TODO: NOW HAVE UNIQUE_ID LINKES TO EACH URL IN DICT, UNSHORT PROVIDES UNSHORT_UNIQUE_ID
+# NEED TO BUILD COMMA SEPARATED STRING THAT CONTAINS ALL UNIQUE_ID
+# NEED TO DO INSERTS OF EVERY URL/UNIQUE_ID INTO TABLE ALONGISDE FULL LINK/POST INSERT
 # TODO: #2 LINK ENTRIES TO LINKS WITH UNIQUE KEY (HASH OF URL)
 # TODO: #3 PREVENT DUPLICATE ENTRIES BY LOOKING UP UNIQUE HASH OF KEY FIRST
 
@@ -59,7 +62,7 @@ def main():
 
     links.extend(reddit_links.main(config['reddit']))
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    links.extend(twitter_links.main(config['twitter'], 3))
+    links.extend(twitter_links.main(config['twitter'], 1))
     links.extend(rss_links.main(config['rss']))
 
     db_interact.db_insert(links)

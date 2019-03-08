@@ -4,9 +4,15 @@ import requests
 import multiprocessing
 import collections
 import urllib3
+import hashlib
 import structure_data
 
 THREADS = 10
+
+
+def build_hash(link):
+	sha256_hash = hashlib.sha256(link.encode())
+	return sha256_hash.hexdigest()
 
 
 def is_shortened(url):
@@ -41,6 +47,7 @@ def unshorten(tweet):
 				if r.status_code == 200:
 					unshortened_url = r.url
 					tweet.data_structure['urls'][index]['unshort_url'] = unshortened_url
+					tweet.data_structure['urls'][index]['unshort_unique_id'] = build_hash(unshortened_url)
 			except Exception as e:
 				print(e)
 				print("Url:" + url)

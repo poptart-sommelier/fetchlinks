@@ -78,7 +78,9 @@ def parse_json(json_response):
         parsed_reddit_data.data_structure['author'] = json_response['data']['author']
         parsed_reddit_data.data_structure['description'] = json_response['data']['title']
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
-        parsed_reddit_data.data_structure['urls'] = [{'url': json_response['data']['url'], 'unshort_url': None}]
+        parsed_reddit_data.data_structure['urls'] = [{'url': json_response['data']['url'], 'unshort_url': None,
+                                                      'unique_id': build_hash(json_response['data']['url']),
+                                                      'unshort_unique_id': None}]
         parsed_reddit_data.data_structure['date_created'] = \
             convert_date_reddit_to_mysql(json_response['data']['created_utc'])
         parsed_reddit_data.data_structure['unique_id'] = build_hash(json_response['data']['url'])
@@ -91,8 +93,8 @@ def parse_json(json_response):
             return None
 
         else:
-            selftext_urls = [{'url': url, 'unshort_url': None} for url in
-                             re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
+            selftext_urls = [{'url': url, 'unshort_url': None, 'unique_id': build_hash(url), 'unshort_unique_id': None}
+                             for url in re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
                              if '.' in url]
 
             if len(selftext_urls) < 1:

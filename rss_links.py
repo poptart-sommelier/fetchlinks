@@ -46,7 +46,8 @@ def build_dict_from_feed(feed):
         parsed_rss_feed_data.data_structure['author'] = feed.href
         parsed_rss_feed_data.data_structure['description'] = entry.title
         parsed_rss_feed_data.data_structure['direct_link'] = None
-        parsed_rss_feed_data.data_structure['urls'] = [{'url': entry.link, 'unshort_url': None}]
+        parsed_rss_feed_data.data_structure['urls'] = [{'url': entry.link, 'unshort_url': None,
+                                                        'unique_id': build_hash(entry.link), 'unshort_unique_id': None}]
         parsed_rss_feed_data.data_structure['date_created'] = convert_date_rss_to_mysql(entry.published)
         parsed_rss_feed_data.data_structure['unique_id'] = build_hash(''.join(
             sorted([url['url'] for url in parsed_rss_feed_data.data_structure['urls']])))
