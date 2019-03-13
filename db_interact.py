@@ -54,11 +54,9 @@ def db_get_last_tweet_id():
 
 
 def db_insert(fetched_data):
-    # Convert data from data_structure to flat rows for DB insert
-    entry_list = dict_to_row(fetched_data)
-
-    db_command = """INSERT IGNORE INTO fetchlinks.links (source, author, description, direct_link, urls, date_created, 
-                    unique_id) values (%s, %s, %s, %s, %s, %s, %s)"""
+    db_command_posts = """INSERT IGNORE INTO fetchlinks.posts (source, author, description, direct_link, urls,
+                        date_created, unique_id) values (%s, %s, %s, %s, %s, %s, %s)"""
+    db_command_urls = """INSERT IGNORE INTO fetchlinks.urls (url, unique_id) values (%s, %s)"""
 
     try:
         db = MySQLdb.connect(host="127.0.0.1", port=33600, user="root", passwd="thepassword", db="fetchlinks",
@@ -70,33 +68,35 @@ def db_insert(fetched_data):
 
     cur = db.cursor()
 
+    post_list = []
+    for line in fetched_data:
+        post_list.append([line.data_structure['source'],
+                          line.data_structure['author'],
+                          line.data_structure['description'],
+                          line.data_structure['direct_link'],
+                          line.data_structure['date_created'],
+                          line.data_structure['unique_id_string']])
+
+    url_list = []
+    for line in fetched_data:
+        for url in line.data_structure['urls']:
+            if url['unshort_url'] is None:
+                url_list.append([url['url'],
+                                 url['unique_id']])
+            else:
+                url_list.append([url['unshort_url'],
+                                 url['unshort_unique_id']])
+
     try:
-        cur.executemany(db_command, entry_list)
+        cur.executemany(db_command_posts, post_list)
         db.commit()
     except MySQLdb.Error as e:
-        logger.error('Could not load tweets. DB error: {0}'.format(e))
+        logger.error('Could not load posts into fetchlinks.posts. DB error: {0}'.format(e))
         db.rollback()
 
-
-def dict_to_row(fetched_data):
-    list_of_rows_for_db = []
-
-    for entry in fetched_data:
-        url_list = []
-
-        for url in entry.data_structure['urls']:
-            if not url['unshort_url']:
-                url_list.append(url['unshort_url'])
-            else:
-                url_list.append(url['url'])
-
-        list_of_rows_for_db.append([entry.data_structure['source'],
-                                    entry.data_structure['author'],
-                                    entry.data_structure['description'],
-                                    entry.data_structure['direct_link'],
-                                    '|'.join([url['unshort_url'] if url['unshort_url'] else url['url']
-                                              for url in entry.data_structure['urls']]),
-                                    entry.data_structure['date_created'],
-                                    entry.data_structure['unique_id']])
-
-    return list_of_rows_for_db
+    try:
+        cur.executemany(db_command_urls, url_list)
+        db.commit()
+    except MySQLdb.Error as e:
+        logger.error('Could not load urls into fetchlinks.urls. DB error: {0}'.format(e))
+        db.rollback()
