@@ -186,8 +186,7 @@ def main(config, api_calls_limit):
 
     authentication = auth(config['credential_location'])
 
-    # last_tweet_id = db_interact.db_get_last_tweet_id()
-    last_tweet_id = 1
+    last_tweet_id = db_interact.db_get_last_tweet_id()
 
     logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, last_tweet_id))
 
@@ -207,7 +206,7 @@ def main(config, api_calls_limit):
             else:
                 break
 
-    # db_interact.db_set_last_tweet_id(last_tweet_id_new)
+    db_interact.db_set_last_tweet_id(last_tweet_id_new)
 
     all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
 

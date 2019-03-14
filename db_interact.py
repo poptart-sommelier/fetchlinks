@@ -9,7 +9,7 @@ def db_set_last_tweet_id(last_accessed_id):
     db_command = """INSERT INTO fetchlinks.twitter (last_accessed_id) values (%s)"""
 
     try:
-        db = MySQLdb.connect(host="127.0.0.1", port=33600, user="root", passwd="thepassword", db="fetchlinks",
+        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
                              use_unicode=True, charset="utf8mb4")
     except Exception as e:
         logger.error("Could not connect to database!")
@@ -30,7 +30,7 @@ def db_get_last_tweet_id():
     db_command = """SELECT last_accessed_id FROM fetchlinks.twitter ORDER BY idx LIMIT 1"""
 
     try:
-        db = MySQLdb.connect(host="127.0.0.1", port=33600, user="root", passwd="thepassword", db="fetchlinks",
+        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
                              use_unicode=True, charset="utf8mb4")
     except Exception as e:
         logger.error("Could not connect to database!")
@@ -54,12 +54,12 @@ def db_get_last_tweet_id():
 
 
 def db_insert(fetched_data):
-    db_command_posts = """INSERT IGNORE INTO fetchlinks.posts (source, author, description, direct_link, urls,
-                        date_created, unique_id) values (%s, %s, %s, %s, %s, %s, %s)"""
+    db_command_posts = """INSERT IGNORE INTO fetchlinks.posts (source, author, description, direct_link, 
+                        date_created, unique_id_string) values (%s, %s, %s, %s, %s, %s)"""
     db_command_urls = """INSERT IGNORE INTO fetchlinks.urls (url, unique_id) values (%s, %s)"""
 
     try:
-        db = MySQLdb.connect(host="127.0.0.1", port=33600, user="root", passwd="thepassword", db="fetchlinks",
+        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
                              use_unicode=True, charset="utf8mb4")
     except Exception as e:
         logger.error("Could not connect to database!")
