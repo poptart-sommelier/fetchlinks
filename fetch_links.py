@@ -1,6 +1,5 @@
 # TODO: PRIORITY:
 # TODO: WHAT TO DO NOW
-# TODO: #2 IF TWITTER HAS NO NEW LINKS, FAILS. FAIL GRACEFULLY ON ALL THREE MODULES WHEN NO RESULTS
 # TODO: #3 LINK ENTRIES TO LINKS WITH UNIQUE KEY (HASH OF URL)
 # TODO: #4 PREVENT DUPLICATE ENTRIES BY LOOKING UP UNIQUE HASH OF KEY FIRST
 
@@ -58,14 +57,26 @@ def main():
 
     config = parse_config()
 
-    links.extend(reddit_links.main(config['reddit']))
+    tmp_result = reddit_links.main(config['reddit'])
+    if tmp_result is not None:
+        links.extend(tmp_result)
+    else:
+        logger.info('No results returned from: reddit')
+
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    links.extend(twitter_links.main(config['twitter'], 1))
-    links.extend(rss_links.main(config['rss']))
+    tmp_result = twitter_links.main(config['twitter'], 1)
+    if tmp_result is not None:
+        links.extend(tmp_result)
+    else:
+        logger.info('No results returned from: twitter')
+
+    tmp_result = rss_links.main(config['rss'])
+    if tmp_result is not None:
+        links.extend(tmp_result)
+    else:
+        logger.info('No results returned from: rss')
 
     db_interact.db_insert(links)
-
-    print()
 
 
 main()

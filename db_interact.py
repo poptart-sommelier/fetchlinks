@@ -1,12 +1,13 @@
 import MySQLdb
 import logging
 import structure_data
+import datetime
 
 logger = logging.getLogger(__name__)
 
 
 def db_set_last_tweet_id(last_accessed_id):
-    db_command = """INSERT INTO fetchlinks.twitter (last_accessed_id) values (%s)"""
+    db_command = """INSERT INTO fetchlinks.twitter (last_accessed_id, time_created) values (%s, %s)"""
 
     try:
         db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
@@ -19,7 +20,7 @@ def db_set_last_tweet_id(last_accessed_id):
     cur = db.cursor()
 
     try:
-        cur.execute(db_command, [last_accessed_id])
+        cur.execute(db_command, [last_accessed_id, datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')])
         db.commit()
     except MySQLdb.Error as e:
         logger.error('Could not set last accessed id. DB error: {0}'.format(e))
@@ -27,7 +28,7 @@ def db_set_last_tweet_id(last_accessed_id):
 
 
 def db_get_last_tweet_id():
-    db_command = """SELECT last_accessed_id FROM fetchlinks.twitter ORDER BY idx LIMIT 1"""
+    db_command = """SELECT last_accessed_id FROM fetchlinks.twitter ORDER BY idx DESC LIMIT 1"""
 
     try:
         db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
