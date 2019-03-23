@@ -1,10 +1,12 @@
 # TODO: PRIORITY:
 # TODO: WHAT TO DO NOW
-# TODO: #3 LINK ENTRIES TO LINKS WITH UNIQUE KEY (HASH OF URL)
-# TODO: #4 PREVENT DUPLICATE ENTRIES BY LOOKING UP UNIQUE HASH OF KEY FIRST
+# TODO: #1 REDDIT API - 'BEFORE' PARAMATER NEEDS TO BE ADDED (AND REDDIT TABLE CREATED TO STORE IT)
+# TODO: #1 NEED NEW TABLE FOR REDDIT IDS (SET UP SQL QUERY), NEED NEW FUNCTIONS FOR INSERTS OF IDS INTO REDDIT TABLE
+# TODO: #1.5 TEST REDDIT URL/API, MAKE SURE WE'RE PULLING TOP/DAILY
+# TODO: #2 IF WE PULL THE SAME POST (NOT URL) TWICE, WE WILL STORE IT TWICE. IMPLEMENT DEDUP
 
 # TODO: CONFIG: all rss feeds to pull
-# TODO: CLONE TWITTER ACCOUNT
+# TODO: CLONE TWITTER ACCOUNT - ALREADY CREATED LIST
 
 # Standard libraries
 import json
@@ -64,7 +66,7 @@ def main():
         logger.info('No results returned from: reddit')
 
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    tmp_result = twitter_links.main(config['twitter'], 1)
+    tmp_result = twitter_links.main(config['twitter'], 15)
     if tmp_result is not None:
         links.extend(tmp_result)
     else:

@@ -10,8 +10,6 @@ import structure_data
 import logging
 logger = logging.getLogger(__name__)
 
-# TODO: LIMIT API CALL -> NEWER THAN UTC TIME?
-# TODO: /r/all.json?before=yyy WHERE yyy = first instance of data.children[0].data.name
 # TODO: error handling
 # TODO: proper logging
 
@@ -44,18 +42,18 @@ def auth(credential_location):
     return access_token
 
 
-def make_request(reddit, token, before=None):
+def make_request(subreddit, token, before=None):
     query_part1 = 'https://oauth.reddit.com/r/'
     query_part2 = '/new/.json'
     user_agent = 'Get_Links Agent'
 
     # Build the URL
     if not before:
-        url = query_part1 + reddit + query_part2
-        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '25'}
+        url = query_part1 + subreddit + query_part2
+        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100'}
     else:
-        url = query_part1 + reddit + query_part2
-        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '25', 'before': before}
+        url = query_part1 + subreddit + query_part2
+        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100', 'before': before}
 
     api_res = requests.get(url=url, params=params, headers={'authorization': 'Bearer ' + token,
                                                             'User-agent': user_agent})
