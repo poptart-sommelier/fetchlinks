@@ -206,11 +206,11 @@ def main(config, api_calls_limit):
             else:
                 break
 
-    db_interact.db_set_last_tweet_id(last_tweet_id_new)
-
     all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
 
     build_unique_id_string(all_tweets_unshort)
+
+    db_interact.db_set_last_tweet_id(last_tweet_id_new)
 
     logger.info('Returning {} entries.'.format(len(all_tweets_unshort)))
 

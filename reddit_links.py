@@ -3,6 +3,7 @@ import json
 import re
 import hashlib
 import datetime
+import db_interact
 
 # Importing Datastructure class
 import structure_data
@@ -42,23 +43,22 @@ def auth(credential_location):
     return access_token
 
 
-def make_request(subreddit, token, before=None):
+def make_request(subreddit, token):
     query_part1 = 'https://oauth.reddit.com/r/'
     query_part2 = '/new/.json'
     user_agent = 'Get_Links Agent'
 
     # Build the URL
-    if not before:
-        url = query_part1 + subreddit + query_part2
-        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100'}
-    else:
-        url = query_part1 + subreddit + query_part2
-        params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100', 'before': before}
+    url = query_part1 + subreddit + query_part2
+    params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100'}
 
     api_res = requests.get(url=url, params=params, headers={'authorization': 'Bearer ' + token,
                                                             'User-agent': user_agent})
 
     new_posts = api_res.json()
+    logger.info('{} returned {} entries'.format(subreddit, len(new_posts['data']['children'])))
+
+    after = new_posts['data']['after']
 
     return new_posts
 
@@ -118,7 +118,9 @@ def main(config):
     token = auth(config['credential_location'])
 
     for sr in config['subreddits']:
+
         resp = make_request(sr, token)
+
         # print(json.dumps(resp))
 
         for r in resp['data']['children']:

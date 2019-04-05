@@ -1,8 +1,8 @@
 import MySQLdb
-import logging
 import structure_data
 import datetime
 
+import logging
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +25,7 @@ def db_set_last_tweet_id(last_accessed_id):
     except MySQLdb.Error as e:
         logger.error('Could not set last accessed id. DB error: {0}'.format(e))
         db.rollback()
+        exit(1)
 
 
 def db_get_last_tweet_id():
@@ -50,8 +51,36 @@ def db_get_last_tweet_id():
             return int(result[0][0])
 
     except MySQLdb.Error as e:
-        logger.error('Could not set last accessed id. DB error: {0}'.format(e))
+        logger.error('Could not get last accessed id. DB error: {0}'.format(e))
         return 1
+
+
+def db_check_duplicates(unique_id_string):
+    db_command_check_duplicates = """SELECT unique_id_string FROM fetchlinks.posts where unique_id_string = %s"""
+
+    try:
+        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
+                             use_unicode=True, charset="utf8mb4")
+    except Exception as e:
+        logger.error("Could not connect to database!")
+        logger.error(e)
+        exit(1)
+
+    cur = db.cursor()
+
+    try:
+        cur.execute(db_command_check_duplicates, unique_id_string)
+        result = cur.fetchall()
+        db.close()
+
+        if len(result) < 1:
+            return False
+        else:
+            return True
+
+    except MySQLdb.Error as e:
+        logger.error('Could not look up unique_id_string. DB error: {0}'.format(e))
+        return False
 
 
 def db_insert(fetched_data):
