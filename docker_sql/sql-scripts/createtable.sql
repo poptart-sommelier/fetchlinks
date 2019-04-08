@@ -1,3 +1,5 @@
+CREATE DATABASE fetchlinks;
+
 CREATE TABLE fetchlinks.posts (
 source VARCHAR(100),
 author VARCHAR(500),

@@ -3,6 +3,8 @@
 
 # TODO: CONFIG: all rss feeds to pull
 # TODO: CLONE TWITTER ACCOUNT - ALREADY CREATED LIST
+# TODO: DUMMY REDDIT ACCOUNT
+# TODO: CONFIGURE GOOGLE CLOUD SERVER - mysql + python (venv?)
 
 # Standard libraries
 import json
