@@ -55,37 +55,10 @@ def db_get_last_tweet_id():
         return 1
 
 
-def db_check_duplicates(unique_id_string):
-    db_command_check_duplicates = """SELECT unique_id_string FROM fetchlinks.posts where unique_id_string = %s"""
-
-    try:
-        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
-                             use_unicode=True, charset="utf8mb4")
-    except Exception as e:
-        logger.error("Could not connect to database!")
-        logger.error(e)
-        exit(1)
-
-    cur = db.cursor()
-
-    try:
-        cur.execute(db_command_check_duplicates, unique_id_string)
-        result = cur.fetchall()
-        db.close()
-
-        if len(result) < 1:
-            return False
-        else:
-            return True
-
-    except MySQLdb.Error as e:
-        logger.error('Could not look up unique_id_string. DB error: {0}'.format(e))
-        return False
-
-
 def db_insert(fetched_data):
     db_command_posts = """INSERT IGNORE INTO fetchlinks.posts (source, author, description, direct_link, 
-                        date_created, unique_id_string) values (%s, %s, %s, %s, %s, %s)"""
+                        date_created, unique_id_string, url_1, url_2, url_3, url_4, url_5, url_6, urls_missing) 
+                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
     db_command_urls = """INSERT IGNORE INTO fetchlinks.urls (url, unique_id) values (%s, %s)"""
 
     try:
@@ -100,12 +73,23 @@ def db_insert(fetched_data):
 
     post_list = []
     for line in fetched_data:
+        # Build URL list, truncate long urls
+        line.prep_for_db()
+
         post_list.append([line.data_structure['source'],
                           line.data_structure['author'],
                           line.data_structure['description'],
                           line.data_structure['direct_link'],
                           line.data_structure['date_created'],
-                          line.data_structure['unique_id_string']])
+                          line.data_structure['unique_id_string'],
+                          line.data_structure['url_1'],
+                          line.data_structure['url_2'],
+                          line.data_structure['url_3'],
+                          line.data_structure['url_4'],
+                          line.data_structure['url_5'],
+                          line.data_structure['url_6'],
+                          line.data_structure['urls_missing']
+                          ])
 
     url_list = []
     for line in fetched_data:
