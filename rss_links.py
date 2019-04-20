@@ -42,8 +42,8 @@ def build_dict_from_feed(feed):
     for entry in feed.entries:
         parsed_rss_feed_data = structure_data.Datastructure()
 
-        parsed_rss_feed_data.data_structure['source'] = 'rss'
-        parsed_rss_feed_data.data_structure['author'] = feed.href
+        parsed_rss_feed_data.data_structure['source'] = feed.feed['link']
+        parsed_rss_feed_data.data_structure['author'] = feed.feed['title']
         parsed_rss_feed_data.data_structure['description'] = entry.title
         parsed_rss_feed_data.data_structure['direct_link'] = None
         parsed_rss_feed_data.data_structure['urls'] = [{'url': entry.link, 'unshort_url': None,

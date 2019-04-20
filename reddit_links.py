@@ -72,7 +72,7 @@ def parse_json(json_response):
     parsed_reddit_data = structure_data.Datastructure()
 
     if not json_response['data']['url'].startswith('https://www.reddit.com/'):
-        parsed_reddit_data.data_structure['source'] = 'reddit/' + json_response['data']['subreddit_name_prefixed']
+        parsed_reddit_data.data_structure['source'] = 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
         parsed_reddit_data.data_structure['author'] = json_response['data']['author']
         parsed_reddit_data.data_structure['description'] = json_response['data']['title']
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
@@ -99,7 +99,7 @@ def parse_json(json_response):
             if len(selftext_urls) < 1:
                 return None
 
-        parsed_reddit_data.data_structure['source'] = 'reddit' + json_response['data']['subreddit_name_prefixed']
+        parsed_reddit_data.data_structure['source'] = 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
         parsed_reddit_data.data_structure['author'] = json_response['data']['author']
         parsed_reddit_data.data_structure['description'] = json_response['data']['title']
         parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']

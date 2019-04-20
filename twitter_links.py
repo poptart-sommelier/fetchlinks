@@ -48,9 +48,9 @@ def parse_retweet(json_response):
              'unshort_unique_id': None} for url in json_response['retweeted_status']['entities']['urls']]
 
     if len(urls) > 0:
-        parsed_tweet_data.data_structure['source'] = 'twitter'
-        parsed_tweet_data.data_structure['author'] = json_response['retweeted_status']['user']['screen_name']\
-                                                     + ': ' + json_response['retweeted_status']['user']['name']
+        parsed_tweet_data.data_structure['source'] = 'https://twitter.com/'\
+                                                     + json_response['retweeted_status']['user']['screen_name']
+        parsed_tweet_data.data_structure['author'] = json_response['retweeted_status']['user']['name']
         parsed_tweet_data.data_structure['description'] = json_response['retweeted_status']['full_text']
         parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/'\
                                                           + json_response['retweeted_status']['user']['screen_name']\
@@ -72,10 +72,13 @@ def parse_quoted_tweet(json_response):
 
     if len(urls) > 0:
 
-        parsed_tweet_data.data_structure['source'] = 'twitter'
-        parsed_tweet_data.data_structure['author'] = json_response['quoted_status']['user']['screen_name'] + ': ' + json_response['quoted_status']['user']['name']
+        parsed_tweet_data.data_structure['source'] = 'https://twitter.com/'\
+                                                     + json_response['quoted_status']['user']['screen_name']
+        parsed_tweet_data.data_structure['author'] = json_response['quoted_status']['user']['name']
         parsed_tweet_data.data_structure['description'] = json_response['quoted_status']['full_text']
-        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str']
+        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/'\
+                                                          + json_response['quoted_status']['user']['screen_name']\
+                                                          + '/status/' + json_response['quoted_status']['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
         parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['quoted_status']['created_at'])
 
@@ -92,10 +95,12 @@ def parse_tweet(json_response):
              'unshort_unique_id': None} for url in json_response['entities']['urls']]
 
     if len(urls) > 0:
-        parsed_tweet_data.data_structure['source'] = 'twitter'
-        parsed_tweet_data.data_structure['author'] = json_response['user']['screen_name'] + ': ' + json_response['user']['name']
+        parsed_tweet_data.data_structure['source'] = 'https://twitter.com/' + json_response['user']['screen_name']
+        parsed_tweet_data.data_structure['author'] = json_response['user']['name']
         parsed_tweet_data.data_structure['description'] = json_response['full_text']
-        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str']
+        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/'\
+                                                          + json_response['user']['screen_name']\
+                                                          + '/status/' + json_response['id_str']
         parsed_tweet_data.data_structure['urls'] = urls
         parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['created_at'])
 
