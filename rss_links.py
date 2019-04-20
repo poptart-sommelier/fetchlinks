@@ -3,6 +3,7 @@ import multiprocessing
 import itertools
 import hashlib
 import datetime
+from dateutil.parser import *
 
 # Importing Datastructure class
 import structure_data
@@ -32,8 +33,13 @@ def parsefeed(url):
 
 
 def convert_date_rss_to_mysql(rss_date):
-    date_object = datetime.datetime.strptime(rss_date[0:25], '%a, %d %b %Y %H:%M:%S')
-    return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+    try:
+        date_object = parse(rss_date)
+        return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        logger.error(e)
+        logger.error('Could not parse date using dateutil: {}'.format(rss_date))
+        return datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
 
 
 def build_dict_from_feed(feed):
@@ -48,7 +54,25 @@ def build_dict_from_feed(feed):
         parsed_rss_feed_data.data_structure['direct_link'] = None
         parsed_rss_feed_data.data_structure['urls'] = [{'url': entry.link, 'unshort_url': None,
                                                         'unique_id': build_hash(entry.link), 'unshort_unique_id': None}]
-        parsed_rss_feed_data.data_structure['date_created'] = convert_date_rss_to_mysql(entry.published)
+
+        if 'published' in entry:
+            try:
+                parsed_rss_feed_data.data_structure['date_created'] = convert_date_rss_to_mysql(entry.published)
+            except AttributeError as e:
+                parsed_rss_feed_data.data_structure['date_created'] = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+                logger.error(e)
+                logger.error('Missing entry.published from {} - {}'.format(feed.feed['title'], entry.title))
+        elif 'updated' in entry:
+            try:
+                parsed_rss_feed_data.data_structure['date_created'] = convert_date_rss_to_mysql(entry.updated)
+            except AttributeError as e:
+                parsed_rss_feed_data.data_structure['date_created'] = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+                logger.error(e)
+                logger.error('Missing entry.updated from {} - {}'.format(feed.feed['title'], entry.title))
+        else:
+                parsed_rss_feed_data.data_structure['date_created'] = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+                logger.error('Missing published/updated info, setting published date to NOW.\n{} - {}'.format(feed.feed['title'], entry.title))
+
         parsed_rss_feed_data.data_structure['unique_id_string'] = ','.join(
             sorted([url['unique_id'] for url in parsed_rss_feed_data.data_structure['urls']]))
 
