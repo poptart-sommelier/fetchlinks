@@ -1,7 +1,10 @@
+# TODO: RECREATE PROJECT (fetchlinks)/CLEAN GIT REPO
 # TODO: SET UP IN GOOGLE - CRON JOB USING CONFIG?
+# TODO: FULLY DOCUMENT DEPLOYMENT IN SETUP.MD
 # TODO: IMPLEMENT 'ignored_sources' IN CONFIG - non-infosec related feeds
 # TODO: STATS - USER POSTS, MOST CLICKED, ETC...
 # TODO: CUSTOM STREAM/TOP USER STREAM
+# TODO: DB MAINTENANCE TASKS - stats, clean-up (drop older than XX days?), partitioning (by day?)
 
 # Standard libraries
 import json

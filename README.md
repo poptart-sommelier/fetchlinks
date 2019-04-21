@@ -1,7 +1,6 @@
 Remaining work:
 
 
-1) Add dates to tweets
 2) Error logging for success/failure - WORKING - DB_LOAD, MISSING - TWITTER_NO_WRAPPER
 3) orchestration script that wraps scraper and db loader
 5) cron job to delete archives older than X days (30?)
