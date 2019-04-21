@@ -66,5 +66,10 @@
         "credential_location": "/home/rich/.creds/db_credentials.json"
     },
     "file_output_location": "./data",
-    "log_level": "INFO"
+    "log_level": "INFO",
+    "ignored_sources": [
+        "https://twitter.com/HCS",
+        "https://twitter.com/TeamReciprocity",
+        "https://twitter.com/ESLHalo"
+    ]
 }
