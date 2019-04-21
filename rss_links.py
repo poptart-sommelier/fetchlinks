@@ -11,12 +11,6 @@ import structure_data
 import logging
 logger = logging.getLogger(__name__)
 
-# TODO: to ensure we don't pull data we already have, use etag and modified (see below code example)
-# TODO: list of rss feeds should be stored in a config file
-# TODO: dump all rss from feedly, create config file
-# TODO: error handling
-# TODO: proper logging
-
 THREADS = 10
 # THIS SHOULD BE READ FROM A CONFIG
 

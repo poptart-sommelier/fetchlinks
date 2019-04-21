@@ -11,11 +11,6 @@ import structure_data
 import logging
 logger = logging.getLogger(__name__)
 
-# TODO: error handling
-# TODO: proper logging
-
-# SUBREDDITS = ['Netsec', 'Malware', 'Antiforensics', 'Computerforensics', 'ReverseEngineering']
-
 
 def build_hash(link):
     sha256_hash = hashlib.sha256(link.encode())
