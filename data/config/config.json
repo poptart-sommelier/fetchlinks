@@ -39,7 +39,7 @@
             "https://digital-forensics.sans.org/blog/feed/",
             "http://seclists.org/rss/cert.rss",
             "http://seclists.org/rss/microsoft.rss",
-            "http://securityaffairs.co/wordpress/feed"
+            "http://securityaffairs.co/wordpress/feed",
             "https://isc.sans.edu/rssfeed.xml",
             "https://labsblog.f-secure.com/feed/rss/",
             "https://malware.news/latest.rss",
@@ -61,8 +61,7 @@
             "http://www.skullsecurity.org/blog/feed",
             "http://www.theregister.co.uk/security/headlines.atom",
             "http://www.zdnet.com/blog/security/rss",
-            "http://zerosum0x0.blogspot.com/feeds/posts/default",
-
+            "http://zerosum0x0.blogspot.com/feeds/posts/default"
         ]
     },
     "log_location": "./data/logs",
