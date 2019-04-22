@@ -1,0 +1,6 @@
+urllib3
+requests
+python_dateutil
+feedparser
+requests_oauthlib
+mysqlclient

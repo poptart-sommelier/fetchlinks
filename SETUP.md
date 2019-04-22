@@ -23,10 +23,12 @@ conda create -n fetchlinks python=3.7 anaconda<br>
 conda create -n fetchlinks_webapp python=3.7 anaconda<br>
 
 <H3>Clone fetchlinks repo</H3>
-
+git clone https://github.com/poptart-sommelier/fetchlinks.git<br>
 <H3>Install Requirements For fetchlinks</H3>
 
+
 <H3>Clone fetchlinks_webapp repo</H3>
+git clone https://github.com/poptart-sommelier/fetchlinks_webapp.git<br>
 
 <H3>Install Requirements For fetchlinks-webapp</H3>
 
