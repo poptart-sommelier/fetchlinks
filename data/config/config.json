@@ -62,7 +62,8 @@
             "http://www.theregister.co.uk/security/headlines.atom",
             "http://www.zdnet.com/blog/security/rss",
             "http://zerosum0x0.blogspot.com/feeds/posts/default",
-            "http://www.hexacorn.com/blog/feed/"
+            "http://www.hexacorn.com/blog/feed/",
+            "https://bohops.com/feed/"
         ]
     },
     "log_location": "./data/logs",
