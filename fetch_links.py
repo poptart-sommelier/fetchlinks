@@ -8,6 +8,7 @@
 # TODO: STATS - USER POSTS, MOST CLICKED, ETC...
 # TODO: CUSTOM STREAM/TOP USER STREAM
 # TODO: DB MAINTENANCE TASKS - stats, clean-up (drop older than XX days?), partitioning (by day?)
+# SELECT * FROM tbl WHERE datetime > NOW() - INTERVAL 15 DAYS
 
 # Standard libraries
 import json
