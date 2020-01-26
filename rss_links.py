@@ -20,6 +20,7 @@ def parsefeed(url):
 
     # Bad status or empty result i.e. feed was down
     if len(feed.feed) == 0:
+        logger.error(f'Url is unresponsive:{url}')
         return None
     if feed.status == 304:
         return None
