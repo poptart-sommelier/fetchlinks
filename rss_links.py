@@ -18,6 +18,9 @@ THREADS = 10
 def parsefeed(url):
     feed = feedparser.parse(url, etag=None, modified=None)
 
+    # Bad status or empty result i.e. feed was down
+    if len(feed.feed) == 0:
+        return None
     if feed.status == 304:
         return None
 
@@ -84,6 +87,9 @@ def main(config):
     pool = multiprocessing.Pool(processes=THREADS)
 
     results = pool.map(parsefeed, config['feeds'])
+
+    # Strip any None values from the list
+    results = filter(None, results)
 
     # results is a list of lists which all contain dictionaries.
     # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
