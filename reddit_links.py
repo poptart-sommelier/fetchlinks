@@ -3,10 +3,9 @@ import json
 import re
 import hashlib
 import datetime
-import db_interact
+# import db_utils
 
-# Importing Datastructure class
-import structure_data
+import fetchlinks_post
 
 import logging
 logger = logging.getLogger(__name__)
@@ -64,22 +63,20 @@ def convert_date_reddit_to_mysql(reddit_date):
 
 
 def parse_json(json_response):
-    parsed_reddit_data = structure_data.Datastructure()
+    parsed_reddit_post = fetchlinks_post.Post()
 
     if not json_response['data']['url'].startswith('https://www.reddit.com/'):
-        parsed_reddit_data.data_structure['source'] = 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
-        parsed_reddit_data.data_structure['author'] = json_response['data']['author']
-        parsed_reddit_data.data_structure['description'] = json_response['data']['title']
-        parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
-        parsed_reddit_data.data_structure['urls'] = [{'url': json_response['data']['url'], 'unshort_url': None,
+        parsed_reddit_post.source = 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
+        parsed_reddit_post.author = json_response['data']['author']
+        parsed_reddit_post.description = json_response['data']['title']
+        parsed_reddit_post.direct_link = 'https://www.reddit.com' + json_response['data']['permalink']
+        parsed_reddit_post.urls = [{'url': json_response['data']['url'], 'unshort_url': None,
                                                       'unique_id': build_hash(json_response['data']['url']),
                                                       'unshort_unique_id': None}]
-        parsed_reddit_data.data_structure['date_created'] = \
-            convert_date_reddit_to_mysql(json_response['data']['created_utc'])
-        parsed_reddit_data.data_structure['unique_id_string'] = ','.join([url['unique_id'] for
-                                                                   url in parsed_reddit_data.data_structure['urls']])
+        parsed_reddit_post.date_created = convert_date_reddit_to_mysql(json_response['data']['created_utc'])
+        parsed_reddit_post.unique_id_string= ','.join([url['unique_id'] for url in parsed_reddit_post.urls])
 
-        return parsed_reddit_data
+        return parsed_reddit_post
 
     else:
         selftext_urls = []
@@ -94,17 +91,15 @@ def parse_json(json_response):
             if len(selftext_urls) < 1:
                 return None
 
-        parsed_reddit_data.data_structure['source'] = 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
-        parsed_reddit_data.data_structure['author'] = json_response['data']['author']
-        parsed_reddit_data.data_structure['description'] = json_response['data']['title']
-        parsed_reddit_data.data_structure['direct_link'] = 'https://www.reddit.com' + json_response['data']['permalink']
-        parsed_reddit_data.data_structure['urls'] = selftext_urls
-        parsed_reddit_data.data_structure['date_created'] = \
-            convert_date_reddit_to_mysql(json_response['data']['created_utc'])
-        parsed_reddit_data.data_structure['unique_id_string'] = ','.join([url['unique_id'] for
-                                                                   url in parsed_reddit_data.data_structure['urls']])
+        parsed_reddit_post.source= 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
+        parsed_reddit_post.author = json_response['data']['author']
+        parsed_reddit_post.description = json_response['data']['title']
+        parsed_reddit_post.direct_link = 'https://www.reddit.com' + json_response['data']['permalink']
+        parsed_reddit_post.urls = selftext_urls
+        parsed_reddit_post.date_created = convert_date_reddit_to_mysql(json_response['data']['created_utc'])
+        parsed_reddit_post.unique_id_string= ','.join([url['unique_id'] for url in parsed_reddit_post.urls])
 
-        return parsed_reddit_data
+        return parsed_reddit_post
 
 
 def main(config):
@@ -115,8 +110,6 @@ def main(config):
     for sr in config['subreddits']:
 
         resp = make_request(sr, token)
-
-        # print(json.dumps(resp))
 
         for r in resp['data']['children']:
             post = parse_json(r)

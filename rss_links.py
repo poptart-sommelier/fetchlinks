@@ -6,7 +6,7 @@ import datetime
 from dateutil.parser import *
 
 # Importing Datastructure class
-import structure_data
+import fetchlinks_post
 
 import logging
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def build_dict_from_feed(feed):
     parsed_feed_entries_list = []
 
     for entry in feed.entries:
-        parsed_rss_feed_data = structure_data.Datastructure()
+        parsed_rss_feed_data = fetchlinks_post.Post()
 
         parsed_rss_feed_data.data_structure['source'] = feed.feed['link']
         parsed_rss_feed_data.data_structure['author'] = feed.feed['title']

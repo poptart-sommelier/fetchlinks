@@ -6,10 +6,10 @@ from requests_oauthlib import OAuth1
 import datetime
 import unshorten_links
 import hashlib
-import db_interact
+import db_utils
 
 # Importing Datastructure class
-import structure_data
+import fetchlinks_post
 
 import logging
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def build_hash(link):
 
 
 def parse_retweet(json_response):
-    parsed_tweet_data = structure_data.Datastructure()
+    parsed_tweet_data = fetchlinks_post.Post()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['retweeted_status']['entities']['urls']]
@@ -65,7 +65,7 @@ def parse_retweet(json_response):
 
 
 def parse_quoted_tweet(json_response):
-    parsed_tweet_data = structure_data.Datastructure()
+    parsed_tweet_data = fetchlinks_post.Post()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['quoted_status']['entities']['urls']]
@@ -89,7 +89,7 @@ def parse_quoted_tweet(json_response):
 
 
 def parse_tweet(json_response):
-    parsed_tweet_data = structure_data.Datastructure()
+    parsed_tweet_data = fetchlinks_post.Post()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['entities']['urls']]
@@ -191,7 +191,7 @@ def main(config, api_calls_limit):
 
     authentication = auth(config['credential_location'])
 
-    last_tweet_id = db_interact.db_get_last_tweet_id()
+    last_tweet_id = db_utils.db_get_last_tweet_id()
 
     logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, last_tweet_id))
 
@@ -215,7 +215,7 @@ def main(config, api_calls_limit):
 
     build_unique_id_string(all_tweets_unshort)
 
-    db_interact.db_set_last_tweet_id(last_tweet_id_new)
+    db_utils.db_set_last_tweet_id(last_tweet_id_new)
 
     logger.info('Returning {} entries.'.format(len(all_tweets_unshort)))
 

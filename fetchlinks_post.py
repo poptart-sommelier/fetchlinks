@@ -1,5 +1,6 @@
-class Datastructure:
+class Post:
     def __init__(self):
+        # TODO: REMOVE THIS
         self.data_structure = {
             'source': '',
             'author': '',
@@ -16,6 +17,21 @@ class Datastructure:
             'url_6': '',
             'urls_missing': 0
         }
+
+        self.source = ''
+        self.author = ''
+        self.description = ''
+        self.direct_link = ''
+        self.urls = []
+        self.date_created = ''
+        self.unique_id_string = ''
+        self.url_1 = ''
+        self.url_2 = ''
+        self.url_3 = ''
+        self.url_4 = ''
+        self.url_5 = ''
+        self.url_6 = ''
+        self.urls_missing = 0
 
     def prep_for_db(self):
         # break out urls to our url fields (max 6), warn if we have more than 6. Also truncates

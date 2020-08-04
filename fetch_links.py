@@ -1,37 +1,32 @@
-# TODO: FOR SPECIFIC USERS, GRAB EVERYTHING THEY POST, NOT JUST IF IT HAS LINKS (SBOUASS, etc...)
+# TODO: CONVERT TO SQLite AND REMOVE MYSQL REQUIREMENT
+# TODO: CONVERT FROM DICT TO CLASS PROPERTIES
+# TODO: SCRIPT FULL DEPLOYMENT
+# TODO: UPDATE REQUIREMENTS
 # TODO: LAST LINKS FETCHED LOAD TIME ON MAIN PAGE
 # TODO: SERVER SECURITY (ENSURE ONLY KEYS FOR SSH, AUTOUPDATES)
 # TODO: UNSHORTENING ON REDDIT/RSS
 # TODO: STRIP THE SHORTENED URL OUT OF THE TWEET (IN TWITTER DATA)
-# TODO: LIMIT RESULTS (INDEX ON DATE? FILTER CRITERIA = DATE < 15 DAYS?
-# SELECT * FROM tbl WHERE datetime > NOW() - INTERVAL 15 DAYS
-# TODO: IMPLEMENT 'ignored_sources' IN CONFIG - non-infosec related feeds
+# TODO: TRUNCATE DB AFTER X-DAYS (30?)
+# TODO: FOR SPECIFIC USERS, GRAB EVERYTHING THEY POST, NOT JUST IF IT HAS LINKS (SBOUASS, etc...)
 # TODO: STATS - USER POSTS, MOST CLICKED, ETC...
 # TODO: CUSTOM STREAM/TOP USER STREAM
-# TODO: DB MAINTENANCE TASKS - stats, clean-up (drop older than XX days?), partitioning (by day?)
-# SELECT * FROM tbl WHERE datetime > NOW() - INTERVAL 15 DAYS
 
 # Standard libraries
 import json
-import os
 import logging
 import logging.config
+from pathlib import Path
 
 # Custom libraries
-import twitter_links
+# import twitter_links
 import reddit_links
-import rss_links
-import db_interact
+# import rss_links
+# import db_utils
 
-DATA = 'data/'
+DB = 'db/fetchlinks.db'
 APP_CONFIG_LOCATION = 'data/config/config.json'
 LOG_CONFIG_LOCATION = 'data/config/log_config.json'
 LOG_LOCATION = 'data/logs/fetch_links.log'
-
-# Read DB for state from previous run - last twitter id, etc...
-
-# Call each module, log object, and config data
-# Write returned data to DB
 
 
 def parse_config():
@@ -41,25 +36,39 @@ def parse_config():
     return json.loads(config)
 
 
+def sanity_check():
+    if not Path(LOG_CONFIG_LOCATION).exists() or not Path(APP_CONFIG_LOCATION).exists():
+        print(f'Missing config files: \n{LOG_CONFIG_LOCATION}\n{APP_CONFIG_LOCATION}\n Cannot continue. Exiting.')
+        exit()
+
+    if not Path(LOG_LOCATION).exists():
+        Path(LOG_LOCATION).parent.mkdir(parents=True, exist_ok=True)
+
+    # if not Path(DB).exists():
+    #     db_utils.db_setup()
+
+
+def configure_logging():
+    # load log_config.json file
+    with open(LOG_CONFIG_LOCATION) as json_log_file:
+        log_config = json.load(json_log_file)
+    # configure logging
+    logging.config.dictConfig(log_config['logging'])
+    # get a logger
+    logger = logging.getLogger(__name__)
+    return logger
+
+
 def main():
     links = []
 
     # Sanity checks
-    if not os.path.exists(DATA) or not os.path.exists(APP_CONFIG_LOCATION) or not os.path.exists(LOG_CONFIG_LOCATION):
-        print('missing some or all of the following directories: \n'
-              'data/, data/config/, data/logs/')
-        exit()
+    sanity_check()
 
-    # load log_config.json file
-    with open(LOG_CONFIG_LOCATION) as json_log_file:
-        log_config = json.load(json_log_file)
+    # Log setup
+    logger = configure_logging()
 
-    # configure logging
-    logging.config.dictConfig(log_config['logging'])
-
-    # get a logger
-    logger = logging.getLogger(__name__)
-
+    # Config setup
     config = parse_config()
 
     tmp_result = reddit_links.main(config['reddit'])
@@ -68,20 +77,21 @@ def main():
     else:
         logger.info('No results returned from: reddit')
 
+    # tmp_result = rss_links.main(config['rss'])
+    # if tmp_result is not None:
+    #     links.extend(tmp_result)
+    # else:
+    #     logger.info('No results returned from: rss')
+
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    tmp_result = twitter_links.main(config['twitter'], 15)
-    if tmp_result is not None:
-        links.extend(tmp_result)
-    else:
-        logger.info('No results returned from: twitter')
+    # tmp_result = twitter_links.main(config['twitter'], 15)
+    # if tmp_result is not None:
+    #     links.extend(tmp_result)
+    # else:
+    #     logger.info('No results returned from: twitter')
 
-    tmp_result = rss_links.main(config['rss'])
-    if tmp_result is not None:
-        links.extend(tmp_result)
-    else:
-        logger.info('No results returned from: rss')
-
-    db_interact.db_insert(links)
+    #
+    # db_utils.db_insert(links)
 
 
 main()
