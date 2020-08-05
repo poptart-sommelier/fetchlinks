@@ -1,14 +1,9 @@
-import MySQLdb
-import sqlite3
-import utils
 import datetime
-
+import sqlite3
+from pathlib import Path
 import logging
+
 logger = logging.getLogger(__name__)
-
-
-def db_setup():
-    pass
 
 
 def db_set_last_tweet_id(last_accessed_id):

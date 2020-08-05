@@ -1,4 +1,5 @@
 # TODO: CONVERT TO SQLite AND REMOVE MYSQL REQUIREMENT
+# TODO: CREATE SETUP SCRIPT SO FULL DEPLOYMENT IS AUTOMATIC
 # TODO: CONVERT FROM DICT TO CLASS PROPERTIES
 # TODO: SCRIPT FULL DEPLOYMENT
 # TODO: UPDATE REQUIREMENTS
@@ -23,7 +24,8 @@ import reddit_links
 import rss_links
 # import db_utils
 
-DB = 'db/fetchlinks.db'
+DB_LOCATION = 'db/'
+DB_NAME = 'fetchlinks.db'
 APP_CONFIG_LOCATION = 'data/config/config.json'
 LOG_CONFIG_LOCATION = 'data/config/log_config.json'
 LOG_LOCATION = 'data/logs/fetch_links.log'
