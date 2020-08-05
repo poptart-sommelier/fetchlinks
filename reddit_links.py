@@ -5,7 +5,7 @@ import hashlib
 import datetime
 # import db_utils
 
-import fetchlinks_post
+import utils
 
 import logging
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ def convert_date_reddit_to_mysql(reddit_date):
 
 
 def parse_json(json_response):
-    parsed_reddit_post = fetchlinks_post.Post()
+    parsed_reddit_post = utils.Post()
 
     if not json_response['data']['url'].startswith('https://www.reddit.com/'):
         parsed_reddit_post.source = 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']

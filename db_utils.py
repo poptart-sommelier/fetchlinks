@@ -1,6 +1,6 @@
 import MySQLdb
 import sqlite3
-import fetchlinks_post
+import utils
 import datetime
 
 import logging

@@ -20,7 +20,7 @@ from pathlib import Path
 # Custom libraries
 # import twitter_links
 import reddit_links
-# import rss_links
+import rss_links
 # import db_utils
 
 DB = 'db/fetchlinks.db'
@@ -71,17 +71,17 @@ def main():
     # Config setup
     config = parse_config()
 
-    tmp_result = reddit_links.main(config['reddit'])
-    if tmp_result is not None:
-        links.extend(tmp_result)
-    else:
-        logger.info('No results returned from: reddit')
-
-    # tmp_result = rss_links.main(config['rss'])
+    # tmp_result = reddit_links.main(config['reddit'])
     # if tmp_result is not None:
     #     links.extend(tmp_result)
     # else:
-    #     logger.info('No results returned from: rss')
+    #     logger.info('No results returned from: reddit')
+
+    tmp_result = rss_links.main(config['rss'])
+    if tmp_result is not None:
+        links.extend(tmp_result)
+    else:
+        logger.info('No results returned from: rss')
 
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
     # tmp_result = twitter_links.main(config['twitter'], 15)
