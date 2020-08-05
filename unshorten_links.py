@@ -5,7 +5,7 @@ import multiprocessing
 import collections
 import urllib3
 import hashlib
-import structure_data
+import fetchlinks_post
 
 import logging
 logger = logging.getLogger(__name__)
