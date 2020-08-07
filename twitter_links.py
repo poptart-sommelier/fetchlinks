@@ -4,12 +4,13 @@ import requests
 import json
 from requests_oauthlib import OAuth1
 import datetime
-import unshorten_links
 import hashlib
-import db_utils
+import re
 
-# Importing Datastructure class
-import fetchlinks_post
+# Custom
+import utils
+import db_utils
+import unshorten_links
 
 import logging
 logger = logging.getLogger(__name__)
@@ -42,21 +43,19 @@ def build_hash(link):
 
 
 def parse_retweet(json_response):
-    parsed_tweet_data = fetchlinks_post.Post()
+    parsed_tweet_data = utils.Post()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['retweeted_status']['entities']['urls']]
 
     if len(urls) > 0:
-        parsed_tweet_data.data_structure['source'] = 'https://twitter.com/'\
+        parsed_tweet_data.source = 'https://twitter.com/'\
                                                      + json_response['retweeted_status']['user']['screen_name']
-        parsed_tweet_data.data_structure['author'] = json_response['retweeted_status']['user']['name']
-        parsed_tweet_data.data_structure['description'] = json_response['retweeted_status']['full_text']
-        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/'\
-                                                          + json_response['retweeted_status']['user']['screen_name']\
-                                                          + '/status/' + json_response['retweeted_status']['id_str']
-        parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['retweeted_status']['created_at'])
+        parsed_tweet_data.author = json_response['retweeted_status']['user']['name']
+        parsed_tweet_data.description = re.sub(r"http(s)?:\/\/t\.co\/[a-z0-9A-Z]+", '', json_response['retweeted_status']['full_text'])
+        parsed_tweet_data.direct_link = 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str']
+        parsed_tweet_data.urls = urls
+        parsed_tweet_data.date_created = convert_date_twitter_to_mysql(json_response['retweeted_status']['created_at'])
 
         return parsed_tweet_data
 
@@ -65,22 +64,20 @@ def parse_retweet(json_response):
 
 
 def parse_quoted_tweet(json_response):
-    parsed_tweet_data = fetchlinks_post.Post()
+    parsed_tweet_data = utils.Post()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['quoted_status']['entities']['urls']]
 
     if len(urls) > 0:
 
-        parsed_tweet_data.data_structure['source'] = 'https://twitter.com/'\
+        parsed_tweet_data.source = 'https://twitter.com/'\
                                                      + json_response['quoted_status']['user']['screen_name']
-        parsed_tweet_data.data_structure['author'] = json_response['quoted_status']['user']['name']
-        parsed_tweet_data.data_structure['description'] = json_response['quoted_status']['full_text']
-        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/'\
-                                                          + json_response['quoted_status']['user']['screen_name']\
-                                                          + '/status/' + json_response['quoted_status']['id_str']
-        parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['quoted_status']['created_at'])
+        parsed_tweet_data.author = json_response['quoted_status']['user']['name']
+        parsed_tweet_data.description = re.sub(r"http(s)?:\/\/t\.co\/[a-z0-9A-Z]+", '', json_response['quoted_status']['full_text'])
+        parsed_tweet_data.direct_link = 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str']
+        parsed_tweet_data.urls = urls
+        parsed_tweet_data.date_created = convert_date_twitter_to_mysql(json_response['quoted_status']['created_at'])
 
         return parsed_tweet_data
 
@@ -89,20 +86,18 @@ def parse_quoted_tweet(json_response):
 
 
 def parse_tweet(json_response):
-    parsed_tweet_data = fetchlinks_post.Post()
+    parsed_tweet_data = utils.Post()
 
     urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['entities']['urls']]
 
     if len(urls) > 0:
-        parsed_tweet_data.data_structure['source'] = 'https://twitter.com/' + json_response['user']['screen_name']
-        parsed_tweet_data.data_structure['author'] = json_response['user']['name']
-        parsed_tweet_data.data_structure['description'] = json_response['full_text']
-        parsed_tweet_data.data_structure['direct_link'] = 'https://twitter.com/'\
-                                                          + json_response['user']['screen_name']\
-                                                          + '/status/' + json_response['id_str']
-        parsed_tweet_data.data_structure['urls'] = urls
-        parsed_tweet_data.data_structure['date_created'] = convert_date_twitter_to_mysql(json_response['created_at'])
+        parsed_tweet_data.source = 'https://twitter.com/' + json_response['user']['screen_name']
+        parsed_tweet_data.author = json_response['user']['name']
+        parsed_tweet_data.description = re.sub(r"http(s)?:\/\/t\.co\/[a-z0-9A-Z]+", '', json_response['full_text'])
+        parsed_tweet_data.direct_link = 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str']
+        parsed_tweet_data.urls = urls
+        parsed_tweet_data.date_created = convert_date_twitter_to_mysql(json_response['created_at'])
 
         return parsed_tweet_data
 
@@ -113,13 +108,13 @@ def parse_tweet(json_response):
 def build_unique_id_string(all_tweets):
     for tweet in all_tweets:
         unique_id_list = []
-        for urls in tweet.data_structure['urls']:
+        for urls in tweet.urls:
             if urls['unshort_url'] is None:
                 unique_id_list.append(urls['unique_id'])
             else:
                 unique_id_list.append(urls['unshort_unique_id'])
 
-        tweet.data_structure['unique_id_string'] = ','.join(unique_id_list)
+        tweet.unique_id_string = ','.join(unique_id_list)
 
     return
 
