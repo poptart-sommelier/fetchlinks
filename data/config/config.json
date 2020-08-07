@@ -30,7 +30,6 @@
             "http://feeds.feedburner.com/NakedSecurity",
             "http://feeds.feedburner.com/TheHackersNews",
             "http://feeds.trendmicro.com/Anti-MalwareBlog",
-            "http://feed.torrentfreak.com/Torrentfreak/",
             "http://findingbad.blogspot.com/feeds/posts/default",
             "https://blog.menasec.net/feeds/posts/default",
             "http://scarybeastsecurity.blogspot.com/feeds/posts/default",
@@ -41,7 +40,6 @@
             "http://seclists.org/rss/microsoft.rss",
             "http://securityaffairs.co/wordpress/feed",
             "https://isc.sans.edu/rssfeed.xml",
-            "https://labsblog.f-secure.com/feed/rss/",
             "https://malware.news/latest.rss",
             "https://oddvar.moe/feed/",
             "https://posts.specterops.io/feed",
@@ -72,7 +70,9 @@
     "db_info": {
         "host": "127.0.0.1",
         "port": "33600",
-        "credential_location": "/home/rich/.creds/db_credentials.json"
+        "credential_location": "/home/rich/.creds/db_credentials.json",
+        "db_name": "fetchlinks.db",
+        "db_location": "db/"
     },
     "file_output_location": "./data",
     "log_level": "INFO",

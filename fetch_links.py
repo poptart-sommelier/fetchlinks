@@ -22,32 +22,14 @@ from pathlib import Path
 # import twitter_links
 import reddit_links
 import rss_links
-# import db_utils
+import db_utils
+import db_setup
 
 DB_LOCATION = 'db/'
 DB_NAME = 'fetchlinks.db'
 APP_CONFIG_LOCATION = 'data/config/config.json'
 LOG_CONFIG_LOCATION = 'data/config/log_config.json'
 LOG_LOCATION = 'data/logs/fetch_links.log'
-
-
-def parse_config():
-    with open(APP_CONFIG_LOCATION, 'r') as config_file:
-        config = config_file.read()
-
-    return json.loads(config)
-
-
-def sanity_check():
-    if not Path(LOG_CONFIG_LOCATION).exists() or not Path(APP_CONFIG_LOCATION).exists():
-        print(f'Missing config files: \n{LOG_CONFIG_LOCATION}\n{APP_CONFIG_LOCATION}\n Cannot continue. Exiting.')
-        exit()
-
-    if not Path(LOG_LOCATION).exists():
-        Path(LOG_LOCATION).parent.mkdir(parents=True, exist_ok=True)
-
-    # if not Path(DB).exists():
-    #     db_utils.db_setup()
 
 
 def configure_logging():
@@ -61,17 +43,38 @@ def configure_logging():
     return logger
 
 
+# Log setup
+logger = configure_logging()
+
+
+def parse_config():
+    with open(APP_CONFIG_LOCATION, 'r') as config_file:
+        config = config_file.read()
+
+    return json.loads(config)
+
+
+def sanity_check(config):
+    if not Path(LOG_CONFIG_LOCATION).exists() or not Path(APP_CONFIG_LOCATION).exists():
+        print(f'Missing config files: \n{LOG_CONFIG_LOCATION}\n{APP_CONFIG_LOCATION}\n Cannot continue. Exiting.')
+        exit()
+
+    if not Path(LOG_LOCATION).exists():
+        Path(LOG_LOCATION).parent.mkdir(parents=True, exist_ok=True)
+
+    if not Path(config['db_info']['db_location'] + config['db_info']['db_name']).exists():
+        logger.info(f'DB does not exist. Creating one: {config["db_info"]["db_location"]+config["db_info"]["db_name"]}')
+        db_setup.db_initial_setup(config['db_info']['db_location'], config['db_info']['db_name'])
+
+
 def main():
     links = []
 
-    # Sanity checks
-    sanity_check()
-
-    # Log setup
-    logger = configure_logging()
-
     # Config setup
     config = parse_config()
+
+    # Sanity checks
+    sanity_check(config)
 
     # tmp_result = reddit_links.main(config['reddit'])
     # if tmp_result is not None:
@@ -93,7 +96,8 @@ def main():
     #     logger.info('No results returned from: twitter')
 
     #
-    # db_utils.db_insert(links)
+    db_utils.db_insert(links, config['db_info']['db_location'] + config['db_info']['db_name'])
 
 
-main()
+if __name__ == '__main__':
+    main()

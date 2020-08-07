@@ -80,10 +80,4 @@ def db_initial_setup(db_location, db_name):
 if __name__ == '__main__':
     db_location = 'db/'
     db_name = 'fetchlinks.db'
-    # TODO: UNCOMMENT THIS
-    # conn = db_setup(db_location, db_name)
-    # TODP: REMOVE THIS, TESTING
-    conn = sqlite3.connect(db_location + db_name)
-    table_posts_configure(conn)
-    table_twitter_configure(conn)
-    table_urls_configure(conn)
+    db_initial_setup(db_location, db_name)
