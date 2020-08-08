@@ -19,7 +19,7 @@ import logging.config
 from pathlib import Path
 
 # Custom libraries
-# import twitter_links
+import twitter_links
 import reddit_links
 import rss_links
 import db_utils
@@ -82,18 +82,18 @@ def main():
     # else:
     #     logger.info('No results returned from: reddit')
 
-    tmp_result = rss_links.main(config['rss'])
-    if tmp_result is not None:
-        links.extend(tmp_result)
-    else:
-        logger.info('No results returned from: rss')
-
-    # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    # tmp_result = twitter_links.main(config['twitter'], 15)
+    # tmp_result = rss_links.main(config['rss'])
     # if tmp_result is not None:
     #     links.extend(tmp_result)
     # else:
-    #     logger.info('No results returned from: twitter')
+    #     logger.info('No results returned from: rss')
+
+    # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
+    tmp_result = twitter_links.main(config['twitter'], 15)
+    if tmp_result is not None:
+        links.extend(tmp_result)
+    else:
+        logger.info('No results returned from: twitter')
 
     #
     db_utils.db_insert(links, config['db_info']['db_location'] + config['db_info']['db_name'])

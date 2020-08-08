@@ -63,7 +63,8 @@
             "http://www.hexacorn.com/blog/feed/",
             "https://bohops.com/feed/",
             "https://secureyourit.co.uk/wp/feed/",
-            "https://blog.xpnsec.com/rss/"
+            "https://blog.xpnsec.com/rss/",
+            "https://cyberforensicator.com/feed/"
         ]
     },
     "log_location": "./data/logs",
