@@ -73,7 +73,8 @@
         "port": "33600",
         "credential_location": "/home/rich/.creds/db_credentials.json",
         "db_name": "fetchlinks.db",
-        "db_location": "db/"
+        "db_location": "db/",
+        "db_full_path": "db/fetchlinks.db"
     },
     "file_output_location": "./data",
     "log_level": "INFO",

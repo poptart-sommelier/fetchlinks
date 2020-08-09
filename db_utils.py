@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def db_set_last_tweet_id(last_accessed_id, db_location=None):
+def db_set_last_tweet_id(last_accessed_id, db_location):
     db_command = """INSERT INTO twitter (last_accessed_id, time_created) values (?, ?)"""
 
     try:
@@ -27,7 +27,7 @@ def db_set_last_tweet_id(last_accessed_id, db_location=None):
         exit(1)
 
 
-def db_get_last_tweet_id(db_location=None):
+def db_get_last_tweet_id(db_location):
     db_command = """SELECT last_accessed_id FROM twitter ORDER BY idx DESC LIMIT 1"""
 
     try:
@@ -53,7 +53,7 @@ def db_get_last_tweet_id(db_location=None):
         return 1
 
 
-def db_insert(fetched_data, db_location=None):
+def db_insert(fetched_data, db_location):
     db_command_posts = """INSERT OR IGNORE INTO posts (source, author, description, direct_link, 
                         date_created, unique_id_string, url_1, url_2, url_3, url_4, url_5, url_6, urls_missing) 
                         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""

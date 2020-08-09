@@ -180,14 +180,14 @@ def get_tweets(authentication, since_id=1, first_last=None):
         return None, None, None
 
 
-def main(config, api_calls_limit):
+def main(twitter_config, db_config, api_calls_limit):
     all_tweets = []
     temp_tweets = []
     keep_going = False
 
-    authentication = auth(config['credential_location'])
+    authentication = auth(twitter_config['credential_location'])
 
-    last_tweet_id = db_utils.db_get_last_tweet_id()
+    last_tweet_id = db_utils.db_get_last_tweet_id(db_config['db_full_path'])
 
     logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, last_tweet_id))
 
@@ -211,7 +211,7 @@ def main(config, api_calls_limit):
 
     build_unique_id_string(all_tweets_unshort)
 
-    db_utils.db_set_last_tweet_id(last_tweet_id_new)
+    db_utils.db_set_last_tweet_id(last_tweet_id_new, db_config['db_fulL_path'])
 
     logger.info('Returning {} entries.'.format(len(all_tweets_unshort)))
 

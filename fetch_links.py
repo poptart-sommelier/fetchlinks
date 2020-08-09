@@ -62,8 +62,8 @@ def sanity_check(config):
     if not Path(LOG_LOCATION).exists():
         Path(LOG_LOCATION).parent.mkdir(parents=True, exist_ok=True)
 
-    if not Path(config['db_info']['db_location'] + config['db_info']['db_name']).exists():
-        logger.info(f'DB does not exist. Creating one: {config["db_info"]["db_location"]+config["db_info"]["db_name"]}')
+    if not Path(config['db_info']['db_full_path']).exists():
+        logger.info(f'DB does not exist. Creating one: {config["db_info"]["db_full_path"]}')
         db_setup.db_initial_setup(config['db_info']['db_location'], config['db_info']['db_name'])
 
 
@@ -89,14 +89,14 @@ def main():
     #     logger.info('No results returned from: rss')
 
     # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    tmp_result = twitter_links.main(config['twitter'], 15)
+    tmp_result = twitter_links.main(config['twitter'], config['db_info'], api_calls_limit=15)
     if tmp_result is not None:
         links.extend(tmp_result)
     else:
         logger.info('No results returned from: twitter')
 
     #
-    db_utils.db_insert(links, config['db_info']['db_location'] + config['db_info']['db_name'])
+    db_utils.db_insert(links, config['db_info']['db_full_path'])
 
 
 if __name__ == '__main__':
