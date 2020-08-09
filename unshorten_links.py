@@ -1,11 +1,12 @@
 #!/usr/bin/python3.5
 
+# TODO: This should be a method in utils.py, and should use async_io
+
 import requests
 import multiprocessing
 import collections
 import urllib3
 import hashlib
-import fetchlinks_post
 
 import logging
 logger = logging.getLogger(__name__)

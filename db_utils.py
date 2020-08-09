@@ -1,22 +1,16 @@
-import MySQLdb
-import sqlite3
-import utils
 import datetime
-
+import sqlite3
+from pathlib import Path
 import logging
+
 logger = logging.getLogger(__name__)
 
 
-def db_setup():
-    pass
-
-
-def db_set_last_tweet_id(last_accessed_id):
-    db_command = """INSERT INTO fetchlinks.twitter (last_accessed_id, time_created) values (%s, %s)"""
+def db_set_last_tweet_id(last_accessed_id, db_location):
+    db_command = """INSERT INTO twitter (last_accessed_id, time_created) values (?, ?)"""
 
     try:
-        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
-                             use_unicode=True, charset="utf8mb4")
+        db = sqlite3.connect(db_location)
     except Exception as e:
         logger.error("Could not connect to database!")
         logger.error(e)
@@ -27,19 +21,18 @@ def db_set_last_tweet_id(last_accessed_id):
     try:
         cur.execute(db_command, [last_accessed_id, datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')])
         db.commit()
-    except MySQLdb.Error as e:
+    except sqlite3.Error as e:
         logger.error('Could not set last accessed id. DB error: {0}'.format(e))
         db.rollback()
         exit(1)
 
 
-def db_get_last_tweet_id():
-    db_command = """SELECT last_accessed_id FROM fetchlinks.twitter ORDER BY idx DESC LIMIT 1"""
+def db_get_last_tweet_id(db_location):
+    db_command = """SELECT last_accessed_id FROM twitter ORDER BY idx DESC LIMIT 1"""
 
     try:
-        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
-                             use_unicode=True, charset="utf8mb4")
-    except Exception as e:
+        db = sqlite3.connect(db_location)
+    except sqlite3.Error as e:
         logger.error("Could not connect to database!")
         logger.error(e)
         exit(1)
@@ -55,21 +48,20 @@ def db_get_last_tweet_id():
         else:
             return int(result[0][0])
 
-    except MySQLdb.Error as e:
+    except sqlite3.Error as e:
         logger.error('Could not get last accessed id. DB error: {0}'.format(e))
         return 1
 
 
-def db_insert(fetched_data):
-    db_command_posts = """INSERT IGNORE INTO fetchlinks.posts (source, author, description, direct_link, 
+def db_insert(fetched_data, db_location):
+    db_command_posts = """INSERT OR IGNORE INTO posts (source, author, description, direct_link, 
                         date_created, unique_id_string, url_1, url_2, url_3, url_4, url_5, url_6, urls_missing) 
-                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-    db_command_urls = """INSERT IGNORE INTO fetchlinks.urls (url, unique_id) values (%s, %s)"""
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+    db_command_urls = """INSERT OR IGNORE INTO urls (url, unique_id) values (?, ?)"""
 
     try:
-        db = MySQLdb.connect(host="127.0.0.1", port=3306, user="root", passwd="thepassword", db="fetchlinks",
-                             use_unicode=True, charset="utf8mb4")
-    except Exception as e:
+        db = sqlite3.connect(db_location)
+    except sqlite3.Error as e:
         logger.error("Could not connect to database!")
         logger.error(e)
         exit(1)
@@ -77,28 +69,28 @@ def db_insert(fetched_data):
     cur = db.cursor()
 
     post_list = []
-    for line in fetched_data:
-        # Build URL list, truncate long urls
-        line.prep_for_db()
+    url_list = []
 
-        post_list.append([line.data_structure['source'],
-                          line.data_structure['author'],
-                          line.data_structure['description'],
-                          line.data_structure['direct_link'],
-                          line.data_structure['date_created'],
-                          line.data_structure['unique_id_string'],
-                          line.data_structure['url_1'],
-                          line.data_structure['url_2'],
-                          line.data_structure['url_3'],
-                          line.data_structure['url_4'],
-                          line.data_structure['url_5'],
-                          line.data_structure['url_6'],
-                          line.data_structure['urls_missing']
+    for post in fetched_data:
+        # Build URL list, truncate long urls
+        post.prep_for_db()
+
+        post_list.append([post.source,
+                          post.author,
+                          post.description,
+                          post.direct_link,
+                          post.date_created,
+                          post.unique_id_string,
+                          post.url_1,
+                          post.url_2,
+                          post.url_3,
+                          post.url_4,
+                          post.url_5,
+                          post.url_6,
+                          post.urls_missing
                           ])
 
-    url_list = []
-    for line in fetched_data:
-        for url in line.data_structure['urls']:
+        for url in post.urls:
             if url['unshort_url'] is None:
                 url_list.append([url['url'],
                                  url['unique_id']])
@@ -109,13 +101,13 @@ def db_insert(fetched_data):
     try:
         cur.executemany(db_command_posts, post_list)
         db.commit()
-    except MySQLdb.Error as e:
-        logger.error('Could not load posts into fetchlinks.posts. DB error: {0}'.format(e))
+    except sqlite3.Error as e:
+        logger.error('Could not load posts into posts. DB error: {0}'.format(e))
         db.rollback()
 
     try:
         cur.executemany(db_command_urls, url_list)
         db.commit()
-    except MySQLdb.Error as e:
-        logger.error('Could not load urls into fetchlinks.urls. DB error: {0}'.format(e))
+    except sqlite3.Error as e:
+        logger.error('Could not load urls into urls. DB error: {0}'.format(e))
         db.rollback()
