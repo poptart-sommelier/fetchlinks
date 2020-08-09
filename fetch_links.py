@@ -76,20 +76,21 @@ def main():
     # Sanity checks
     sanity_check(config)
 
-    # tmp_result = reddit_links.main(config['reddit'])
-    # if tmp_result is not None:
-    #     links.extend(tmp_result)
-    # else:
-    #     logger.info('No results returned from: reddit')
+    tmp_result = reddit_links.main(config['reddit'])
+    if tmp_result is not None:
+        links.extend(tmp_result)
+    else:
+        logger.info('No results returned from: reddit')
+    #
+    tmp_result = rss_links.main(config['rss'])
+    if tmp_result is not None:
+        links.extend(tmp_result)
+    else:
+        logger.info('No results returned from: rss')
 
-    # tmp_result = rss_links.main(config['rss'])
-    # if tmp_result is not None:
-    #     links.extend(tmp_result)
-    # else:
-    #     logger.info('No results returned from: rss')
-
-    # CHANGE THE API CALL LIMIT BELOW, SET TO 1 FOR TESTING
-    tmp_result = twitter_links.main(config['twitter'], config['db_info'], api_calls_limit=15)
+    # TODO: CHANGE THIS BACK TO 15!
+    # CHANGE THE API CALL LIMIT BELOW, SET TO LOW NUMBER FOR TESTING, 15 FOR PROD
+    tmp_result = twitter_links.main(config['twitter'], config['db_info'], api_calls_limit=5)
     if tmp_result is not None:
         links.extend(tmp_result)
     else:
