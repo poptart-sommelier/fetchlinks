@@ -6,7 +6,6 @@ from requests_oauthlib import OAuth1
 import datetime
 import hashlib
 import re
-import sqlite3
 
 # Custom
 import utils
@@ -53,7 +52,7 @@ def parse_retweet(json_response):
         parsed_tweet_data.source = 'https://twitter.com/'\
                                                      + json_response['retweeted_status']['user']['screen_name']
         parsed_tweet_data.author = json_response['retweeted_status']['user']['name']
-        parsed_tweet_data.description = re.sub(r"http(s)?:\/\/t\.co\/[a-z0-9A-Z]+", '', json_response['retweeted_status']['full_text'])
+        parsed_tweet_data.description = re.sub(r"http(s)?://t\.co/[a-z0-9A-Z]+", '', json_response['retweeted_status']['full_text'])
         parsed_tweet_data.direct_link = 'https://twitter.com/' + json_response['retweeted_status']['user']['screen_name'] + '/status/' + json_response['retweeted_status']['id_str']
         parsed_tweet_data.urls = urls
         parsed_tweet_data.date_created = convert_date_twitter_to_mysql(json_response['retweeted_status']['created_at'])
@@ -75,7 +74,7 @@ def parse_quoted_tweet(json_response):
         parsed_tweet_data.source = 'https://twitter.com/'\
                                                      + json_response['quoted_status']['user']['screen_name']
         parsed_tweet_data.author = json_response['quoted_status']['user']['name']
-        parsed_tweet_data.description = re.sub(r"http(s)?:\/\/t\.co\/[a-z0-9A-Z]+", '', json_response['quoted_status']['full_text'])
+        parsed_tweet_data.description = re.sub(r"http(s)?://t\.co/[a-z0-9A-Z]+", '', json_response['quoted_status']['full_text'])
         parsed_tweet_data.direct_link = 'https://twitter.com/' + json_response['quoted_status']['user']['screen_name'] + '/status/' + json_response['quoted_status']['id_str']
         parsed_tweet_data.urls = urls
         parsed_tweet_data.date_created = convert_date_twitter_to_mysql(json_response['quoted_status']['created_at'])
@@ -95,7 +94,7 @@ def parse_tweet(json_response):
     if len(urls) > 0:
         parsed_tweet_data.source = 'https://twitter.com/' + json_response['user']['screen_name']
         parsed_tweet_data.author = json_response['user']['name']
-        parsed_tweet_data.description = re.sub(r"http(s)?:\/\/t\.co\/[a-z0-9A-Z]+", '', json_response['full_text'])
+        parsed_tweet_data.description = re.sub(r"http(s)?://t\.co/[a-z0-9A-Z]+", '', json_response['full_text'])
         parsed_tweet_data.direct_link = 'https://twitter.com/' + json_response['user']['screen_name'] + '/status/' + json_response['id_str']
         parsed_tweet_data.urls = urls
         parsed_tweet_data.date_created = convert_date_twitter_to_mysql(json_response['created_at'])
@@ -120,6 +119,29 @@ def build_unique_id_string(all_tweets):
     return
 
 
+def parse_json_resp(all_tweets_json):
+    tweets = []
+
+    for tweet_json in all_tweets_json:
+        # Is a retweet
+        if 'retweeted_status' in tweet_json:
+            t = parse_retweet(tweet_json)
+            if t:
+                tweets.append(t)
+        # Is a quoted tweet
+        elif 'quoted_status' in tweet_json:
+            t = parse_quoted_tweet(tweet_json)
+            if t:
+                tweets.append(t)
+        # Is standard tweet
+        else:
+            t = parse_tweet(tweet_json)
+            if t:
+                tweets.append(t)
+
+    return tweets
+
+
 def get_tweets(authentication, since_id=1, first_last=None):
     tweets = []
     keep_going = False
@@ -142,76 +164,52 @@ def get_tweets(authentication, since_id=1, first_last=None):
 
     json_resp = r.json()
 
-    if (r.status_code == 200) and (len(json_resp) > 0):
-        new_first_last_ids = {
-            'latest_id': max([j['id'] for j in r.json()]),
-            'oldest_id': min([j['id'] for j in r.json()])
-        }
-        # print(new_first_last_ids)
-
-        for jr in json_resp:
-            # Is a retweet
-            if 'retweeted_status' in jr:
-                t = parse_retweet(jr)
-                if t:
-                    tweets.append(t)
-            # Is a quoted tweet
-            elif 'quoted_status' in jr:
-                t = parse_quoted_tweet(jr)
-                if t:
-                    tweets.append(t)
-            # Is standard tweet
-            else:
-                t = parse_tweet(jr)
-                if t:
-                    tweets.append(t)
-
-        if since_id < new_first_last_ids['oldest_id'] - 1 and \
-                int(r.headers['x-rate-limit-remaining']) > 0 and \
-                new_first_last_ids['latest_id'] > new_first_last_ids['oldest_id']:
-            keep_going = True
-
-        else:
-            keep_going = False
-
-        return tweets, new_first_last_ids, keep_going
-
-    else:
-        return None, None, None
+    return json_resp, r.status_code, int(r.headers['x-rate-limit-remaining'])
 
 
 def main(twitter_config, db_config, api_calls_limit):
     all_tweets = []
-    temp_tweets = []
-    keep_going = False
+    all_tweets_json = []
+    tweets_json = []
 
     authentication = auth(twitter_config['credential_location'])
 
-    last_tweet_id = db_utils.db_get_last_tweet_id(db_config['db_full_path'])
+    previous_run_newest_tweet_id = db_utils.db_get_last_tweet_id(db_config['db_full_path'])
 
-    logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, last_tweet_id))
+    logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, previous_run_newest_tweet_id))
 
-    temp_tweets, first_last, keep_going = get_tweets(authentication, last_tweet_id)
+    while True:
+        tweets_json, status_code, api_calls_remaining = get_tweets(authentication, previous_run_newest_tweet_id)
+        logger.info(f'Got {len(tweets_json)} tweets.\nStatus Code: {status_code}.\nAPI calls remaining: {api_calls_remaining}')
 
-    if temp_tweets:
-        last_tweet_id_new = first_last['latest_id']
-        all_tweets.extend(temp_tweets)
+        # We have made an API call, substract by one
+        api_calls_limit = api_calls_limit - 1
+
+        if status_code == 200 and len(tweets_json) > 0:
+            all_tweets_json.extend(tweets_json)
+            newest_id = max([j['id'] for j in tweets_json])
+            oldest_id = min([j['id'] for j in tweets_json])
+        else:
+            break
+
+        if not (previous_run_newest_tweet_id < oldest_id - 1 and
+                api_calls_remaining > 0 and
+                api_calls_limit > 0 and
+                newest_id > oldest_id
+                ):
+            break
+
+    if len(all_tweets_json) > 0:
+        all_tweets = parse_json_resp(all_tweets_json)
     else:
+        logger.info('No tweets retrieved. Returning.')
         return
-
-    if keep_going:
-        for i in range(api_calls_limit - 1):
-            temp_tweets, first_last, keep_going = get_tweets(authentication, last_tweet_id, first_last)
-            if keep_going is True:
-                all_tweets.extend(temp_tweets)
-            else:
-                break
 
     all_tweets_unshort = unshorten_links.unshorten_start(all_tweets)
 
     build_unique_id_string(all_tweets_unshort)
 
-    db_utils.db_set_last_tweet_id(last_tweet_id_new, db_config['db_fulL_path'])
+    db_utils.db_set_last_tweet_id(newest_id, db_config['db_full_path'])
 
     logger.info('Returning {} entries.'.format(len(all_tweets_unshort)))
 

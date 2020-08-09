@@ -44,7 +44,7 @@ def is_shortened(url):
 
 
 def unshorten(post):
-    for index, url in enumerate(post.data_structure['urls']):
+    for index, url in enumerate(post.urls):
         if is_shortened(url['url']):
             try:
                 r = requests.get(url['url'])
@@ -54,8 +54,8 @@ def unshorten(post):
                 continue
             if r.status_code == 200:
                 unshortened_url = r.url
-                post.data_structure['urls'][index]['unshort_url'] = unshortened_url
-                post.data_structure['urls'][index]['unshort_unique_id'] = build_hash(unshortened_url)
+                post.urls[index]['unshort_url'] = unshortened_url
+                post.urls[index]['unshort_unique_id'] = build_hash(unshortened_url)
         else:
             continue
 
