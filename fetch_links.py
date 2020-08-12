@@ -1,12 +1,9 @@
-# TODO: ADD CREDS TO THIS VM TO TEST TWITTER AND REDDIT
 # TODO: CONVERT FLASK TO USE SQLITE3
 
 # TODO: CREATE SETUP SCRIPT SO FULL DEPLOYMENT IS AUTOMATIC
 # TODO: UPDATE REQUIREMENTS
 # TODO: LAST LINKS FETCHED LOAD TIME ON MAIN PAGE
 # TODO: SERVER SECURITY (ENSURE ONLY KEYS FOR SSH, AUTOUPDATES)
-# TODO: UNSHORTENING ON REDDIT/RSS
-# TODO: STRIP THE SHORTENED URL OUT OF THE TWEET (IN TWITTER DATA)
 # TODO: TRUNCATE DB AFTER X-DAYS (30?)
 # TODO: FOR SPECIFIC USERS, GRAB EVERYTHING THEY POST, NOT JUST IF IT HAS LINKS (SBOUASS, etc...)
 # TODO: STATS - USER POSTS, MOST CLICKED, ETC...
@@ -81,7 +78,7 @@ def main():
         links.extend(tmp_result)
     else:
         logger.info('No results returned from: reddit')
-    #
+
     tmp_result = rss_links.main(config['rss'])
     if tmp_result is not None:
         links.extend(tmp_result)
@@ -96,7 +93,6 @@ def main():
     else:
         logger.info('No results returned from: twitter')
 
-    #
     db_utils.db_insert(links, config['db_info']['db_full_path'])
 
 

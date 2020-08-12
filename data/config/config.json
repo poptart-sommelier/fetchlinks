@@ -61,7 +61,7 @@
             "https://bohops.com/feed/",
             "https://secureyourit.co.uk/wp/feed/",
             "https://blog.xpnsec.com/rss/",
-            "https://cyberforensicator.com/feed/"
+            "http://cyberforensicator.com/feed/"
         ]
     },
     "log_location": "./data/logs",

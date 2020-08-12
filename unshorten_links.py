@@ -1,9 +1,7 @@
 #!/usr/bin/python3.5
 
-# TODO: This should be a method in utils.py, and should use async_io
-
 import requests
-import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 import collections
 import urllib3
 import hashlib
@@ -62,13 +60,14 @@ def unshorten(post):
     return post
 
 
-def unshorten_start(all_posts_dict_list):
+def unshorten_start(all_posts):
     # parse tweet for urls key
     # go through each url and make sure it's not shortened.
     # if it is, unshorten it
     # replace that url with the unshortened url in the dictionary
-    pool = multiprocessing.Pool(processes=THREADS)
+    # pool = multiprocessing.Pool(processes=THREADS)
+    pool = ThreadPoolExecutor(max_workers=THREADS)
 
-    results = pool.map(unshorten, all_posts_dict_list)
+    results = pool.map(unshorten, all_posts)
 
-    return results
+    return list(results)
