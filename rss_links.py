@@ -16,6 +16,7 @@ THREADS = 10
 
 
 def parsefeed(url):
+    logging.info(f'Parsing: {url}')
     feed = feedparser.parse(url, etag=None, modified=None)
 
     # Bad status or empty result i.e. feed was down

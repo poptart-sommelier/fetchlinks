@@ -87,7 +87,7 @@ def main():
 
     # TODO: CHANGE THIS BACK TO 15!
     # CHANGE THE API CALL LIMIT BELOW, SET TO LOW NUMBER FOR TESTING, 15 FOR PROD
-    tmp_result = twitter_links.main(config['twitter'], config['db_info'], api_calls_limit=5)
+    tmp_result = twitter_links.main(config['twitter'], config['db_info'], api_calls_limit=15)
     if tmp_result is not None:
         links.extend(tmp_result)
     else:
