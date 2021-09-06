@@ -1,0 +1,69 @@
+{
+    "reddit": {
+        "subreddits": [
+            "Netsec",
+            "Malware",
+            "Antiforensics",
+            "Computerforensics",
+            "ReverseEngineering"
+        ],
+        "credential_location": "/home/rich/.creds/reddit_api.json"
+    },
+    "twitter": {
+        "credential_location": "/home/rich/.creds/twitter_api.json"
+    },
+    "rss": {
+        "feeds": [
+            "http://addxorrol.blogspot.com/feeds/posts/default",
+            "http://adsecurity.org/?feed=rss2",
+            "http://blog.didierstevens.com/feed/",
+            "http://blogs.mcafee.com/category/mcafee-labs/feed",
+            "http://blogs.technet.com/mmpc/rss.xml",
+            "http://blog.strategiccyber.com/feed/",
+            "http://blog.reversinglabs.com/blog/rss.xml",
+            "http://carnal0wnage.blogspot.com/feeds/posts/default",
+            "http://countuponsecurity.com/feed/",
+            "http://feeds.feedburner.com/darknethackers",
+            "http://feeds.feedburner.com/feedburner/Talos",
+            "http://feeds.feedburner.com/KrebsOnSecurity",
+            "http://feeds.feedburner.com/NakedSecurity",
+            "http://feeds.feedburner.com/TheHackersNews",
+            "http://feeds.trendmicro.com/Anti-MalwareBlog",
+            "http://findingbad.blogspot.com/feeds/posts/default",
+            "https://blog.menasec.net/feeds/posts/default",
+            "http://scarybeastsecurity.blogspot.com/feeds/posts/default",
+            "https://cyberwardog.blogspot.com/feeds/posts/default",
+            "https://dfir.it/atom.xml",
+            "https://digital-forensics.sans.org/blog/feed/",
+            "http://seclists.org/rss/cert.rss",
+            "http://seclists.org/rss/microsoft.rss",
+            "http://securityaffairs.co/wordpress/feed",
+            "https://isc.sans.edu/rssfeed.xml",
+            "https://malware.news/latest.rss",
+            "https://oddvar.moe/feed/",
+            "https://posts.specterops.io/feed",
+            "https://www.cybereason.com/blog/rss.xml",
+            "https://www.endgame.com/blog-rss.xml",
+            "https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed",
+            "https://www.n00py.io/feed/",
+            "https://www.redcanary.com/blog/feed/",
+            "https://zeltser.com/feed/",
+            "http://threatpost.com/feed",
+            "http://volatility-labs.blogspot.com/feeds/posts/default",
+            "http://windowsir.blogspot.com/feeds/posts/default",
+            "http://www.darkoperator.com/blog/rss.xml",
+            "http://www.darkreading.com/rss/all.xml",
+            "http://www.exploit-monday.com/feeds/posts/default",
+            "http://www.securelist.com/en/rss/allupdates",
+            "http://www.skullsecurity.org/blog/feed",
+            "http://www.zdnet.com/blog/security/rss",
+            "http://zerosum0x0.blogspot.com/feeds/posts/default",
+            "http://www.hexacorn.com/blog/feed/",
+            "https://bohops.com/feed/",
+            "https://secureyourit.co.uk/wp/feed/",
+            "https://blog.xpnsec.com/rss/",
+            "http://cyberforensicator.com/feed/",
+            "https://itm4n.github.io/feed.xml"
+        ]
+    }
+}
