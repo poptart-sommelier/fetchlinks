@@ -1,5 +1,4 @@
 {
-    "log_location": "./data/logs",
     "db_info": {
         "host": "127.0.0.1",
         "port": "33600",
@@ -8,8 +7,10 @@
         "db_location": "db/",
         "db_full_path": "db/fetchlinks.db"
     },
-    "file_output_location": "./data",
-    "log_level": "INFO",
-    "ignored_sources": [
-    ]
+    "log_info": {
+        "log_config_location": "data/config/log_config.json",
+        "log_location": "./data/logs/fetch_links.log",
+        "log_level": "INFO"
+    },
+    "file_output_location": "./data"
 }
