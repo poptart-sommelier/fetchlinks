@@ -53,7 +53,7 @@ def build_dict_from_feed(feed):
         parsed_rss_feed_data.description = entry.title
         parsed_rss_feed_data.direct_link = None
         parsed_rss_feed_data.urls = [{'url': entry.link, 'unshort_url': None,
-                                                        'unique_id': build_hash(entry.link), 'unshort_unique_id': None}]
+                                      'unique_id': build_hash(entry.link), 'unshort_unique_id': None}]
 
         if 'published' in entry:
             try:

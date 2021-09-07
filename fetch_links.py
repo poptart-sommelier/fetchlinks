@@ -10,6 +10,11 @@
 #  STATS ON POSTERS/SOURCES
 #  SEARCH ABILITY?
 
+
+# TODO:
+#  PARENT CLASS -> Post()
+#  CHILD CLASS -> Reddit/Twitter/etc... contain all logic inside and simplify processing.
+
 # Standard libraries
 import logging
 from logging import StreamHandler
