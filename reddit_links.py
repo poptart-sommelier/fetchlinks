@@ -102,12 +102,12 @@ def parse_json(json_response):
         return parsed_reddit_post
 
 
-def main(config):
+def main(sources):
     all_posts = []
 
-    token = auth(config['credential_location'])
+    token = auth(sources['credential_location'])
 
-    for sr in config['subreddits']:
+    for sr in sources['subreddits']:
 
         resp = make_request(sr, token)
 

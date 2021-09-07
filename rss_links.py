@@ -24,6 +24,7 @@ def parsefeed(url):
         logger.error(f'Url is unresponsive:{url}')
         return None
     if feed.status == 304:
+        logger.info(f'Url returned 304: {url}')
         return None
 
     result_dict = build_dict_from_feed(feed)

@@ -7,10 +7,10 @@
             "Computerforensics",
             "ReverseEngineering"
         ],
-        "credential_location": "/home/rich/.creds/reddit_api.json"
+        "credential_location": "c:\\users\\user\\.fetchlinks\\reddit.json"
     },
     "twitter": {
-        "credential_location": "/home/rich/.creds/twitter_api.json"
+        "credential_location": "c:\\users\\user\\.fetchlinks\\twitter.json"
     },
     "rss": {
         "feeds": [

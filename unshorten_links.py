@@ -1,4 +1,5 @@
-#!/usr/bin/python3.5
+# TODO:
+#  THIS SHOULD BE IN UTILS AND CLEANED UP
 
 import requests
 from concurrent.futures import ThreadPoolExecutor
