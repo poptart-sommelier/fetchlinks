@@ -41,6 +41,10 @@ def convert_date_rss_to_mysql(rss_date):
         return datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
 
 
+def parse_post(feed_title, feed_link, post):
+    pass
+
+
 def build_dict_from_feed(feed):
     parsed_feed_entries_list = []
 

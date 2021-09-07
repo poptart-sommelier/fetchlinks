@@ -1,5 +1,6 @@
 import hashlib
-
+from dateutil.parser import parse
+import datetime
 
 def build_hash(link):
     sha256_hash = hashlib.sha256(link.encode())
@@ -46,9 +47,53 @@ class Post:
 
 
 class RssPost(Post):
-    def __init__(self, post):
+    def __init__(self, feed_source, feed_author, post):
         super().__init__()
-        pass
+        self.extract_data_from_post(feed_source, feed_author, post)
+
+    def convert_date_rss_to_mysql(self, rss_date):
+        try:
+            date_object = parse(rss_date)
+            self.date_created = datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+        except Exception as e:
+            # We couldn't parse the date for some reason. Make it "now"
+            self.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+
+    def extract_data_from_post(self, feed_source, feed_author, post):
+        self.source = feed_source
+        self.author = feed_author
+        self.description = post.title
+        self.direct_link = None
+        # TODO: WTF DOES THIS DO? IT ONLY CREATES ONE LINK
+        self.urls = [{'url': post.link,
+                      'unshort_url': None,
+                      'unique_id': build_hash(post.link),
+                      'unshort_unique_id': None}]
+
+        if 'published' in post:
+            try:
+                self.date_created = convert_date_rss_to_mysql(post.published)
+            except AttributeError as e:
+                self.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+                logger.error(e)
+                logger.error('Missing post.published from {} - {}'.format(post.feed['title'], post.title))
+        elif 'updated' in post:
+            try:
+                self.date_created = convert_date_rss_to_mysql(post.updated)
+            except AttributeError as e:
+                self.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+                logger.error(e)
+                logger.error('Missing post.updated from {} - {}'.format(post.feed['title'], post.title))
+        else:
+            self.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+            logger.error('Missing published/updated info, setting published date to NOW.\n{} - {}'.format(post.feed['title'], post.title))
+
+        self.unique_id_string = ','.join(
+            sorted([url['unique_id'] for url in self.urls]))
+
+        parsed_feed_entries_list.append(self)
+
+    return parsed_feed_entries_list
 
 
 class RedditPost(Post):
