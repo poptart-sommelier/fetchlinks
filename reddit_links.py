@@ -11,11 +11,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def build_hash(link):
-    sha256_hash = hashlib.sha256(link.encode())
-    return sha256_hash.hexdigest()
-
-
 def auth(credential_location):
     try:
         with open(credential_location, 'r') as json_data:
@@ -71,7 +66,7 @@ def parse_json(json_response):
         parsed_reddit_post.description = json_response['data']['title']
         parsed_reddit_post.direct_link = 'https://www.reddit.com' + json_response['data']['permalink']
         parsed_reddit_post.urls = [{'url': json_response['data']['url'], 'unshort_url': None,
-                                                      'unique_id': build_hash(json_response['data']['url']),
+                                                      'unique_id': utils.build_hash(json_response['data']['url']),
                                                       'unshort_unique_id': None}]
         parsed_reddit_post.date_created = convert_date_reddit_to_mysql(json_response['data']['created_utc'])
         parsed_reddit_post.unique_id_string= ','.join([url['unique_id'] for url in parsed_reddit_post.urls])
@@ -84,7 +79,7 @@ def parse_json(json_response):
             return None
 
         else:
-            selftext_urls = [{'url': url, 'unshort_url': None, 'unique_id': build_hash(url), 'unshort_unique_id': None}
+            selftext_urls = [{'url': url, 'unshort_url': None, 'unique_id': utils.build_hash(url), 'unshort_unique_id': None}
                              for url in re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
                              if '.' in url]
 

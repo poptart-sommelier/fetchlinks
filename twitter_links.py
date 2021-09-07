@@ -37,15 +37,10 @@ def convert_date_twitter_to_mysql(twitter_date):
     return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
 
 
-def build_hash(link):
-    sha256_hash = hashlib.sha256(link.encode())
-    return sha256_hash.hexdigest()
-
-
 def parse_retweet(json_response):
     parsed_tweet_data = utils.Post()
 
-    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
+    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': utils.build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['retweeted_status']['entities']['urls']]
 
     if len(urls) > 0:
@@ -66,7 +61,7 @@ def parse_retweet(json_response):
 def parse_quoted_tweet(json_response):
     parsed_tweet_data = utils.Post()
 
-    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
+    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': utils.build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['quoted_status']['entities']['urls']]
 
     if len(urls) > 0:
@@ -88,7 +83,7 @@ def parse_quoted_tweet(json_response):
 def parse_tweet(json_response):
     parsed_tweet_data = utils.Post()
 
-    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': build_hash(url['expanded_url']),
+    urls = [{'url': url['expanded_url'], 'unshort_url': None, 'unique_id': utils.build_hash(url['expanded_url']),
              'unshort_unique_id': None} for url in json_response['entities']['urls']]
 
     if len(urls) > 0:

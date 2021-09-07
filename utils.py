@@ -1,3 +1,11 @@
+import hashlib
+
+
+def build_hash(link):
+    sha256_hash = hashlib.sha256(link.encode())
+    return sha256_hash.hexdigest()
+
+
 class Post:
     def __init__(self):
         self.source = ''
@@ -37,3 +45,19 @@ class Post:
                 self.url_6 = url['unshort_url'] if url['unshort_url'] is not None else url['url']
 
 
+class RssPost(Post):
+    def __init__(self, post):
+        super().__init__()
+        pass
+
+
+class RedditPost(Post):
+    def __init__(self, post):
+        super().__init__()
+        pass
+
+
+class TwitterPost(Post):
+    def __init__(self, post):
+        super().__init__()
+        pass

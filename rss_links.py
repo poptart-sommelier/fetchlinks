@@ -1,25 +1,23 @@
 import feedparser
-import multiprocessing
-import itertools
-import hashlib
 import datetime
 from dateutil.parser import *
+import concurrent.futures
 
-# Importing Post class
-import utils
+# Custom libraries
+from utils import RssPost, build_hash
 
 import logging
+
 logger = logging.getLogger(__name__)
 
-THREADS = 10
-# THIS SHOULD BE READ FROM A CONFIG
+THREADS = 25
 
 
-def parsefeed(url):
+def parse_feed(url):
     logging.info(f'Parsing: {url}')
-    feed = feedparser.parse(url, etag=None, modified=None)
+    feed = feedparser.parse(url)
 
-    # Bad status or empty result i.e. feed was down
+    # Problematic return values
     if len(feed.feed) == 0:
         logger.error(f'Url is unresponsive:{url}')
         return None
@@ -27,6 +25,7 @@ def parsefeed(url):
         logger.info(f'Url returned 304: {url}')
         return None
 
+    # TODO: THIS SHOULD BE A CLASS RssPost()
     result_dict = build_dict_from_feed(feed)
 
     return result_dict
@@ -46,7 +45,7 @@ def build_dict_from_feed(feed):
     parsed_feed_entries_list = []
 
     for entry in feed.entries:
-        parsed_rss_feed_data = utils.Post()
+        parsed_rss_feed_data = RssPost()
 
         parsed_rss_feed_data.source = feed.feed['link']
         parsed_rss_feed_data.author = feed.feed['title']
@@ -81,29 +80,28 @@ def build_dict_from_feed(feed):
     return parsed_feed_entries_list
 
 
-def build_hash(link):
-    sha256_hash = hashlib.sha256(link.encode())
-    return sha256_hash.hexdigest()
+def get_feeds(feeds):
+    results = list()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
+        futures = [executor.submit(parse_feed, feed) for feed in feeds]
+        for future in concurrent.futures.as_completed(futures):
+            if future.result() is not None and len(future.result()) > 0:
+                results.extend(future.result())
+    return results
 
 
 def main(config):
-    pool = multiprocessing.Pool(processes=THREADS)
-
-    results = pool.map(parsefeed, config['feeds'])
-
-    # Strip any None values from the list
-    results = filter(None, results)
-
-    # results is a list of lists which all contain dictionaries.
-    # we want one list with all the dicts, so we use itertools.chain.from_iterable to join/flatten all the lists
-    processed_results = list(itertools.chain.from_iterable(results))
-
-    logger.info('Returning {} entries.'.format(len(processed_results)))
-
-    return processed_results
+    if config.get('feeds', False):
+        results = get_feeds(config.get('feeds'))
+        logger.info('Returning {} entries.'.format(len(results)))
+        return results
+    else:
+        logger.error('No RSS feeds to parse.')
+        return []
 
 
 if __name__ == '__main__':
-    fetched_results = main(['https://www.endgame.com/blog-rss.xml', 'https://isc.sans.edu/rssfeed.xml'])
+    test_feeds = ['https://www.endgame.com/blog-rss.xml',
+                  'https://isc.sans.edu/rssfeed.xml']
 
-    print()
+    fetched_results = main(test_feeds)
