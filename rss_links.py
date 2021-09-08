@@ -1,111 +1,58 @@
 import feedparser
-import datetime
-from dateutil.parser import *
 import concurrent.futures
+import logging
 
 # Custom libraries
-from utils import RssPost, build_hash
-
-import logging
+from utils import RssPost
+import db_utils
 
 logger = logging.getLogger(__name__)
 
 THREADS = 25
 
 
-def parse_feed(url):
-    logging.info(f'Parsing: {url}')
+def get_feed(url):
+    logging.debug(f'Parsing: {url}')
     feed = feedparser.parse(url)
 
-    # Problematic return values
+    # Problems
+    if feed.bozo:
+        logger.error(f'Feedparser has issues with: {url}: {feed.bozo_exception}.\nReturned {len(feed.entries)} posts.')
     if len(feed.feed) == 0:
-        logger.error(f'Url is unresponsive:{url}')
-        return None
-    if feed.status == 304:
-        logger.info(f'Url returned 304: {url}')
-        return None
+        logger.error(f'Feed has no contents: {url}')
 
-    # TODO: THIS SHOULD BE A CLASS RssPost()
-    result_dict = build_dict_from_feed(feed)
-
-    return result_dict
+    return feed
 
 
-def convert_date_rss_to_mysql(rss_date):
-    try:
-        date_object = parse(rss_date)
-        return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
-    except Exception as e:
-        logger.error(e)
-        logger.error('Could not parse date using dateutil: {}'.format(rss_date))
-        return datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+def parse_posts(feeds):
+    posts = list()
+    for feed in feeds:
+        source = feed.feed['link']
+        author = feed.feed['title']
+        for post in feed.entries:
+            parsed_post = RssPost(source, author, post)
+            posts.append(parsed_post)
 
-
-def parse_post(feed_title, feed_link, post):
-    pass
-
-
-def build_dict_from_feed(feed):
-    parsed_feed_entries_list = []
-
-    for entry in feed.entries:
-        parsed_rss_feed_data = RssPost()
-
-        parsed_rss_feed_data.source = feed.feed['link']
-        parsed_rss_feed_data.author = feed.feed['title']
-        parsed_rss_feed_data.description = entry.title
-        parsed_rss_feed_data.direct_link = None
-        parsed_rss_feed_data.urls = [{'url': entry.link, 'unshort_url': None,
-                                      'unique_id': build_hash(entry.link), 'unshort_unique_id': None}]
-
-        if 'published' in entry:
-            try:
-                parsed_rss_feed_data.date_created = convert_date_rss_to_mysql(entry.published)
-            except AttributeError as e:
-                parsed_rss_feed_data.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
-                logger.error(e)
-                logger.error('Missing entry.published from {} - {}'.format(feed.feed['title'], entry.title))
-        elif 'updated' in entry:
-            try:
-                parsed_rss_feed_data.date_created = convert_date_rss_to_mysql(entry.updated)
-            except AttributeError as e:
-                parsed_rss_feed_data.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
-                logger.error(e)
-                logger.error('Missing entry.updated from {} - {}'.format(feed.feed['title'], entry.title))
-        else:
-            parsed_rss_feed_data.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
-            logger.error('Missing published/updated info, setting published date to NOW.\n{} - {}'.format(feed.feed['title'], entry.title))
-
-        parsed_rss_feed_data.unique_id_string = ','.join(
-            sorted([url['unique_id'] for url in parsed_rss_feed_data.urls]))
-
-        parsed_feed_entries_list.append(parsed_rss_feed_data)
-
-    return parsed_feed_entries_list
+    return posts
 
 
 def get_feeds(feeds):
     results = list()
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
-        futures = [executor.submit(parse_feed, feed) for feed in feeds]
+        futures = [executor.submit(get_feed, feed) for feed in feeds]
         for future in concurrent.futures.as_completed(futures):
-            if future.result() is not None and len(future.result()) > 0:
-                results.extend(future.result())
+            if future.result() is not None:
+                results.append(future.result())
     return results
 
 
-def main(config):
-    if config.get('feeds', False):
-        results = get_feeds(config.get('feeds'))
-        logger.info('Returning {} entries.'.format(len(results)))
-        return results
+def run(rss_feed_links, config):
+    fetched_feeds = get_feeds(rss_feed_links)
+    parsed_posts = parse_posts(fetched_feeds)
+
+    if parsed_posts is not None:
+        db_full_path = config['db_info']['db_location'] + config['db_info']['db_name']
+        db_utils.db_insert(parsed_posts, db_full_path)
+        logger.info(f'Inserted {len(parsed_posts)} Rss posts into DB')
     else:
-        logger.error('No RSS feeds to parse.')
-        return []
-
-
-if __name__ == '__main__':
-    test_feeds = ['https://www.endgame.com/blog-rss.xml',
-                  'https://isc.sans.edu/rssfeed.xml']
-
-    fetched_results = main(test_feeds)
+        logging.info('No new Rss posts found')

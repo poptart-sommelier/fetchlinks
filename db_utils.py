@@ -75,6 +75,8 @@ def db_insert(fetched_data, db_location):
         # Build URL list, truncate long urls
         post.prep_for_db()
 
+        # TODO: THE LIST BEING APPENDED HERE SHOULD BE RETURNED BY A CLASS METHOD
+        #  post.get_list_of_fields()
         post_list.append([post.source,
                           post.author,
                           post.description,

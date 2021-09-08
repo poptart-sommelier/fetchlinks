@@ -43,11 +43,7 @@ def configure_logging(config):
 
 def fetch_links(config, sources):
     # TODO: Spin up threads to run these in parallel
-    tmp_result = rss_links.main(sources['rss'])
-    if tmp_result is not None:
-        db_utils.db_insert(tmp_result, config['db_info']['db_full_path'])
-    else:
-        logging.info('No results returned from: rss')
+    rss_links.run(sources['rss']['feeds'], config)
 
     tmp_result = reddit_links.main(sources['reddit'])
     if tmp_result is not None:

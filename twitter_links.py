@@ -4,7 +4,6 @@ import requests
 import json
 from requests_oauthlib import OAuth1
 import datetime
-import hashlib
 import re
 
 # Custom

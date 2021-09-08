@@ -4,7 +4,7 @@ from pathlib import Path
 
 import db_setup
 
-VALID_FIELDS = {'db_info': ['host', 'port', 'credential_location', 'db_name', 'db_location'],
+VALID_FIELDS = {'db_info': ['credential_location', 'db_name', 'db_location'],
                 'log_info': ['log_config_location', 'log_location', 'log_level']}
 
 
@@ -26,6 +26,10 @@ def _validate_sources(sources):
         if settings.get('credential_location', False):
             if not Path(settings.get('credential_location')).exists():
                 raise FileNotFoundError(f'{source} credential file could not be found at location: {settings.get("credential_location")}')
+    if sources.get('rss', False):
+        if sources['rss'].get('feeds', False):
+            if len(sources['rss']['feeds']) < 1:
+                raise ValueError('The Rss config contains no feeds')
 
 
 def parse_config(app_config_location):
