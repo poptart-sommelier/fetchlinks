@@ -4,7 +4,7 @@ from pathlib import Path
 
 import db_setup
 
-VALID_FIELDS = {'db_info': ['credential_location', 'db_name', 'db_location'],
+VALID_FIELDS = {'db_info': ['db_name', 'db_location'],
                 'log_info': ['log_config_location', 'log_location', 'log_level']}
 
 

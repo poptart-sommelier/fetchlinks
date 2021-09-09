@@ -20,7 +20,6 @@ from pathlib import Path
 import twitter_links
 import reddit_links
 import rss_links
-import db_utils
 import startup_and_validate
 
 
@@ -38,16 +37,14 @@ def configure_logging(config):
 
 def fetch_links(config, sources):
     # TODO: Spin up threads to run these in parallel
-    # rss_links.run(sources['rss']['feeds'], config)
-    # reddit_links.run(sources['reddit'], config)
+    # rss_links.run(sources['rss']['feeds'], config['db_info'])
+    # reddit_links.run(sources['reddit'], config['db_info'])
 
-    # TODO: CHANGE THIS BACK TO 15!
-    # CHANGE THE API CALL LIMIT BELOW, SET TO LOW NUMBER FOR TESTING, 15 FOR PROD
-    tmp_result = twitter_links.main(sources['twitter'], config['db_info'], api_calls_limit=15)
-    if tmp_result is not None:
-        db_utils.db_insert(tmp_result, config['db_info']['db_full_path'])
-    else:
-        logging.info('No results returned from: twitter')
+    tmp_result = twitter_links.run(sources['twitter'], config['db_info'])
+    # if tmp_result is not None:
+    #     db_utils.db_insert(tmp_result, config['db_info']['db_full_path'])
+    # else:
+    #     logging.info('No results returned from: twitter')
 
 
 def main():

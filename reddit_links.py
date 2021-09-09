@@ -31,7 +31,6 @@ def get_subreddit(subreddit, token):
     try:
         subreddit_resp = requests.get(url=subreddit_url, params=params, headers=headers)
         subreddit_resp = subreddit_resp.json()
-        subreddit_posts = subreddit_resp['data']['children']
     except requests.exceptions.HTTPError as errh:
         logger.error("Http Error:", errh)
     except requests.exceptions.ConnectionError as errc:
@@ -41,6 +40,7 @@ def get_subreddit(subreddit, token):
     except requests.exceptions.RequestException as err:
         logger.error("OOps: Something Else", err)
 
+    subreddit_posts = subreddit_resp['data']['children']
     logger.debug(f'{subreddit} returned {len(subreddit_posts)} entries')
 
     return subreddit_posts
@@ -56,12 +56,12 @@ def parse_posts(posts):
     return parsed_posts
 
 
-def run(reddit_config, config):
+def run(reddit_config, db_info):
     subreddit_posts = get_subreddits(reddit_config)
     parsed_posts = parse_posts(subreddit_posts)
 
     if parsed_posts is not None:
-        db_full_path = config['db_info']['db_location'] + config['db_info']['db_name']
+        db_full_path = db_info['db_location'] + db_info['db_name']
         db_utils.db_insert(parsed_posts, db_full_path)
         logger.info(f'Inserted {len(parsed_posts)} Rss posts into DB')
     else:

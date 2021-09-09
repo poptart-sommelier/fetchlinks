@@ -46,12 +46,12 @@ def get_feeds(feeds):
     return results
 
 
-def run(rss_feed_links, config):
+def run(rss_feed_links, db_info):
     fetched_feeds = get_feeds(rss_feed_links)
     parsed_posts = parse_posts(fetched_feeds)
 
     if parsed_posts is not None:
-        db_full_path = config['db_info']['db_location'] + config['db_info']['db_name']
+        db_full_path = db_info['db_location'] + db_info['db_name']
         db_utils.db_insert(parsed_posts, db_full_path)
         logger.info(f'Inserted {len(parsed_posts)} Rss posts into DB')
     else:

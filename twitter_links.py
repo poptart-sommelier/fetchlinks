@@ -2,33 +2,18 @@
 
 import requests
 import json
-from requests_oauthlib import OAuth1
 import datetime
 import re
+import logging
 
 # Custom
 import utils
+from utils import TwitterPost
+from auth import TwitterAuth
 import db_utils
 import unshorten_links
 
-import logging
 logger = logging.getLogger(__name__)
-
-
-def auth(credential_location):
-    try:
-        with open(credential_location, 'r') as json_data:
-            creds = json.load(json_data)
-    except IOError:
-        logger.error('Could not load twitter credentials from: ' + credential_location)
-        exit()
-
-    consumer_key = creds['twitter_creds']['CONSUMER_KEY']
-    consumer_secret = creds['twitter_creds']['CONSUMER_SECRET']
-    access_token = creds['twitter_creds']['ACCESS_TOKEN']
-    access_token_secret = creds['twitter_creds']['ACCESS_TOKEN_SECRET']
-
-    return OAuth1(consumer_key, consumer_secret, access_token, access_token_secret)
 
 
 def convert_date_twitter_to_mysql(twitter_date):
@@ -161,23 +146,27 @@ def get_tweets(authentication, since_id=1, first_last=None):
     return json_resp, r.status_code, int(r.headers['x-rate-limit-remaining'])
 
 
-def main(twitter_config, db_config, api_calls_limit):
+def run(twitter_config, db_info):
     all_tweets = []
     all_tweets_json = []
     tweets_json = []
 
-    authentication = auth(twitter_config['credential_location'])
+    twitter_api_calls_max = 15
 
-    previous_run_newest_tweet_id = db_utils.db_get_last_tweet_id(db_config['db_full_path'])
+    # authentication = auth(twitter_config['credential_location'])
+    twitter_auth = TwitterAuth(twitter_config['credential_location'])
+    authentication = twitter_auth.get_auth()
 
-    logger.info('Making {} API calls. Starting with {} tweet id.'.format(api_calls_limit, previous_run_newest_tweet_id))
+    previous_run_newest_tweet_id = db_utils.db_get_last_tweet_id(db_info['db_location'] + db_info['db_name'])
+
+    logger.debug('Making {} API calls. Starting with {} tweet id.'.format(twitter_api_calls_max, previous_run_newest_tweet_id))
 
     while True:
         tweets_json, status_code, api_calls_remaining = get_tweets(authentication, previous_run_newest_tweet_id)
         logger.info(f'Got {len(tweets_json)} tweets.\nStatus Code: {status_code}.\nAPI calls remaining: {api_calls_remaining}')
 
         # We have made an API call, substract by one
-        api_calls_limit = api_calls_limit - 1
+        twitter_api_calls_max = twitter_api_calls_max - 1
 
         if status_code == 200 and len(tweets_json) > 0:
             all_tweets_json.extend(tweets_json)
@@ -188,7 +177,7 @@ def main(twitter_config, db_config, api_calls_limit):
 
         if not (previous_run_newest_tweet_id < oldest_id - 1 and
                 api_calls_remaining > 0 and
-                api_calls_limit > 0 and
+                twitter_api_calls_max > 0 and
                 newest_id > oldest_id
                 ):
             break
@@ -203,7 +192,7 @@ def main(twitter_config, db_config, api_calls_limit):
 
     build_unique_id_string(all_tweets_unshort)
 
-    db_utils.db_set_last_tweet_id(newest_id, db_config['db_full_path'])
+    db_utils.db_set_last_tweet_id(newest_id, db_info['db_full_path'])
 
     logger.info('Returning {} entries.'.format(len(all_tweets_unshort)))
 
