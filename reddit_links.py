@@ -1,120 +1,68 @@
 import requests
-import json
-import re
-import hashlib
 import datetime
-# import db_utils
-
-import utils
-
 import logging
+
+# Custom libraries
+from utils import RedditPost
+import db_utils
+from auth import RedditAuth
+
 logger = logging.getLogger(__name__)
 
 
-def auth(credential_location):
-    try:
-        with open(credential_location, 'r') as json_data:
-            creds = json.load(json_data)
-    except IOError:
-        logger.error('Could not load Reddit credentials from: ' + credential_location)
-        exit()
+def get_subreddits(reddit_config):
+    subreddit_posts = list()
 
-    app_client_id = creds['reddit_creds']['APP_CLIENT_ID']
-    app_client_secret = creds['reddit_creds']['APP_CLIENT_SECRET']
+    reddit_auth = RedditAuth(reddit_config['credential_location'])
+    token = reddit_auth.get_auth()
 
-    # Get an access token
-    authentication = requests.post('https://www.reddit.com/api/v1/access_token',
-                                   headers={'User-agent': 'get_links_lol'},
-                                   data={'grant_type': 'client_credentials'},
-                                   auth=(app_client_id, app_client_secret))
+    for subreddit in reddit_config['subreddits']:
+        subreddit_posts.extend(get_subreddit(subreddit, token))
 
-    access_token = authentication.json()['access_token']
-    return access_token
+    return subreddit_posts
 
 
-def make_request(subreddit, token):
-    query_part1 = 'https://oauth.reddit.com/r/'
-    query_part2 = '/new/.json'
-    user_agent = 'Get_Links Agent'
-
-    # Build the URL
-    url = query_part1 + subreddit + query_part2
+def get_subreddit(subreddit, token):
+    subreddit_url = f'https://oauth.reddit.com/r/{subreddit}/new/.json'
     params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100'}
+    user_agent = 'Get_Links Agent'
+    headers = {'authorization': f'Bearer {token}', 'User-agent': user_agent}
 
-    api_res = requests.get(url=url, params=params, headers={'authorization': 'Bearer ' + token,
-                                                            'User-agent': user_agent})
+    try:
+        subreddit_resp = requests.get(url=subreddit_url, params=params, headers=headers)
+        subreddit_resp = subreddit_resp.json()
+        subreddit_posts = subreddit_resp['data']['children']
+    except requests.exceptions.HTTPError as errh:
+        logger.error("Http Error:", errh)
+    except requests.exceptions.ConnectionError as errc:
+        logger.error("Error Connecting:", errc)
+    except requests.exceptions.Timeout as errt:
+        logger.error("Timeout Error:", errt)
+    except requests.exceptions.RequestException as err:
+        logger.error("OOps: Something Else", err)
 
-    new_posts = api_res.json()
-    logger.info('{} returned {} entries'.format(subreddit, len(new_posts['data']['children'])))
+    logger.debug(f'{subreddit} returned {len(subreddit_posts)} entries')
 
-    after = new_posts['data']['after']
-
-    return new_posts
+    return subreddit_posts
 
 
-def convert_date_reddit_to_mysql(reddit_date):
-    date_object = datetime.datetime.utcfromtimestamp(int(reddit_date))
-    return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+def parse_posts(posts):
+    parsed_posts = list()
+
+    for post in posts:
+        parsed_post = RedditPost(post)
+        if len(parsed_post.urls) > 0:
+            parsed_posts.append(parsed_post)
+    return parsed_posts
 
 
-def parse_json(json_response):
-    parsed_reddit_post = utils.Post()
+def run(reddit_config, config):
+    subreddit_posts = get_subreddits(reddit_config)
+    parsed_posts = parse_posts(subreddit_posts)
 
-    if not json_response['data']['url'].startswith('https://www.reddit.com/'):
-        parsed_reddit_post.source = 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
-        parsed_reddit_post.author = json_response['data']['author']
-        parsed_reddit_post.description = json_response['data']['title']
-        parsed_reddit_post.direct_link = 'https://www.reddit.com' + json_response['data']['permalink']
-        parsed_reddit_post.urls = [{'url': json_response['data']['url'], 'unshort_url': None,
-                                                      'unique_id': utils.build_hash(json_response['data']['url']),
-                                                      'unshort_unique_id': None}]
-        parsed_reddit_post.date_created = convert_date_reddit_to_mysql(json_response['data']['created_utc'])
-        parsed_reddit_post.unique_id_string= ','.join([url['unique_id'] for url in parsed_reddit_post.urls])
-
-        return parsed_reddit_post
-
+    if parsed_posts is not None:
+        db_full_path = config['db_info']['db_location'] + config['db_info']['db_name']
+        db_utils.db_insert(parsed_posts, db_full_path)
+        logger.info(f'Inserted {len(parsed_posts)} Rss posts into DB')
     else:
-        selftext_urls = []
-        if not json_response['data']['selftext_html']:
-            return None
-
-        else:
-            selftext_urls = [{'url': url, 'unshort_url': None, 'unique_id': utils.build_hash(url), 'unshort_unique_id': None}
-                             for url in re.findall(r'href=[\'"]?([^\'" >]+)', json_response['data']['selftext_html'])
-                             if '.' in url]
-
-            if len(selftext_urls) < 1:
-                return None
-
-        parsed_reddit_post.source= 'https://www.reddit.com/' + json_response['data']['subreddit_name_prefixed']
-        parsed_reddit_post.author = json_response['data']['author']
-        parsed_reddit_post.description = json_response['data']['title']
-        parsed_reddit_post.direct_link = 'https://www.reddit.com' + json_response['data']['permalink']
-        parsed_reddit_post.urls = selftext_urls
-        parsed_reddit_post.date_created = convert_date_reddit_to_mysql(json_response['data']['created_utc'])
-        parsed_reddit_post.unique_id_string= ','.join([url['unique_id'] for url in parsed_reddit_post.urls])
-
-        return parsed_reddit_post
-
-
-def main(sources):
-    all_posts = []
-
-    token = auth(sources['credential_location'])
-
-    for sr in sources['subreddits']:
-
-        resp = make_request(sr, token)
-
-        for r in resp['data']['children']:
-            post = parse_json(r)
-            if post:
-                all_posts.append(post)
-
-    logger.info('Returning {} entries.'.format(len(all_posts)))
-
-    return all_posts
-
-
-if __name__ == '__main__':
-    main()
+        logging.info('No new Rss posts found')

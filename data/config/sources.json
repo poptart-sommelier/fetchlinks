@@ -7,10 +7,10 @@
             "Computerforensics",
             "ReverseEngineering"
         ],
-        "credential_location": "c:\\users\\user\\.fetchlinks\\reddit.json"
+        "credential_location": "c:\\users\\user\\.fetchlinks\\secrets.json"
     },
     "twitter": {
-        "credential_location": "c:\\users\\user\\.fetchlinks\\twitter.json"
+        "credential_location": "c:\\users\\user\\.fetchlinks\\secrets.json"
     },
     "rss": {
         "feeds": [
@@ -57,7 +57,8 @@
             "https://secureyourit.co.uk/wp/feed/",
             "https://blog.xpnsec.com/rss/",
             "http://cyberforensicator.com/feed/",
-            "https://itm4n.github.io/feed.xml"
+            "https://itm4n.github.io/feed.xml",
+            "https://www.trustedsec.com/feed/"
         ]
     }
 }

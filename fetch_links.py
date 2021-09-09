@@ -8,12 +8,7 @@
 #  BETTER LOG CONFIG
 #  DOCUMENT CREATION OF API CREDS FOR TWITTER/REDDIT
 #  STATS ON POSTERS/SOURCES
-#  SEARCH ABILITY?
-
-
-# TODO:
-#  PARENT CLASS -> Post()
-#  CHILD CLASS -> Reddit/Twitter/etc... contain all logic inside and simplify processing.
+#  SEARCH FEATURE
 
 # Standard libraries
 import logging
@@ -43,13 +38,8 @@ def configure_logging(config):
 
 def fetch_links(config, sources):
     # TODO: Spin up threads to run these in parallel
-    rss_links.run(sources['rss']['feeds'], config)
-
-    tmp_result = reddit_links.main(sources['reddit'])
-    if tmp_result is not None:
-        db_utils.db_insert(tmp_result, config['db_info']['db_full_path'])
-    else:
-        logging.info('No results returned from: reddit')
+    # rss_links.run(sources['rss']['feeds'], config)
+    # reddit_links.run(sources['reddit'], config)
 
     # TODO: CHANGE THIS BACK TO 15!
     # CHANGE THE API CALL LIMIT BELOW, SET TO LOW NUMBER FOR TESTING, 15 FOR PROD
