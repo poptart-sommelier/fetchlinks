@@ -17,7 +17,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Custom libraries
-import twitter_links
+# import twitter_links
+import twitter_links_v2
 import reddit_links
 import rss_links
 import startup_and_validate
@@ -39,8 +40,8 @@ def fetch_links(config, sources):
     # TODO: Spin up threads to run these in parallel
     # rss_links.run(sources['rss']['feeds'], config['db_info'])
     # reddit_links.run(sources['reddit'], config['db_info'])
-
-    tmp_result = twitter_links.run(sources['twitter'], config['db_info'])
+    twitter_links_v2.run(sources['twitter'], config['db_info'])
+    # tmp_result = twitter_links.run(sources['twitter'], config['db_info'])
     # if tmp_result is not None:
     #     db_utils.db_insert(tmp_result, config['db_info']['db_full_path'])
     # else:

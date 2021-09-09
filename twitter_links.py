@@ -1,4 +1,11 @@
-#!/usr/bin/python3
+# TODO: PARSING TWEETS SHOULD GO LIKE THIS:
+#  def parse_tweet(json)
+#  if 'quoted_status' in json:
+#    parse_tweet(json['quoted_status'])
+#  if 'retweeted_status' in json:
+#    parse_tweet(json['retweeted_status'])
+#  else:
+#    parse_tweet(json)
 
 import requests
 import json
@@ -153,13 +160,10 @@ def run(twitter_config, db_info):
 
     twitter_api_calls_max = 15
 
-    # authentication = auth(twitter_config['credential_location'])
     twitter_auth = TwitterAuth(twitter_config['credential_location'])
     authentication = twitter_auth.get_auth()
 
     previous_run_newest_tweet_id = db_utils.db_get_last_tweet_id(db_info['db_location'] + db_info['db_name'])
-
-    logger.debug('Making {} API calls. Starting with {} tweet id.'.format(twitter_api_calls_max, previous_run_newest_tweet_id))
 
     while True:
         tweets_json, status_code, api_calls_remaining = get_tweets(authentication, previous_run_newest_tweet_id)

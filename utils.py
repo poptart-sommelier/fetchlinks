@@ -1,7 +1,9 @@
+# Standard libraries
 import hashlib
 import dateutil.parser
 import datetime
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,10 @@ def convert_date_string_for_mysql(rss_date: str) -> str:
 def convert_epoch_to_mysql(epoch: float) -> str:
     date_object = datetime.datetime.utcfromtimestamp(int(epoch))
     return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+
+
+def convert_date_twitter_to_mysql(twitter_date):
+    return datetime.datetime.strftime(twitter_date, '%Y-%m-%d %H:%M:%S')
 
 
 class Post:
@@ -118,4 +124,19 @@ class RedditPost(Post):
 class TwitterPost(Post):
     def __init__(self, post):
         super().__init__()
-        pass
+        self.twitter_url = 'https://twitter.com/'
+        if hasattr(post, 'retweeted_status'):
+            self.extract_data_from_post(post, post.retweeted_status)
+        elif hasattr(post, 'quoted_status'):
+            self.extract_data_from_post(post, post.quoted_status)
+        else:
+            self.extract_data_from_post(post, post)
+
+    def extract_data_from_post(self, post, status):
+        self.source = f'{self.twitter_url}{post.user.screen_name}'
+        self.author = status.user.name
+        self.description = re.sub(r"http(s)?://t\.co/[a-z0-9A-Z]+", '', post.full_text)
+        self.direct_link = f'{self.twitter_url}{status.user.screen_name}/status/{status.id_str}'
+        self.urls = list()
+        self.date_created = convert_date_twitter_to_mysql(status.created_at)
+

@@ -11,11 +11,12 @@ class Auth:
         self.file = file
         self.file_contents: dict = dict()
         if self.file != '':
-            self.file_contents = self._read_secrets_file_json()
+            self.file_contents = self.read_secrets_file_json(file)
 
-    def _read_secrets_file_json(self) -> dict:
+    @staticmethod
+    def read_secrets_file_json(file) -> dict:
         try:
-            with open(self.file, 'r') as f:
+            with open(file, 'r') as f:
                 return json.load(f)
         except IOError as e:
             logger.error(e)

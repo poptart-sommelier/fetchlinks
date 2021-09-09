@@ -19,6 +19,7 @@ requests
 requests-oauthlib
 six
 SQLAlchemy
+tweepy
 urllib3
 visitor
 Werkzeug
