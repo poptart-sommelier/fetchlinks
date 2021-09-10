@@ -100,7 +100,7 @@ class RedditPost(Post):
     def __init__(self, post):
         super().__init__()
         self.extract_data_from_post(post)
-        self.parse_urls(post)
+        self._extract_urls(post)
         self.unique_id_string = ','.join([url['unique_id'] for url in self.urls])
 
     def extract_data_from_post(self, post):
@@ -111,7 +111,7 @@ class RedditPost(Post):
         self.urls = list()
         self.date_created = convert_epoch_to_mysql(post['data']['created_utc'])
 
-    def parse_urls(self, post):
+    def _extract_urls(self, post):
         if post['data'].get('url', False):
             url = post['data']['url']
             if not url.startswith('https://www.reddit.com/') and url != '':
@@ -133,6 +133,8 @@ class TwitterPost(Post):
             self.extract_data_from_post(post.quoted_status)
         else:
             self.extract_data_from_post(post)
+
+        self.unique_id_string = ','.join(sorted([url['unique_id'] for url in self.urls]))
 
     def extract_data_from_post(self, status):
         self.author = status.user.name

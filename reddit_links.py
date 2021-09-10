@@ -1,5 +1,4 @@
 import requests
-import datetime
 import logging
 
 # Custom libraries

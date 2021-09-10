@@ -92,6 +92,7 @@ def db_insert(fetched_data, db_location):
                           post.urls_missing
                           ])
 
+        # TODO: THIS IS REDUNDANT
         for url in post.urls:
             if url['unshort_url'] is None:
                 url_list.append([url['url'],
