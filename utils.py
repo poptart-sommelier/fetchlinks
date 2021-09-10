@@ -39,7 +39,7 @@ class Post:
         self.author = ''
         self.description = ''
         self.direct_link = ''
-        self.urls = []
+        self.urls = list()
         self.date_created = ''
         self.unique_id_string = ''
         self.url_1 = ''
@@ -125,18 +125,24 @@ class TwitterPost(Post):
     def __init__(self, post):
         super().__init__()
         self.twitter_url = 'https://twitter.com/'
-        if hasattr(post, 'retweeted_status'):
-            self.extract_data_from_post(post, post.retweeted_status)
-        elif hasattr(post, 'quoted_status'):
-            self.extract_data_from_post(post, post.quoted_status)
-        else:
-            self.extract_data_from_post(post, post)
-
-    def extract_data_from_post(self, post, status):
         self.source = f'{self.twitter_url}{post.user.screen_name}'
+        self.tweet_id = post.id
+        if hasattr(post, 'retweeted_status'):
+            self.extract_data_from_post(post.retweeted_status)
+        elif hasattr(post, 'quoted_status'):
+            self.extract_data_from_post(post.quoted_status)
+        else:
+            self.extract_data_from_post(post)
+
+    def extract_data_from_post(self, status):
         self.author = status.user.name
-        self.description = re.sub(r"http(s)?://t\.co/[a-z0-9A-Z]+", '', post.full_text)
+        self.description = re.sub(r"http(s)?://t\.co/[a-z0-9A-Z]+", '', status.full_text)
         self.direct_link = f'{self.twitter_url}{status.user.screen_name}/status/{status.id_str}'
-        self.urls = list()
+        self._extract_urls(status)
         self.date_created = convert_date_twitter_to_mysql(status.created_at)
 
+    def _extract_urls(self, status):
+        self.urls = [{'url': url['expanded_url'],
+                      'unshort_url': None,
+                      'unique_id': build_hash(url['expanded_url']),
+                      'unshort_unique_id': None} for url in status.entities['urls']]
