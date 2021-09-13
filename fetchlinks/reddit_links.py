@@ -1,5 +1,6 @@
 import requests
 import logging
+from typing import List
 
 # Custom libraries
 from utils import RedditPost
@@ -9,7 +10,7 @@ from auth import RedditAuth
 logger = logging.getLogger(__name__)
 
 
-def get_subreddits(reddit_config):
+def get_subreddits(reddit_config: dict) -> List[dict]:
     subreddit_posts = list()
 
     reddit_auth = RedditAuth(reddit_config['credential_location'])
@@ -21,7 +22,7 @@ def get_subreddits(reddit_config):
     return subreddit_posts
 
 
-def get_subreddit(subreddit, token):
+def get_subreddit(subreddit: str, token: RedditAuth) -> List[dict]:
     subreddit_url = f'https://oauth.reddit.com/r/{subreddit}/new/.json'
     params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100'}
     user_agent = 'Get_Links Agent'
@@ -45,7 +46,7 @@ def get_subreddit(subreddit, token):
     return subreddit_posts
 
 
-def parse_posts(posts):
+def parse_posts(posts: List[dict]) -> List[RedditPost]:
     parsed_posts = list()
 
     for post in posts:
@@ -55,7 +56,7 @@ def parse_posts(posts):
     return parsed_posts
 
 
-def run(reddit_config, db_info):
+def run(reddit_config: dict, db_info: dict):
     subreddit_posts = get_subreddits(reddit_config)
     parsed_posts = parse_posts(subreddit_posts)
 

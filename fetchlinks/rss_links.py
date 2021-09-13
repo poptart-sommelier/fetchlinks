@@ -1,6 +1,7 @@
 import feedparser
 import concurrent.futures
 import logging
+from typing import List
 
 # Custom libraries
 from utils import RssPost
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 THREADS = 25
 
 
-def get_feed(url):
+def get_feed(url: str) -> feedparser.FeedParserDict:
     logging.debug(f'Parsing: {url}')
     feed = feedparser.parse(url)
 
@@ -24,7 +25,7 @@ def get_feed(url):
     return feed
 
 
-def parse_posts(feeds):
+def parse_posts(feeds: list) -> List[RssPost]:
     posts = list()
     for feed in feeds:
         source = feed.feed['link']
@@ -36,7 +37,7 @@ def parse_posts(feeds):
     return posts
 
 
-def get_feeds(feeds):
+def get_feeds(feeds: list) -> list:
     results = list()
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
         futures = [executor.submit(get_feed, feed) for feed in feeds]
@@ -46,7 +47,7 @@ def get_feeds(feeds):
     return results
 
 
-def run(rss_feed_links, db_info):
+def run(rss_feed_links: list, db_info: dict):
     fetched_feeds = get_feeds(rss_feed_links)
     parsed_posts = parse_posts(fetched_feeds)
 

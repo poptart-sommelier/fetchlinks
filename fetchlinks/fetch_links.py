@@ -17,9 +17,9 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Custom libraries
-import twitter_links
-import reddit_links
 import rss_links
+import reddit_links
+import twitter_links
 import startup_and_validate
 
 
@@ -35,10 +35,15 @@ def configure_logging(config):
                         datefmt="%d/%m/%Y %I:%M:%S %p")
 
 
-def fetch_links(config, sources):
-    # TODO: Spin up threads to run these in parallel
-    # rss_links.run(sources['rss']['feeds'], config['db_info'])
-    # reddit_links.run(sources['reddit'], config['db_info'])
+def fetch_links(config: dict, sources: dict):
+    """
+    Call all our fetch_links modules
+    :param config: app config info, mainly database stuff
+    :param sources: rss links, subreddits, etc...
+    :return: Nothing
+    """
+    rss_links.run(sources['rss']['feeds'], config['db_info'])
+    reddit_links.run(sources['reddit'], config['db_info'])
     twitter_links.run(sources['twitter'], config['db_info'])
 
 

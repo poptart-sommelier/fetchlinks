@@ -7,6 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 class Auth:
+    """
+    Base class for Authentication
+    """
     def __init__(self, file: str = ''):
         self.file = file
         self.file_contents: dict = dict()
@@ -15,6 +18,11 @@ class Auth:
 
     @staticmethod
     def read_secrets_file_json(file) -> dict:
+        """
+        Takes a file location and loads it as json
+        :param file: location of the secrets file needed to connect to service
+        :return: a json.load result
+        """
         try:
             with open(file, 'r') as f:
                 return json.load(f)
@@ -23,6 +31,9 @@ class Auth:
 
 
 class RedditAuth(Auth):
+    """
+    Reddit Authentication class.
+    """
     def __init__(self, secrets_file: str = ''):
         super().__init__(secrets_file)
 
@@ -38,6 +49,10 @@ class RedditAuth(Auth):
         self.app_client_secret = self.file_contents['reddit']['APP_CLIENT_SECRET']
 
     def get_auth(self):
+        """
+        Authenticate to Reddit's api endpoint and return an access token
+        :return: a string representing reddit api access token
+        """
         headers = {'User-agent': 'fetch_links'}
         data = {'grant_type': 'client_credentials'}
 
@@ -56,6 +71,9 @@ class RedditAuth(Auth):
 
 
 class TwitterAuth(Auth):
+    """
+    Twitter Authentication class.
+    """
     def __init__(self, secrets_file: str = ''):
         super().__init__(secrets_file)
 
@@ -73,5 +91,9 @@ class TwitterAuth(Auth):
         self.access_token_secret = self.file_contents['twitter']['ACCESS_TOKEN_SECRET']
 
     def get_auth(self):
+        """
+        Authenticate to twitter's api using provided secrets
+        :return: OAuth1 authenticated token
+        """
         return OAuth1(self.consumer_key, self.consumer_secret,
                       self.access_token, self.access_token_secret)

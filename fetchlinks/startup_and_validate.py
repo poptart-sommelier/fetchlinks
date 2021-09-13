@@ -8,7 +8,12 @@ VALID_FIELDS = {'db_info': ['db_name', 'db_location'],
                 'log_info': ['log_config_location', 'log_location', 'log_level']}
 
 
-def parse_sources(sources_location):
+def parse_sources(sources_location: str) -> dict:
+    """
+    Parse the sources config file.
+    :param sources_location: location of the sources.json file
+    :return: valid sources as dict
+    """
     if Path(sources_location).exists():
         with open(sources_location, 'r') as sources_file:
             sources = json.load(sources_file)
@@ -20,7 +25,12 @@ def parse_sources(sources_location):
     return sources
 
 
-def _validate_sources(sources):
+def _validate_sources(sources: dict):
+    """
+    Validates critical sources fields, mainly the creds field. Returns nothing, raises on error
+    :param sources: parsed sources as dict
+    :return: Nothing
+    """
     # check if our api config files exists
     for source, settings in sources.items():
         if settings.get('credential_location', False):
@@ -32,7 +42,12 @@ def _validate_sources(sources):
                 raise ValueError('The Rss config contains no feeds')
 
 
-def parse_config(app_config_location):
+def parse_config(app_config_location: str) -> dict:
+    """
+    parses the config file
+    :param app_config_location: location of the app_config
+    :return: parsed config as dict
+    """
     if Path(app_config_location).exists():
         with open(app_config_location, 'r') as config_file:
             config = json.load(config_file)
@@ -42,7 +57,12 @@ def parse_config(app_config_location):
         raise FileNotFoundError('Config file does not exist.')
 
 
-def _validate_config(config):
+def _validate_config(config: dict):
+    """
+    validates the config file fields
+    :param config: config fields as dict
+    :return: nothing
+    """
     for header, fields in VALID_FIELDS.items():
         if header in config.keys():
             _validate_config_fields(config[header], fields)

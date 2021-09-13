@@ -1,5 +1,6 @@
 # Standard libraries
 import logging
+from typing import List
 
 # External libraries
 import tweepy
@@ -12,7 +13,7 @@ from utils import TwitterPost
 logger = logging.getLogger(__name__)
 
 
-def get_twitter_api(twitter_config):
+def get_twitter_api(twitter_config: dict):
     twitter_secrets = TwitterAuth(twitter_config['credential_location'])
 
     auth = tweepy.OAuthHandler(twitter_secrets.consumer_key, twitter_secrets.consumer_secret)
@@ -21,17 +22,18 @@ def get_twitter_api(twitter_config):
     return tweepy.API(auth)
 
 
-def get_last_tweet_id(posts):
+def get_last_tweet_id(posts: List[TwitterPost]) -> int:
     return max([post.tweet_id for post in posts])
 
 
-def get_tweets(api, last_id):
+def get_tweets(api, last_id: int) -> List[TwitterPost]:
     posts = list()
 
     try:
         for tweet in tweepy.Cursor(api.home_timeline, count=200, since_id=last_id,
                                    exclude_replies=True, tweet_mode='extended').items():
             post = TwitterPost(tweet)
+            # Drop posts with no links in them
             if len(post.urls) > 0:
                 posts.append(TwitterPost(tweet))
     except tweepy.RateLimitError as e:
@@ -40,7 +42,7 @@ def get_tweets(api, last_id):
     return posts
 
 
-def run(twitter_config, db_info):
+def run(twitter_config: dict, db_info: dict):
     db_full_path = db_info['db_location'] + db_info['db_name']
 
     api = get_twitter_api(twitter_config)
