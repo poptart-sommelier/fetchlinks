@@ -14,7 +14,10 @@ THREADS = 25
 
 def get_feed(url: str) -> feedparser.FeedParserDict:
     logging.debug(f'Parsing: {url}')
-    feed = feedparser.parse(url)
+    try:
+        feed = feedparser.parse(url)
+    except ConnectionResetError as e:
+        logging.error(e)
 
     # Problems
     if feed.bozo:

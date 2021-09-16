@@ -89,8 +89,8 @@ def _validate_config_fields(config_keys, valid_keys):
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-config', help='Config location', type=str)
-    parser.add_argument('-sources', help='Sources location', type=str)
+    parser.add_argument('-config', help='Config location', type=str, required=True)
+    parser.add_argument('-sources', help='Sources location', type=str, required=True)
     return parser.parse_args()
 
 

@@ -39,36 +39,29 @@ class Post:
         self.author = ''
         self.description = ''
         self.direct_link = ''
-        self.urls = list()
         self.date_created = ''
+        self.urls = dict()
+        self.urls_not_parsed = 0
         self.unique_id_string = ''
-        self.url_1 = ''
-        self.url_2 = ''
-        self.url_3 = ''
-        self.url_4 = ''
-        self.url_5 = ''
-        self.url_6 = ''
-        self.urls_missing = 0
 
-    def prep_for_db(self):
-        # break out urls to our url fields (max 6), warn if we have more than 6.
-        for i, url in enumerate(self.urls):
-            if i > 5:
-                self.urls_missing = 1
-                break
+    def _get_url_list(self):
+        return [url for url in self.urls.values()]
 
-            if i == 0:
-                self.url_1 = url['unshort_url'] if url['unshort_url'] is not None else url['url']
-            if i == 1:
-                self.url_2 = url['unshort_url'] if url['unshort_url'] is not None else url['url']
-            if i == 2:
-                self.url_3 = url['unshort_url'] if url['unshort_url'] is not None else url['url']
-            if i == 3:
-                self.url_4 = url['unshort_url'] if url['unshort_url'] is not None else url['url']
-            if i == 4:
-                self.url_5 = url['unshort_url'] if url['unshort_url'] is not None else url['url']
-            if i == 5:
-                self.url_6 = url['unshort_url'] if url['unshort_url'] is not None else url['url']
+    def _generate_unique_url_string(self):
+        temp = list()
+        for url in sorted(self._get_url_list()):
+            if url != '':
+                temp.append(url)
+        self.unique_id_string = build_hash(','.join(temp))
+
+    @property
+    def post_has_urls(self):
+        return any(self._get_url_list())
+
+    def get_db_friendly_list(self):
+        return [self.source, self.author, self.description, self.direct_link, self.date_created, self.unique_id_string,
+                self.urls.get(0), self.urls.get(1, ''), self.urls.get(2, ''), self.urls.get(3, ''),
+                self.urls.get(4, ''), self.urls.get(5, ''), self.urls_not_parsed]
 
 
 class RssPost(Post):
@@ -81,10 +74,7 @@ class RssPost(Post):
         self.author = feed_author
         self.description = post.title
         self.direct_link = None
-        self.urls = [{'url': post.link,
-                      'unshort_url': None,
-                      'unique_id': build_hash(post.link),
-                      'unshort_unique_id': None}]
+        self.urls[0] = post.link
 
         if 'published' in post:
             self.date_created = convert_date_string_for_mysql(post.published)
@@ -93,7 +83,7 @@ class RssPost(Post):
         else:
             self.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
 
-        self.unique_id_string = ','.join(sorted([url['unique_id'] for url in self.urls]))
+        self._generate_unique_url_string()
 
 
 class RedditPost(Post):
@@ -101,24 +91,20 @@ class RedditPost(Post):
         super().__init__()
         self.extract_data_from_post(post)
         self._extract_urls(post)
-        self.unique_id_string = ','.join([url['unique_id'] for url in self.urls])
+        self._generate_unique_url_string()
 
     def extract_data_from_post(self, post):
         self.source = f'https://www.reddit.com/{post["data"]["subreddit_name_prefixed"]}'
         self.author = post['data']['author']
         self.description = post['data']['title']
         self.direct_link = f'https://www.reddit.com{post["data"]["permalink"]}'
-        self.urls = list()
         self.date_created = convert_epoch_to_mysql(post['data']['created_utc'])
 
     def _extract_urls(self, post):
         if post['data'].get('url', False):
             url = post['data']['url']
             if not url.startswith('https://www.reddit.com/') and url != '':
-                self.urls = [{'url': url,
-                              'unshort_url': None,
-                              'unique_id': build_hash(url),
-                              'unshort_unique_id': None}]
+                self.urls[0] = url
 
 
 class TwitterPost(Post):
@@ -134,7 +120,7 @@ class TwitterPost(Post):
         else:
             self.extract_data_from_post(post)
 
-        self.unique_id_string = ','.join(sorted([url['unique_id'] for url in self.urls]))
+        self._generate_unique_url_string()
 
     def extract_data_from_post(self, status):
         self.author = status.user.name
@@ -144,7 +130,5 @@ class TwitterPost(Post):
         self.date_created = convert_date_twitter_to_mysql(status.created_at)
 
     def _extract_urls(self, status):
-        self.urls = [{'url': url['expanded_url'],
-                      'unshort_url': None,
-                      'unique_id': build_hash(url['expanded_url']),
-                      'unshort_unique_id': None} for url in status.entities['urls']]
+        for i, url in enumerate(status.entities['urls']):
+            self.urls[i] = url['expanded_url']

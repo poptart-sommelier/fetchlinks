@@ -1,15 +1,3 @@
-# TODO: CREATE TESTS
-#  CREATE SETUP SCRIPT SO FULL DEPLOYMENT IS AUTOMATIC
-#  UPDATE REQUIREMENTS
-#  LAST LINKS FETCHED LOAD TIME ON MAIN PAGE
-#  SERVER SECURITY (ENSURE ONLY KEYS FOR SSH, AUTOUPDATES)
-#  TRUNCATE DB AFTER X-DAYS (30?)
-#  FOR SPECIFIC USERS, GRAB EVERYTHING THEY POST, NOT JUST IF IT HAS LINKS (SBOUASS, etc...)
-#  BETTER LOG CONFIG
-#  DOCUMENT CREATION OF API CREDS FOR TWITTER/REDDIT
-#  STATS ON POSTERS/SOURCES
-#  SEARCH FEATURE
-
 # Standard libraries
 import logging
 from logging import StreamHandler
@@ -42,8 +30,8 @@ def fetch_links(config: dict, sources: dict):
     :param sources: rss links, subreddits, etc...
     :return: Nothing
     """
-    rss_links.run(sources['rss']['feeds'], config['db_info'])
-    reddit_links.run(sources['reddit'], config['db_info'])
+    # rss_links.run(sources['rss']['feeds'], config['db_info'])
+    # reddit_links.run(sources['reddit'], config['db_info'])
     twitter_links.run(sources['twitter'], config['db_info'])
 
 

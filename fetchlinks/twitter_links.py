@@ -34,8 +34,12 @@ def get_tweets(api, last_id: int) -> List[TwitterPost]:
                                    exclude_replies=True, tweet_mode='extended').items():
             post = TwitterPost(tweet)
             # Drop posts with no links in them
-            if len(post.urls) > 0:
+            if post.post_has_urls:
                 posts.append(TwitterPost(tweet))
+            else:
+                # TODO: DEBUGGING REMOVE ME
+                logging.debug('no posts')
+
     except tweepy.RateLimitError as e:
         logger.error(f'Out of api calls: {e}')
 

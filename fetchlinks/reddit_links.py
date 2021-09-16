@@ -51,7 +51,7 @@ def parse_posts(posts: List[dict]) -> List[RedditPost]:
 
     for post in posts:
         parsed_post = RedditPost(post)
-        if len(parsed_post.urls) > 0:
+        if parsed_post.post_has_urls:
             parsed_posts.append(parsed_post)
     return parsed_posts
 
