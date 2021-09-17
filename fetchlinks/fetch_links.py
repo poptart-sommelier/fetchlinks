@@ -30,8 +30,8 @@ def fetch_links(config: dict, sources: dict):
     :param sources: rss links, subreddits, etc...
     :return: Nothing
     """
-    # rss_links.run(sources['rss']['feeds'], config['db_info'])
-    # reddit_links.run(sources['reddit'], config['db_info'])
+    rss_links.run(sources['rss']['feeds'], config['db_info'])
+    reddit_links.run(sources['reddit'], config['db_info'])
     twitter_links.run(sources['twitter'], config['db_info'])
 
 
