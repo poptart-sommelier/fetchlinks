@@ -1,0 +1,11 @@
+{
+    "db_info": {
+        "db_name": "fetchlinks.db",
+        "db_location": "db/"
+    },
+    "log_info": {
+        "log_config_location": "data/config/log_config.json",
+        "log_location": "./data/logs/fetch_links.log",
+        "log_level": "DEBUG"
+    }
+}

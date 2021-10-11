@@ -78,6 +78,4 @@ def db_initial_setup(db_location, db_name):
 
 
 if __name__ == '__main__':
-    db_location = 'db/'
-    db_name = 'fetchlinks.db'
-    db_initial_setup(db_location, db_name)
+    db_initial_setup('db/', 'fetchlinks.db')

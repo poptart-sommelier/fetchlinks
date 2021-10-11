@@ -1,6 +1,5 @@
 import datetime
 import sqlite3
-from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,6 @@ def db_insert(fetched_data, db_location):
     db_command_posts = """INSERT OR IGNORE INTO posts (source, author, description, direct_link, 
                         date_created, unique_id_string, url_1, url_2, url_3, url_4, url_5, url_6, urls_missing) 
                         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
-    db_command_urls = """INSERT OR IGNORE INTO urls (url, unique_id) values (?, ?)"""
 
     try:
         db = sqlite3.connect(db_location)
@@ -69,45 +67,13 @@ def db_insert(fetched_data, db_location):
     cur = db.cursor()
 
     post_list = []
-    url_list = []
 
     for post in fetched_data:
-        # Build URL list, truncate long urls
-        post.prep_for_db()
-
-        post_list.append([post.source,
-                          post.author,
-                          post.description,
-                          post.direct_link,
-                          post.date_created,
-                          post.unique_id_string,
-                          post.url_1,
-                          post.url_2,
-                          post.url_3,
-                          post.url_4,
-                          post.url_5,
-                          post.url_6,
-                          post.urls_missing
-                          ])
-
-        for url in post.urls:
-            if url['unshort_url'] is None:
-                url_list.append([url['url'],
-                                 url['unique_id']])
-            else:
-                url_list.append([url['unshort_url'],
-                                 url['unshort_unique_id']])
+        post_list.append(post.get_db_friendly_list())
 
     try:
         cur.executemany(db_command_posts, post_list)
         db.commit()
     except sqlite3.Error as e:
         logger.error('Could not load posts into posts. DB error: {0}'.format(e))
-        db.rollback()
-
-    try:
-        cur.executemany(db_command_urls, url_list)
-        db.commit()
-    except sqlite3.Error as e:
-        logger.error('Could not load urls into urls. DB error: {0}'.format(e))
         db.rollback()
