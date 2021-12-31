@@ -58,7 +58,9 @@
             "https://blog.xpnsec.com/rss/",
             "http://cyberforensicator.com/feed/",
             "https://itm4n.github.io/feed.xml",
-            "https://www.trustedsec.com/feed/"
+            "https://www.trustedsec.com/feed/",
+            "https://m365internals.com/feed/",
+            "https://blog.badsectorlabs.com/feeds/all.atom.xml"
         ]
     }
 }
