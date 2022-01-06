@@ -60,7 +60,8 @@
             "https://itm4n.github.io/feed.xml",
             "https://www.trustedsec.com/feed/",
             "https://m365internals.com/feed/",
-            "https://blog.badsectorlabs.com/feeds/all.atom.xml"
+            "https://blog.badsectorlabs.com/feeds/all.atom.xml",
+            "https://digi.ninja/rss.xml"
         ]
     }
 }
