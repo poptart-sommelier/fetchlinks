@@ -61,7 +61,8 @@
             "https://www.trustedsec.com/feed/",
             "https://m365internals.com/feed/",
             "https://blog.badsectorlabs.com/feeds/all.atom.xml",
-            "https://digi.ninja/rss.xml"
+            "https://digi.ninja/rss.xml",
+            "https://security-soup.net/feed/"
         ]
     }
 }
