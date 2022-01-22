@@ -62,7 +62,8 @@
             "https://m365internals.com/feed/",
             "https://blog.badsectorlabs.com/feeds/all.atom.xml",
             "https://digi.ninja/rss.xml",
-            "https://security-soup.net/feed/"
+            "https://security-soup.net/feed/",
+            "https://www.inversecos.com/feeds/posts/default?alt=rss"
         ]
     }
 }
