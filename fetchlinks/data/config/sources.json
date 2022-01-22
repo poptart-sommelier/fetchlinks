@@ -64,7 +64,8 @@
             "https://digi.ninja/rss.xml",
             "https://security-soup.net/feed/",
             "https://www.inversecos.com/feeds/posts/default?alt=rss",
-            "http://o365blog.com/index.xml"
+            "http://o365blog.com/index.xml",
+            "https://www.lieben.nu/liebensraum/feed/"
         ]
     }
 }
