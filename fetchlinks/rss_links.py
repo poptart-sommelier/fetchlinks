@@ -31,8 +31,13 @@ def get_feed(url: str) -> feedparser.FeedParserDict:
 def parse_posts(feeds: list) -> List[RssPost]:
     posts = list()
     for feed in feeds:
-        source = feed.feed['link']
-        author = feed.feed['title']
+        try:
+            source = feed.feed['link']
+            author = feed.feed['title']
+        except KeyError as e:
+            logging.error(e)
+            continue
+
         for post in feed.entries:
             parsed_post = RssPost(source, author, post)
             posts.append(parsed_post)
