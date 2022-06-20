@@ -3,7 +3,7 @@ import concurrent.futures
 import logging
 from typing import List
 
-# Custom libraries
+# Custom libraries.
 from utils import RssPost
 import db_utils
 
