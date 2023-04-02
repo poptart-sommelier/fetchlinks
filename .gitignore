@@ -2,4 +2,6 @@
 /fetchlinks/data/logs/
 /db/
 /fetchlinks/db/
+/.vscode/
 .idea/
+/__pycache__/

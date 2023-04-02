@@ -17,8 +17,6 @@
             "http://addxorrol.blogspot.com/feeds/posts/default",
             "http://adsecurity.org/?feed=rss2",
             "http://blog.didierstevens.com/feed/",
-            "http://blogs.mcafee.com/category/mcafee-labs/feed",
-            "http://blog.strategiccyber.com/feed/",
             "http://blog.reversinglabs.com/blog/rss.xml",
             "http://carnal0wnage.blogspot.com/feeds/posts/default",
             "http://countuponsecurity.com/feed/",
@@ -50,21 +48,19 @@
             "http://www.darkoperator.com/blog/rss.xml",
             "http://www.darkreading.com/rss/all.xml",
             "http://www.securelist.com/en/rss/allupdates",
-            "http://www.skullsecurity.org/blog/feed",
+            "http://www.skullsecurity.org/feed",
             "http://zerosum0x0.blogspot.com/feeds/posts/default",
             "http://www.hexacorn.com/blog/feed/",
             "https://bohops.com/feed/",
             "https://secureyourit.co.uk/wp/feed/",
             "https://blog.xpnsec.com/rss/",
-            "http://cyberforensicator.com/feed/",
             "https://itm4n.github.io/feed.xml",
             "https://www.trustedsec.com/feed/",
             "https://m365internals.com/feed/",
             "https://blog.badsectorlabs.com/feeds/all.atom.xml",
             "https://security-soup.net/feed/",
             "https://www.inversecos.com/feeds/posts/default?alt=rss",
-            "http://o365blog.com/index.xml",
-            "https://www.lieben.nu/liebensraum/feed/"
+            "http://o365blog.com/index.xml"
         ]
     }
 }

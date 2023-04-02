@@ -1,0 +1,986 @@
+02/04/2023 08:29:11 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:29:11 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:29:19 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:29:21 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:29:21 PM (rss_links) DEBUG - Parsing: http://blog.strategiccyber.com/feed/
+02/04/2023 08:29:21 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 08:29:41 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 08:29:41 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 08:29:46 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:29:49 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 08:30:39 PM (rss_links) ERROR - Feedparser has issues with: http://blog.strategiccyber.com/feed/: <unknown>:11:88: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:30:40 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 08:30:40 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 08:30:41 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 08:30:43 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 08:30:44 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 08:30:44 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 08:30:44 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 08:30:44 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 08:30:44 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 08:30:44 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 08:30:46 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 08:30:54 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 08:31:04 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 08:31:04 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:31:05 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 08:31:05 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 08:31:05 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 08:31:06 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 08:32:08 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 08:33:12 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 08:33:19 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 08:33:19 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/blog/feed
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 08:33:38 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 08:33:41 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 08:33:43 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 08:33:43 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 08:33:43 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 08:33:43 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 08:33:43 PM (rss_links) DEBUG - Parsing: http://cyberforensicator.com/feed/
+02/04/2023 08:34:08 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:34:17 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:34:24 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:34:24 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:34:25 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:34:25 PM (rss_links) DEBUG - Parsing: http://blog.strategiccyber.com/feed/
+02/04/2023 08:34:26 PM (rss_links) ERROR - Feedparser has issues with: http://blog.strategiccyber.com/feed/: <unknown>:11:88: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:34:26 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 08:34:27 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 08:34:28 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 08:34:28 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 08:34:29 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 08:34:29 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 08:34:30 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 08:34:30 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 08:34:30 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 08:34:31 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:34:31 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 08:34:32 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 08:34:33 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 08:34:36 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 08:34:40 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 08:34:41 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 08:34:41 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 08:34:42 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 08:34:42 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 08:34:43 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 08:34:43 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 08:34:44 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 08:34:45 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 08:34:45 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 08:34:46 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 08:34:46 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:34:46 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 08:34:47 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 08:34:48 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 08:34:49 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 08:34:49 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 08:34:50 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 08:34:50 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 08:34:52 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 08:34:53 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:34:53 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 08:34:55 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/blog/feed
+02/04/2023 08:34:55 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/blog/feed: <unknown>:26:170: mismatched tag.
+Returned 0 posts.
+02/04/2023 08:34:55 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 08:34:56 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 08:34:56 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 08:34:57 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 08:34:57 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 08:34:57 PM (rss_links) DEBUG - Parsing: http://cyberforensicator.com/feed/
+02/04/2023 08:34:57 PM (rss_links) ERROR - Feedparser has issues with: http://cyberforensicator.com/feed/: <urlopen error [Errno 11001] getaddrinfo failed>.
+Returned 0 posts.
+02/04/2023 08:34:57 PM (rss_links) ERROR - Feed has no contents: http://cyberforensicator.com/feed/
+02/04/2023 08:34:57 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 08:34:58 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 08:34:59 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 08:34:59 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 08:35:02 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 08:35:03 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 08:35:04 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 08:35:05 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:35:48 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:36:01 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:36:54 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:37:25 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:38:21 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:38:54 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:38:59 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:39:27 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:39:34 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:39:36 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:39:36 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:39:36 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:39:36 PM (rss_links) DEBUG - Parsing: http://blog.strategiccyber.com/feed/
+02/04/2023 08:39:37 PM (rss_links) ERROR - Feedparser has issues with: http://blog.strategiccyber.com/feed/: <unknown>:11:88: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:39:37 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 08:39:38 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 08:39:40 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 08:39:40 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 08:39:41 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 08:39:41 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 08:39:41 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 08:39:41 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 08:39:42 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 08:39:42 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:39:42 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 08:39:43 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 08:39:45 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 08:39:46 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 08:39:50 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 08:39:51 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 08:39:51 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 08:39:52 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 08:39:53 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 08:39:53 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 08:39:54 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 08:39:55 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 08:39:56 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 08:39:57 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 08:39:57 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 08:39:57 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:39:57 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 08:39:58 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 08:39:59 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 08:40:00 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 08:40:00 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 08:40:01 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 08:40:01 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 08:40:04 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 08:40:05 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:40:05 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 08:40:07 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/blog/feed
+02/04/2023 08:40:07 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/blog/feed: <unknown>:26:170: mismatched tag.
+Returned 0 posts.
+02/04/2023 08:40:07 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 08:40:08 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 08:40:08 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 08:40:09 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 08:40:09 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 08:40:09 PM (rss_links) DEBUG - Parsing: http://cyberforensicator.com/feed/
+02/04/2023 08:40:09 PM (rss_links) ERROR - Feedparser has issues with: http://cyberforensicator.com/feed/: <urlopen error [Errno 11001] getaddrinfo failed>.
+Returned 0 posts.
+02/04/2023 08:40:09 PM (rss_links) ERROR - Feed has no contents: http://cyberforensicator.com/feed/
+02/04/2023 08:40:09 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 08:40:09 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 08:40:11 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 08:40:11 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 08:40:14 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 08:40:16 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 08:40:17 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 08:40:18 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:41:27 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:41:28 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:41:30 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:41:30 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:41:31 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:41:31 PM (rss_links) DEBUG - Parsing: http://blog.strategiccyber.com/feed/
+02/04/2023 08:41:31 PM (rss_links) ERROR - Feedparser has issues with: http://blog.strategiccyber.com/feed/: <unknown>:11:88: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:41:31 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 08:41:32 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 08:41:34 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 08:41:34 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 08:41:35 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 08:41:35 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 08:41:35 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 08:41:35 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 08:41:36 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 08:41:36 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:41:36 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 08:41:37 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 08:41:38 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 08:41:40 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 08:41:44 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 08:41:45 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 08:41:45 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 08:41:46 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 08:41:46 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 08:41:47 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 08:41:47 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 08:41:48 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 08:41:48 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 08:41:49 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 08:41:49 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 08:41:49 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:41:49 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 08:41:50 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 08:41:51 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 08:41:52 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 08:41:53 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 08:41:53 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 08:41:54 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 08:41:56 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 08:41:57 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:41:57 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 08:41:59 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/blog/feed
+02/04/2023 08:41:59 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/blog/feed: <unknown>:26:170: mismatched tag.
+Returned 0 posts.
+02/04/2023 08:41:59 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 08:41:59 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 08:42:00 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 08:42:00 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 08:42:01 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 08:42:01 PM (rss_links) DEBUG - Parsing: http://cyberforensicator.com/feed/
+02/04/2023 08:42:01 PM (rss_links) ERROR - Feedparser has issues with: http://cyberforensicator.com/feed/: <urlopen error [Errno 11001] getaddrinfo failed>.
+Returned 0 posts.
+02/04/2023 08:42:01 PM (rss_links) ERROR - Feed has no contents: http://cyberforensicator.com/feed/
+02/04/2023 08:42:01 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 08:42:01 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 08:42:02 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 08:42:03 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 08:42:05 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 08:42:06 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 08:42:07 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 08:42:07 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:44:11 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:11 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:11 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:12 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:12 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:13 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:13 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:14 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:14 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:14 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:14 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:15 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:15 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:16 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:16 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:16 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:44:16 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:29 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:44:29 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://blogs.mcafee.com/category/mcafee-labs/feed
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://blog.strategiccyber.com/feed/
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 08:49:11 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 08:49:16 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 08:49:21 PM (rss_links) ERROR - Remote end closed connection without response
+02/04/2023 08:49:21 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 08:49:21 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 08:50:02 PM (rss_links) ERROR - Feedparser has issues with: http://blog.strategiccyber.com/feed/: <unknown>:11:88: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:50:02 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/blog/feed
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: http://cyberforensicator.com/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 08:50:02 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 08:50:03 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 08:50:03 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:50:03 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 08:50:03 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 08:50:03 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 08:50:03 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 08:50:03 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:50:03 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/blog/feed: <unknown>:26:170: mismatched tag.
+Returned 0 posts.
+02/04/2023 08:50:03 PM (rss_links) ERROR - Feedparser has issues with: http://cyberforensicator.com/feed/: <urlopen error [Errno 11001] getaddrinfo failed>.
+Returned 0 posts.
+02/04/2023 08:50:04 PM (rss_links) ERROR - Feed has no contents: http://cyberforensicator.com/feed/
+02/04/2023 08:50:05 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:50:09 PM (rss_links) ERROR - 'link'
+02/04/2023 08:50:09 PM (rss_links) ERROR - 'link'
+02/04/2023 08:50:09 PM (rss_links) ERROR - 'link'
+02/04/2023 08:50:09 PM (rss_links) ERROR - 'link'
+02/04/2023 08:50:09 PM (rss_links) ERROR - 'link'
+02/04/2023 08:50:09 PM (rss_links) ERROR - 'link'
+02/04/2023 08:50:09 PM (rss_links) INFO - Inserted 875 Rss posts into DB
+02/04/2023 08:50:09 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): www.reddit.com:443
+02/04/2023 08:50:09 PM (connectionpool) DEBUG - https://www.reddit.com:443 "POST /api/v1/access_token HTTP/1.1" 200 110
+02/04/2023 08:50:09 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:50:10 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Netsec/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 22868
+02/04/2023 08:50:10 PM (reddit_links) DEBUG - Netsec returned 100 entries
+02/04/2023 08:50:10 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:50:12 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Malware/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44782
+02/04/2023 08:50:12 PM (reddit_links) DEBUG - Malware returned 100 entries
+02/04/2023 08:50:12 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:50:13 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Antiforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44753
+02/04/2023 08:50:13 PM (reddit_links) DEBUG - Antiforensics returned 100 entries
+02/04/2023 08:50:13 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:50:14 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Computerforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 53885
+02/04/2023 08:50:14 PM (reddit_links) DEBUG - Computerforensics returned 100 entries
+02/04/2023 08:50:14 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:50:15 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/ReverseEngineering/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 28031
+02/04/2023 08:50:15 PM (reddit_links) DEBUG - ReverseEngineering returned 100 entries
+02/04/2023 08:50:15 PM (reddit_links) INFO - Inserted 287 Rss posts into DB
+02/04/2023 08:50:15 PM (api) DEBUG - PARAMS: {'count': '200', 'since_id': '1', 'exclude_replies': 'True', 'tweet_mode': 'extended'}
+02/04/2023 08:50:15 PM (oauth1_auth) DEBUG - Signing request <PreparedRequest [GET]> using client <Client client_key=QBpAezpvU13AKRICqCDbxbEKz, client_secret=****, resource_owner_key=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd, resource_owner_secret=****, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=None, nonce=None, timestamp=None>
+02/04/2023 08:50:15 PM (oauth1_auth) DEBUG - Including body in call to sign: False
+02/04/2023 08:50:15 PM (__init__) DEBUG - Collected params: [('count', '200'), ('since_id', '1'), ('exclude_replies', 'True'), ('tweet_mode', 'extended'), ('oauth_nonce', '65696005286704622811680465015'), ('oauth_timestamp', '1680465015'), ('oauth_version', '1.0'), ('oauth_signature_method', 'HMAC-SHA1'), ('oauth_consumer_key', 'QBpAezpvU13AKRICqCDbxbEKz'), ('oauth_token', '2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd')]
+02/04/2023 08:50:15 PM (__init__) DEBUG - Normalized params: count=200&exclude_replies=True&oauth_consumer_key=QBpAezpvU13AKRICqCDbxbEKz&oauth_nonce=65696005286704622811680465015&oauth_signature_method=HMAC-SHA1&oauth_timestamp=1680465015&oauth_token=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd&oauth_version=1.0&since_id=1&tweet_mode=extended
+02/04/2023 08:50:15 PM (__init__) DEBUG - Normalized URI: https://api.twitter.com/1.1/statuses/home_timeline.json
+02/04/2023 08:50:15 PM (__init__) DEBUG - Signing: signature base string: GET&https%3A%2F%2Fapi.twitter.com%2F1.1%2Fstatuses%2Fhome_timeline.json&count%3D200%26exclude_replies%3DTrue%26oauth_consumer_key%3DQBpAezpvU13AKRICqCDbxbEKz%26oauth_nonce%3D65696005286704622811680465015%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1680465015%26oauth_token%3D2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd%26oauth_version%3D1.0%26since_id%3D1%26tweet_mode%3Dextended
+02/04/2023 08:50:15 PM (__init__) DEBUG - Signature: ovDGUGXk8ssGabOMWZGkKaNie1o=
+02/04/2023 08:50:15 PM (oauth1_auth) DEBUG - Updated url: https://api.twitter.com/1.1/statuses/home_timeline.json?count=200&since_id=1&exclude_replies=True&tweet_mode=extended
+02/04/2023 08:50:15 PM (oauth1_auth) DEBUG - Updated headers: {'User-Agent': 'Python/3.10.1 Requests/2.27.1 Tweepy/4.5.0', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Authorization': 'OAuth oauth_nonce="65696005286704622811680465015", oauth_timestamp="1680465015", oauth_version="1.0", oauth_signature_method="HMAC-SHA1", oauth_consumer_key="QBpAezpvU13AKRICqCDbxbEKz", oauth_token="2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd", oauth_signature="ovDGUGXk8ssGabOMWZGkKaNie1o%3D"'}
+02/04/2023 08:50:15 PM (oauth1_auth) DEBUG - Updated body: None
+02/04/2023 08:50:15 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): api.twitter.com:443
+02/04/2023 08:50:15 PM (connectionpool) DEBUG - https://api.twitter.com:443 "GET /1.1/statuses/home_timeline.json?count=200&since_id=1&exclude_replies=True&tweet_mode=extended HTTP/1.1" 200 103989
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (api) DEBUG - PARAMS: {'max_id': '1642258948655927296', 'count': '200', 'since_id': '1', 'exclude_replies': 'True', 'tweet_mode': 'extended'}
+02/04/2023 08:50:16 PM (oauth1_auth) DEBUG - Signing request <PreparedRequest [GET]> using client <Client client_key=QBpAezpvU13AKRICqCDbxbEKz, client_secret=****, resource_owner_key=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd, resource_owner_secret=****, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=None, nonce=None, timestamp=None>
+02/04/2023 08:50:16 PM (oauth1_auth) DEBUG - Including body in call to sign: False
+02/04/2023 08:50:16 PM (__init__) DEBUG - Collected params: [('max_id', '1642258948655927296'), ('count', '200'), ('since_id', '1'), ('exclude_replies', 'True'), ('tweet_mode', 'extended'), ('oauth_nonce', '59609104288416488161680465016'), ('oauth_timestamp', '1680465016'), ('oauth_version', '1.0'), ('oauth_signature_method', 'HMAC-SHA1'), ('oauth_consumer_key', 'QBpAezpvU13AKRICqCDbxbEKz'), ('oauth_token', '2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd')]
+02/04/2023 08:50:16 PM (__init__) DEBUG - Normalized params: count=200&exclude_replies=True&max_id=1642258948655927296&oauth_consumer_key=QBpAezpvU13AKRICqCDbxbEKz&oauth_nonce=59609104288416488161680465016&oauth_signature_method=HMAC-SHA1&oauth_timestamp=1680465016&oauth_token=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd&oauth_version=1.0&since_id=1&tweet_mode=extended
+02/04/2023 08:50:16 PM (__init__) DEBUG - Normalized URI: https://api.twitter.com/1.1/statuses/home_timeline.json
+02/04/2023 08:50:16 PM (__init__) DEBUG - Signing: signature base string: GET&https%3A%2F%2Fapi.twitter.com%2F1.1%2Fstatuses%2Fhome_timeline.json&count%3D200%26exclude_replies%3DTrue%26max_id%3D1642258948655927296%26oauth_consumer_key%3DQBpAezpvU13AKRICqCDbxbEKz%26oauth_nonce%3D59609104288416488161680465016%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1680465016%26oauth_token%3D2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd%26oauth_version%3D1.0%26since_id%3D1%26tweet_mode%3Dextended
+02/04/2023 08:50:16 PM (__init__) DEBUG - Signature: vHn1WsMHNYNt5pyqivXpU6JKwAQ=
+02/04/2023 08:50:16 PM (oauth1_auth) DEBUG - Updated url: https://api.twitter.com/1.1/statuses/home_timeline.json?max_id=1642258948655927296&count=200&since_id=1&exclude_replies=True&tweet_mode=extended
+02/04/2023 08:50:16 PM (oauth1_auth) DEBUG - Updated headers: {'User-Agent': 'Python/3.10.1 Requests/2.27.1 Tweepy/4.5.0', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Cookie': 'guest_id=v1%3A168046501466918819; lang=en', 'Authorization': 'OAuth oauth_nonce="59609104288416488161680465016", oauth_timestamp="1680465016", oauth_version="1.0", oauth_signature_method="HMAC-SHA1", oauth_consumer_key="QBpAezpvU13AKRICqCDbxbEKz", oauth_token="2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd", oauth_signature="vHn1WsMHNYNt5pyqivXpU6JKwAQ%3D"'}
+02/04/2023 08:50:16 PM (oauth1_auth) DEBUG - Updated body: None
+02/04/2023 08:50:16 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): api.twitter.com:443
+02/04/2023 08:50:16 PM (connectionpool) DEBUG - https://api.twitter.com:443 "GET /1.1/statuses/home_timeline.json?max_id=1642258948655927296&count=200&since_id=1&exclude_replies=True&tweet_mode=extended HTTP/1.1" 200 78565
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:16 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (api) DEBUG - PARAMS: {'max_id': '1642083154382004225', 'count': '200', 'since_id': '1', 'exclude_replies': 'True', 'tweet_mode': 'extended'}
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Signing request <PreparedRequest [GET]> using client <Client client_key=QBpAezpvU13AKRICqCDbxbEKz, client_secret=****, resource_owner_key=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd, resource_owner_secret=****, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=None, nonce=None, timestamp=None>
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Including body in call to sign: False
+02/04/2023 08:50:17 PM (__init__) DEBUG - Collected params: [('max_id', '1642083154382004225'), ('count', '200'), ('since_id', '1'), ('exclude_replies', 'True'), ('tweet_mode', 'extended'), ('oauth_nonce', '80668294526830637081680465017'), ('oauth_timestamp', '1680465017'), ('oauth_version', '1.0'), ('oauth_signature_method', 'HMAC-SHA1'), ('oauth_consumer_key', 'QBpAezpvU13AKRICqCDbxbEKz'), ('oauth_token', '2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd')]
+02/04/2023 08:50:17 PM (__init__) DEBUG - Normalized params: count=200&exclude_replies=True&max_id=1642083154382004225&oauth_consumer_key=QBpAezpvU13AKRICqCDbxbEKz&oauth_nonce=80668294526830637081680465017&oauth_signature_method=HMAC-SHA1&oauth_timestamp=1680465017&oauth_token=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd&oauth_version=1.0&since_id=1&tweet_mode=extended
+02/04/2023 08:50:17 PM (__init__) DEBUG - Normalized URI: https://api.twitter.com/1.1/statuses/home_timeline.json
+02/04/2023 08:50:17 PM (__init__) DEBUG - Signing: signature base string: GET&https%3A%2F%2Fapi.twitter.com%2F1.1%2Fstatuses%2Fhome_timeline.json&count%3D200%26exclude_replies%3DTrue%26max_id%3D1642083154382004225%26oauth_consumer_key%3DQBpAezpvU13AKRICqCDbxbEKz%26oauth_nonce%3D80668294526830637081680465017%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1680465017%26oauth_token%3D2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd%26oauth_version%3D1.0%26since_id%3D1%26tweet_mode%3Dextended
+02/04/2023 08:50:17 PM (__init__) DEBUG - Signature: +dp5l3Ye8Xr8dWiMH6rdQAmHCYA=
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Updated url: https://api.twitter.com/1.1/statuses/home_timeline.json?max_id=1642083154382004225&count=200&since_id=1&exclude_replies=True&tweet_mode=extended
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Updated headers: {'User-Agent': 'Python/3.10.1 Requests/2.27.1 Tweepy/4.5.0', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Cookie': 'guest_id=v1%3A168046501466918819; lang=en', 'Authorization': 'OAuth oauth_nonce="80668294526830637081680465017", oauth_timestamp="1680465017", oauth_version="1.0", oauth_signature_method="HMAC-SHA1", oauth_consumer_key="QBpAezpvU13AKRICqCDbxbEKz", oauth_token="2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd", oauth_signature="%2Bdp5l3Ye8Xr8dWiMH6rdQAmHCYA%3D"'}
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Updated body: None
+02/04/2023 08:50:17 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): api.twitter.com:443
+02/04/2023 08:50:17 PM (connectionpool) DEBUG - https://api.twitter.com:443 "GET /1.1/statuses/home_timeline.json?max_id=1642083154382004225&count=200&since_id=1&exclude_replies=True&tweet_mode=extended HTTP/1.1" 200 97009
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:17 PM (api) DEBUG - PARAMS: {'max_id': '1641861748331524096', 'count': '200', 'since_id': '1', 'exclude_replies': 'True', 'tweet_mode': 'extended'}
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Signing request <PreparedRequest [GET]> using client <Client client_key=QBpAezpvU13AKRICqCDbxbEKz, client_secret=****, resource_owner_key=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd, resource_owner_secret=****, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=None, nonce=None, timestamp=None>
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Including body in call to sign: False
+02/04/2023 08:50:17 PM (__init__) DEBUG - Collected params: [('max_id', '1641861748331524096'), ('count', '200'), ('since_id', '1'), ('exclude_replies', 'True'), ('tweet_mode', 'extended'), ('oauth_nonce', '29840291061916228081680465017'), ('oauth_timestamp', '1680465017'), ('oauth_version', '1.0'), ('oauth_signature_method', 'HMAC-SHA1'), ('oauth_consumer_key', 'QBpAezpvU13AKRICqCDbxbEKz'), ('oauth_token', '2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd')]
+02/04/2023 08:50:17 PM (__init__) DEBUG - Normalized params: count=200&exclude_replies=True&max_id=1641861748331524096&oauth_consumer_key=QBpAezpvU13AKRICqCDbxbEKz&oauth_nonce=29840291061916228081680465017&oauth_signature_method=HMAC-SHA1&oauth_timestamp=1680465017&oauth_token=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd&oauth_version=1.0&since_id=1&tweet_mode=extended
+02/04/2023 08:50:17 PM (__init__) DEBUG - Normalized URI: https://api.twitter.com/1.1/statuses/home_timeline.json
+02/04/2023 08:50:17 PM (__init__) DEBUG - Signing: signature base string: GET&https%3A%2F%2Fapi.twitter.com%2F1.1%2Fstatuses%2Fhome_timeline.json&count%3D200%26exclude_replies%3DTrue%26max_id%3D1641861748331524096%26oauth_consumer_key%3DQBpAezpvU13AKRICqCDbxbEKz%26oauth_nonce%3D29840291061916228081680465017%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1680465017%26oauth_token%3D2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd%26oauth_version%3D1.0%26since_id%3D1%26tweet_mode%3Dextended
+02/04/2023 08:50:17 PM (__init__) DEBUG - Signature: Sg3AvOqUA7/k0OMqGu+Aes09+Gc=
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Updated url: https://api.twitter.com/1.1/statuses/home_timeline.json?max_id=1641861748331524096&count=200&since_id=1&exclude_replies=True&tweet_mode=extended
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Updated headers: {'User-Agent': 'Python/3.10.1 Requests/2.27.1 Tweepy/4.5.0', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Cookie': 'guest_id=v1%3A168046501466918819; lang=en', 'Authorization': 'OAuth oauth_nonce="29840291061916228081680465017", oauth_timestamp="1680465017", oauth_version="1.0", oauth_signature_method="HMAC-SHA1", oauth_consumer_key="QBpAezpvU13AKRICqCDbxbEKz", oauth_token="2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd", oauth_signature="Sg3AvOqUA7%2Fk0OMqGu%2BAes09%2BGc%3D"'}
+02/04/2023 08:50:17 PM (oauth1_auth) DEBUG - Updated body: None
+02/04/2023 08:50:17 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): api.twitter.com:443
+02/04/2023 08:50:18 PM (connectionpool) DEBUG - https://api.twitter.com:443 "GET /1.1/statuses/home_timeline.json?max_id=1641861748331524096&count=200&since_id=1&exclude_replies=True&tweet_mode=extended HTTP/1.1" 200 68974
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (twitter_links) DEBUG - no posts
+02/04/2023 08:50:18 PM (api) DEBUG - PARAMS: {'max_id': '1641800787134226437', 'count': '200', 'since_id': '1', 'exclude_replies': 'True', 'tweet_mode': 'extended'}
+02/04/2023 08:50:18 PM (oauth1_auth) DEBUG - Signing request <PreparedRequest [GET]> using client <Client client_key=QBpAezpvU13AKRICqCDbxbEKz, client_secret=****, resource_owner_key=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd, resource_owner_secret=****, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=None, nonce=None, timestamp=None>
+02/04/2023 08:50:18 PM (oauth1_auth) DEBUG - Including body in call to sign: False
+02/04/2023 08:50:18 PM (__init__) DEBUG - Collected params: [('max_id', '1641800787134226437'), ('count', '200'), ('since_id', '1'), ('exclude_replies', 'True'), ('tweet_mode', 'extended'), ('oauth_nonce', '51389256021324113351680465018'), ('oauth_timestamp', '1680465018'), ('oauth_version', '1.0'), ('oauth_signature_method', 'HMAC-SHA1'), ('oauth_consumer_key', 'QBpAezpvU13AKRICqCDbxbEKz'), ('oauth_token', '2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd')]
+02/04/2023 08:50:18 PM (__init__) DEBUG - Normalized params: count=200&exclude_replies=True&max_id=1641800787134226437&oauth_consumer_key=QBpAezpvU13AKRICqCDbxbEKz&oauth_nonce=51389256021324113351680465018&oauth_signature_method=HMAC-SHA1&oauth_timestamp=1680465018&oauth_token=2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd&oauth_version=1.0&since_id=1&tweet_mode=extended
+02/04/2023 08:50:18 PM (__init__) DEBUG - Normalized URI: https://api.twitter.com/1.1/statuses/home_timeline.json
+02/04/2023 08:50:18 PM (__init__) DEBUG - Signing: signature base string: GET&https%3A%2F%2Fapi.twitter.com%2F1.1%2Fstatuses%2Fhome_timeline.json&count%3D200%26exclude_replies%3DTrue%26max_id%3D1641800787134226437%26oauth_consumer_key%3DQBpAezpvU13AKRICqCDbxbEKz%26oauth_nonce%3D51389256021324113351680465018%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1680465018%26oauth_token%3D2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd%26oauth_version%3D1.0%26since_id%3D1%26tweet_mode%3Dextended
+02/04/2023 08:50:18 PM (__init__) DEBUG - Signature: edqYg7h9H+pXmXJ1zjDSo3680es=
+02/04/2023 08:50:18 PM (oauth1_auth) DEBUG - Updated url: https://api.twitter.com/1.1/statuses/home_timeline.json?max_id=1641800787134226437&count=200&since_id=1&exclude_replies=True&tweet_mode=extended
+02/04/2023 08:50:18 PM (oauth1_auth) DEBUG - Updated headers: {'User-Agent': 'Python/3.10.1 Requests/2.27.1 Tweepy/4.5.0', 'Accept-Encoding': 'gzip, deflate', 'Accept': '*/*', 'Connection': 'keep-alive', 'Cookie': 'guest_id=v1%3A168046501466918819; lang=en', 'Authorization': 'OAuth oauth_nonce="51389256021324113351680465018", oauth_timestamp="1680465018", oauth_version="1.0", oauth_signature_method="HMAC-SHA1", oauth_consumer_key="QBpAezpvU13AKRICqCDbxbEKz", oauth_token="2765153112-s6nCatnKcpkk10WpryA41mhzeoMSX18sbcUwKEd", oauth_signature="edqYg7h9H%2BpXmXJ1zjDSo3680es%3D"'}
+02/04/2023 08:50:18 PM (oauth1_auth) DEBUG - Updated body: None
+02/04/2023 08:50:18 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): api.twitter.com:443
+02/04/2023 08:50:18 PM (connectionpool) DEBUG - https://api.twitter.com:443 "GET /1.1/statuses/home_timeline.json?max_id=1641800787134226437&count=200&since_id=1&exclude_replies=True&tweet_mode=extended HTTP/1.1" 200 28
+02/04/2023 08:50:18 PM (twitter_links) INFO - Inserted 342 posts into DB
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://blog.strategiccyber.com/feed/
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 08:52:44 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 08:52:45 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 08:52:45 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 08:52:45 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:52:45 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 08:52:45 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 08:52:45 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 08:52:45 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 08:52:45 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 08:52:46 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/blog/feed
+02/04/2023 08:52:47 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 08:52:47 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 08:52:47 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 08:52:47 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 08:52:47 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 08:52:48 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 08:52:48 PM (rss_links) DEBUG - Parsing: http://cyberforensicator.com/feed/
+02/04/2023 08:52:48 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 08:52:48 PM (rss_links) ERROR - Feedparser has issues with: http://cyberforensicator.com/feed/: <urlopen error [Errno 11001] getaddrinfo failed>.
+Returned 0 posts.
+02/04/2023 08:52:48 PM (rss_links) ERROR - Feed has no contents: http://cyberforensicator.com/feed/
+02/04/2023 08:52:48 PM (rss_links) ERROR - Feedparser has issues with: http://blog.strategiccyber.com/feed/: <unknown>:11:88: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:52:48 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 08:52:48 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 08:52:48 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 08:52:48 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 08:52:49 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 08:52:49 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 08:52:49 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:52:50 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/blog/feed: <unknown>:26:170: mismatched tag.
+Returned 0 posts.
+02/04/2023 08:52:51 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:52:53 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 08:52:57 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:53:00 PM (rss_links) ERROR - 'link'
+02/04/2023 08:53:01 PM (rss_links) ERROR - 'link'
+02/04/2023 08:53:01 PM (rss_links) ERROR - 'link'
+02/04/2023 08:53:01 PM (rss_links) ERROR - 'link'
+02/04/2023 08:53:01 PM (rss_links) ERROR - 'link'
+02/04/2023 08:53:01 PM (rss_links) ERROR - 'link'
+02/04/2023 08:53:01 PM (rss_links) INFO - Inserted 875 Rss posts into DB
+02/04/2023 08:53:01 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): www.reddit.com:443
+02/04/2023 08:53:01 PM (connectionpool) DEBUG - https://www.reddit.com:443 "POST /api/v1/access_token HTTP/1.1" 200 110
+02/04/2023 08:53:01 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:53:02 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Netsec/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 22834
+02/04/2023 08:53:02 PM (reddit_links) DEBUG - Netsec returned 100 entries
+02/04/2023 08:53:02 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:53:03 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Malware/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44831
+02/04/2023 08:53:03 PM (reddit_links) DEBUG - Malware returned 100 entries
+02/04/2023 08:53:03 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:53:04 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Antiforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44758
+02/04/2023 08:53:04 PM (reddit_links) DEBUG - Antiforensics returned 100 entries
+02/04/2023 08:53:04 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:53:05 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Computerforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 53794
+02/04/2023 08:53:05 PM (reddit_links) DEBUG - Computerforensics returned 100 entries
+02/04/2023 08:53:05 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:53:06 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/ReverseEngineering/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 28044
+02/04/2023 08:53:06 PM (reddit_links) DEBUG - ReverseEngineering returned 100 entries
+02/04/2023 08:53:06 PM (reddit_links) INFO - Inserted 287 Rss posts into DB
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 08:57:40 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 08:57:41 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 08:57:41 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 08:57:42 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 08:57:42 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 08:57:42 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:57:42 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 08:57:43 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 08:57:43 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 08:57:43 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/feed
+02/04/2023 08:57:43 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 08:57:44 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 08:57:44 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 08:57:44 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 08:57:44 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 08:57:44 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 08:57:45 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 08:57:45 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:57:45 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 08:57:47 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 08:57:47 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 08:57:47 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 08:57:47 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 08:57:47 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 08:57:48 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 08:57:48 PM (rss_links) DEBUG - Parsing: https://www.lieben.nu/liebensraum/feed/
+02/04/2023 08:57:49 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/feed: application/octet-stream is not an XML media type.
+Returned 10 posts.
+02/04/2023 08:57:57 PM (rss_links) ERROR - 'link'
+02/04/2023 08:57:57 PM (rss_links) ERROR - 'link'
+02/04/2023 08:57:57 PM (rss_links) ERROR - 'link'
+02/04/2023 08:57:57 PM (rss_links) INFO - Inserted 885 Rss posts into DB
+02/04/2023 08:57:57 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): www.reddit.com:443
+02/04/2023 08:57:57 PM (connectionpool) DEBUG - https://www.reddit.com:443 "POST /api/v1/access_token HTTP/1.1" 200 110
+02/04/2023 08:57:57 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:57:58 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Netsec/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 22829
+02/04/2023 08:57:58 PM (reddit_links) DEBUG - Netsec returned 100 entries
+02/04/2023 08:57:58 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:57:59 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Malware/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44795
+02/04/2023 08:57:59 PM (reddit_links) DEBUG - Malware returned 100 entries
+02/04/2023 08:57:59 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:58:00 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Antiforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44758
+02/04/2023 08:58:00 PM (reddit_links) DEBUG - Antiforensics returned 100 entries
+02/04/2023 08:58:00 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:58:01 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Computerforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 53844
+02/04/2023 08:58:01 PM (reddit_links) DEBUG - Computerforensics returned 100 entries
+02/04/2023 08:58:01 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 08:58:02 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/ReverseEngineering/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 28046
+02/04/2023 08:58:02 PM (reddit_links) DEBUG - ReverseEngineering returned 100 entries
+02/04/2023 08:58:02 PM (reddit_links) INFO - Inserted 287 Rss posts into DB
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 09:02:42 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 09:02:43 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 09:02:44 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 09:02:44 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/feed
+02/04/2023 09:02:45 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 09:02:45 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 09:02:45 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/feed: application/octet-stream is not an XML media type.
+Returned 10 posts.
+02/04/2023 09:02:45 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 09:02:46 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 09:02:46 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 09:02:46 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 09:02:47 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 09:02:47 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 09:02:47 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 09:02:47 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 09:02:47 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 09:02:47 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 09:02:47 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 09:02:48 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 09:02:49 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 09:02:50 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 09:02:59 PM (rss_links) ERROR - 'link'
+02/04/2023 09:02:59 PM (rss_links) ERROR - 'link'
+02/04/2023 09:02:59 PM (rss_links) ERROR - 'link'
+02/04/2023 09:02:59 PM (rss_links) INFO - Inserted 875 Rss posts into DB
+02/04/2023 09:02:59 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): www.reddit.com:443
+02/04/2023 09:03:00 PM (connectionpool) DEBUG - https://www.reddit.com:443 "POST /api/v1/access_token HTTP/1.1" 200 110
+02/04/2023 09:03:00 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:03:01 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Netsec/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 22921
+02/04/2023 09:03:01 PM (reddit_links) DEBUG - Netsec returned 100 entries
+02/04/2023 09:03:01 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:03:02 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Malware/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44818
+02/04/2023 09:03:02 PM (reddit_links) DEBUG - Malware returned 100 entries
+02/04/2023 09:03:02 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:03:03 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Antiforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44701
+02/04/2023 09:03:03 PM (reddit_links) DEBUG - Antiforensics returned 100 entries
+02/04/2023 09:03:03 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:03:04 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Computerforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 53813
+02/04/2023 09:03:04 PM (reddit_links) DEBUG - Computerforensics returned 100 entries
+02/04/2023 09:03:04 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:03:05 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/ReverseEngineering/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 28024
+02/04/2023 09:03:05 PM (reddit_links) DEBUG - ReverseEngineering returned 100 entries
+02/04/2023 09:03:05 PM (reddit_links) INFO - Inserted 287 Rss posts into DB
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://addxorrol.blogspot.com/feeds/posts/default
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://adsecurity.org/?feed=rss2
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://blog.didierstevens.com/feed/
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://blog.reversinglabs.com/blog/rss.xml
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://carnal0wnage.blogspot.com/feeds/posts/default
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://countuponsecurity.com/feed/
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/feedburner/Talos
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/KrebsOnSecurity
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/NakedSecurity
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://feeds.feedburner.com/TheHackersNews
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://feeds.trendmicro.com/Anti-MalwareBlog
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://findingbad.blogspot.com/feeds/posts/default
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://blog.menasec.net/feeds/posts/default
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://scarybeastsecurity.blogspot.com/feeds/posts/default
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://cyberwardog.blogspot.com/feeds/posts/default
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://dfir.it/atom.xml
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/cert.rss
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://seclists.org/rss/microsoft.rss
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://securityaffairs.co/wordpress/feed
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://isc.sans.edu/rssfeed.xml
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://malware.news/latest.rss
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://oddvar.moe/feed/
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://posts.specterops.io/feed
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://www.cybereason.com/blog/rss.xml
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://www.n00py.io/feed/
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://www.redcanary.com/blog/feed/
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: https://zeltser.com/feed/
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://threatpost.com/feed
+02/04/2023 09:08:09 PM (rss_links) DEBUG - Parsing: http://volatility-labs.blogspot.com/feeds/posts/default
+02/04/2023 09:08:10 PM (rss_links) ERROR - Feedparser has issues with: https://www.fireeye.com/content/fireeye-www/en_US/blog/threat-research/_jcr_content.feed: <unknown>:18:41: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 09:08:10 PM (rss_links) DEBUG - Parsing: http://windowsir.blogspot.com/feeds/posts/default
+02/04/2023 09:08:10 PM (rss_links) DEBUG - Parsing: http://www.darkoperator.com/blog/rss.xml
+02/04/2023 09:08:10 PM (rss_links) DEBUG - Parsing: http://www.darkreading.com/rss/all.xml
+02/04/2023 09:08:10 PM (rss_links) ERROR - Feedparser has issues with: https://dfir.it/atom.xml: document declared as us-ascii, but parsed as utf-8.
+Returned 19 posts.
+02/04/2023 09:08:10 PM (rss_links) DEBUG - Parsing: http://www.securelist.com/en/rss/allupdates
+02/04/2023 09:08:10 PM (rss_links) DEBUG - Parsing: http://www.skullsecurity.org/feed
+02/04/2023 09:08:10 PM (rss_links) DEBUG - Parsing: http://zerosum0x0.blogspot.com/feeds/posts/default
+02/04/2023 09:08:11 PM (rss_links) DEBUG - Parsing: http://www.hexacorn.com/blog/feed/
+02/04/2023 09:08:11 PM (rss_links) DEBUG - Parsing: https://bohops.com/feed/
+02/04/2023 09:08:11 PM (rss_links) DEBUG - Parsing: https://secureyourit.co.uk/wp/feed/
+02/04/2023 09:08:11 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.feedburner.com/feedburner/Talos: <unknown>:1:655989: not well-formed (invalid token).
+Returned 15 posts.
+02/04/2023 09:08:11 PM (rss_links) DEBUG - Parsing: https://blog.xpnsec.com/rss/
+02/04/2023 09:08:12 PM (rss_links) DEBUG - Parsing: https://itm4n.github.io/feed.xml
+02/04/2023 09:08:12 PM (rss_links) DEBUG - Parsing: https://www.trustedsec.com/feed/
+02/04/2023 09:08:12 PM (rss_links) DEBUG - Parsing: https://m365internals.com/feed/
+02/04/2023 09:08:12 PM (rss_links) ERROR - Feedparser has issues with: http://feeds.trendmicro.com/Anti-MalwareBlog: <unknown>:19:38: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 09:08:12 PM (rss_links) DEBUG - Parsing: https://blog.badsectorlabs.com/feeds/all.atom.xml
+02/04/2023 09:08:12 PM (rss_links) DEBUG - Parsing: https://security-soup.net/feed/
+02/04/2023 09:08:12 PM (rss_links) DEBUG - Parsing: https://www.inversecos.com/feeds/posts/default?alt=rss
+02/04/2023 09:08:14 PM (rss_links) DEBUG - Parsing: http://o365blog.com/index.xml
+02/04/2023 09:08:21 PM (rss_links) ERROR - Feedparser has issues with: http://www.skullsecurity.org/feed: application/octet-stream is not an XML media type.
+Returned 10 posts.
+02/04/2023 09:08:22 PM (rss_links) ERROR - Feedparser has issues with: http://www.darkreading.com/rss/all.xml: <unknown>:9:94: not well-formed (invalid token).
+Returned 0 posts.
+02/04/2023 09:08:25 PM (rss_links) ERROR - 'link'
+02/04/2023 09:08:25 PM (rss_links) ERROR - 'link'
+02/04/2023 09:08:25 PM (rss_links) ERROR - 'link'
+02/04/2023 09:08:25 PM (rss_links) INFO - Inserted 875 Rss posts into DB
+02/04/2023 09:08:25 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): www.reddit.com:443
+02/04/2023 09:08:26 PM (connectionpool) DEBUG - https://www.reddit.com:443 "POST /api/v1/access_token HTTP/1.1" 200 110
+02/04/2023 09:08:26 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:08:26 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Netsec/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 22785
+02/04/2023 09:08:26 PM (reddit_links) DEBUG - Netsec returned 100 entries
+02/04/2023 09:08:26 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:08:28 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Malware/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44863
+02/04/2023 09:08:28 PM (reddit_links) DEBUG - Malware returned 100 entries
+02/04/2023 09:08:28 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:08:28 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Antiforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 44676
+02/04/2023 09:08:29 PM (reddit_links) DEBUG - Antiforensics returned 100 entries
+02/04/2023 09:08:29 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:08:30 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/Computerforensics/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 53867
+02/04/2023 09:08:30 PM (reddit_links) DEBUG - Computerforensics returned 100 entries
+02/04/2023 09:08:30 PM (connectionpool) DEBUG - Starting new HTTPS connection (1): oauth.reddit.com:443
+02/04/2023 09:08:30 PM (connectionpool) DEBUG - https://oauth.reddit.com:443 "GET /r/ReverseEngineering/new/.json?sort=new&show=all&t=all&limit=100 HTTP/1.1" 200 28025
+02/04/2023 09:08:30 PM (reddit_links) DEBUG - ReverseEngineering returned 100 entries
+02/04/2023 09:08:31 PM (reddit_links) INFO - Inserted 287 Rss posts into DB

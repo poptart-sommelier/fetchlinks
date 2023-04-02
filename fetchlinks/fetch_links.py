@@ -32,7 +32,8 @@ def fetch_links(config: dict, sources: dict):
     """
     rss_links.run(sources['rss']['feeds'], config['db_info'])
     reddit_links.run(sources['reddit'], config['db_info'])
-    twitter_links.run(sources['twitter'], config['db_info'])
+    # twitter now charges for API access
+    # twitter_links.run(sources['twitter'], config['db_info'])
 
 
 def main():

@@ -14,16 +14,21 @@ THREADS = 25
 
 def get_feed(url: str) -> feedparser.FeedParserDict:
     logging.debug(f'Parsing: {url}')
+
     try:
         feed = feedparser.parse(url)
-    except ConnectionResetError as e:
-        logging.error(e)
 
-    # Problems
-    if feed.bozo:
-        logger.error(f'Feedparser has issues with: {url}: {feed.bozo_exception}.\nReturned {len(feed.entries)} posts.')
-    if len(feed.feed) == 0:
-        logger.error(f'Feed has no contents: {url}')
+        # Problems
+        if feed.bozo:
+            logger.error(
+                f'Feedparser has issues with: {url}: {feed.bozo_exception}.\nReturned {len(feed.entries)} posts.')
+        if len(feed.feed) == 0:
+            logger.error(f'Feed has no contents: {url}')
+
+    except Exception as e:
+        # Futures and/or feedparser is throwing a weird error. Tracking it down.
+        logging.error(e)
+        return None
 
     return feed
 
