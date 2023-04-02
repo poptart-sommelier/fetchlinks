@@ -1,7 +1,6 @@
-/venv/
-/fetchlinks/data/logs/
-/db/
-/fetchlinks/db/
-/.vscode/
+venv/
+data/logs/
+db/
+.vscode/
 .idea/
-/__pycache__/
+__pycache__/
