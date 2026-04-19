@@ -15,7 +15,7 @@ def parse_sources(sources_location: str) -> dict:
     :return: valid sources as dict
     """
     if Path(sources_location).exists():
-        with open(sources_location, 'r') as sources_file:
+        with open(sources_location, 'r', encoding='utf-8') as sources_file:
             sources = json.load(sources_file)
     else:
         raise FileNotFoundError('Sources file does not exist.')
@@ -49,7 +49,7 @@ def parse_config(app_config_location: str) -> dict:
     :return: parsed config as dict
     """
     if Path(app_config_location).exists():
-        with open(app_config_location, 'r') as config_file:
+        with open(app_config_location, 'r', encoding='utf-8') as config_file:
             config = json.load(config_file)
         _validate_config(config)
         return config
@@ -70,11 +70,13 @@ def _validate_config(config: dict):
             raise ValueError(f'Config file is missing config info: {header}.')
 
     # check if our log location exists
-    if not Path(config['log_info']['log_location']).exists():
-        Path(config['log_info']['log_location']).parent.mkdir(parents=True, exist_ok=True)
+    log_path = Path(config['log_info']['log_location'])
+    if not log_path.exists():
+        log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # check if we already have a db
-    if not Path(config['db_info']['db_location'] + config['db_info']['db_name']).exists():
+    db_path = Path(config['db_info']['db_location']) / config['db_info']['db_name']
+    if not db_path.exists():
         db_setup.db_initial_setup(config['db_info']['db_location'], config['db_info']['db_name'])
 
 

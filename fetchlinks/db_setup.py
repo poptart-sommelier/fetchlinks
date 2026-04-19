@@ -6,23 +6,20 @@ logger = logging.getLogger(__name__)
 
 
 def db_create(db_location, db_name):
-    if Path(db_location + db_name).is_file():
-        logger.error('DB file already exists. Back it up before overwriting it.')
-        exit(1)
-    else:
-        try:
-            Path(db_location).mkdir(parents=True, exist_ok=False)
-            conn = sqlite3.connect(db_location + db_name)
-        except sqlite3.OperationalError as e:
-            logger.error(e)
-            exit(1)
-    return conn
+    db_dir = Path(db_location)
+    db_path = db_dir / db_name
+
+    try:
+        db_dir.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(db_path)
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError(f'Failed to create or open database at {db_path}') from exc
 
 
 def table_posts_configure(conn):
     try:
         conn.execute("""
-    CREATE TABLE posts (
+    CREATE TABLE IF NOT EXISTS posts (
     idx INTEGER PRIMARY KEY,
     source TEXT,
     author TEXT,
@@ -38,29 +35,32 @@ def table_posts_configure(conn):
     url_6 TEXT,
     urls_missing INTEGER NOT NULL DEFAULT 0 )
     """)
-        conn.execute("CREATE INDEX idx_unique_id_string ON posts(unique_id_string)")
-    except sqlite3.OperationalError as e:
-        logger.error(e)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_unique_id_string ON posts(unique_id_string)")
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure posts table') from exc
 
 
 def table_urls_configure(conn):
     try:
         conn.execute("""
-    CREATE TABLE urls (
+    CREATE TABLE IF NOT EXISTS urls (
     idx INTEGER PRIMARY KEY,
     url TEXT,
     unique_id TEXT UNIQUE )
     """)
-        conn.execute("CREATE INDEX idx_unique_id ON urls(unique_id)")
-    except sqlite3.OperationalError as e:
-        logger.error(e)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_unique_id ON urls(unique_id)")
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure urls table') from exc
 
 
 def db_initial_setup(db_location, db_name):
-    logger.info(f'Creating {db_location+db_name}')
+    db_path = Path(db_location) / db_name
+    logger.info(f'Creating or validating {db_path}')
     conn = db_create(db_location, db_name)
     table_posts_configure(conn)
     table_urls_configure(conn)
+    conn.commit()
+    conn.close()
     logger.info('Successfully created DB')
 
 

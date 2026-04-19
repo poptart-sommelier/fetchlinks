@@ -23,10 +23,12 @@ class Auth:
         :return: a json.load result
         """
         try:
-            with open(file, 'r') as f:
+            with open(file, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except IOError as e:
-            logger.error(e)
+        except IOError as exc:
+            raise RuntimeError(f'Unable to open secrets file: {file}') from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(f'Secrets file is not valid JSON: {file}') from exc
 
 
 class RedditAuth(Auth):
@@ -44,8 +46,11 @@ class RedditAuth(Auth):
         self.set_secrets()
 
     def set_secrets(self):
-        self.app_client_id = self.file_contents['reddit']['APP_CLIENT_ID']
-        self.app_client_secret = self.file_contents['reddit']['APP_CLIENT_SECRET']
+        try:
+            self.app_client_id = self.file_contents['reddit']['APP_CLIENT_ID']
+            self.app_client_secret = self.file_contents['reddit']['APP_CLIENT_SECRET']
+        except KeyError as exc:
+            raise ValueError('Missing required reddit credential keys in secrets file') from exc
 
     def get_auth(self):
         """
@@ -58,7 +63,10 @@ class RedditAuth(Auth):
         response = requests.post(self.reddit_auth_api_url,
                                  headers=headers,
                                  data=data,
-                                 auth=(self.app_client_id, self.app_client_secret))
+                                 auth=(self.app_client_id, self.app_client_secret),
+                                 timeout=20)
+
+        response.raise_for_status()
 
         response = response.json()
         self.access_token = response.get('access_token', '')
