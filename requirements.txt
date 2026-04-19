@@ -2,4 +2,3 @@ feedparser
 python-dateutil
 requests
 requests-oauthlib
-tweepy

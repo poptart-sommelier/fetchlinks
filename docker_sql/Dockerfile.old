@@ -6,9 +6,6 @@ RUN \
   apt-get -y upgrade && \
   apt-get install -y curl git htop man unzip vim wget python3
 
-# Add files.
-# ADD /home/rich/Documents/SCRIPTS/PROJECTS/TWITTERLINKS/ /root/TWITTERLINKS/
-
 # Set environment variables.
 ENV HOME /root
 

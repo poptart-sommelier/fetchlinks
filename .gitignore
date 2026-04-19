@@ -1,5 +1,7 @@
 venv/
 data/logs/
+fetch_links.log
+*.log
 db/
 .vscode/
 .idea/

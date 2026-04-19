@@ -1,5 +1,4 @@
 import requests
-from requests_oauthlib import OAuth1
 import json
 import logging
 
@@ -68,32 +67,3 @@ class RedditAuth(Auth):
             return self.access_token
         else:
             raise ValueError('Reddit authentication received an invalid access token')
-
-
-class TwitterAuth(Auth):
-    """
-    Twitter Authentication class.
-    """
-    def __init__(self, secrets_file: str = ''):
-        super().__init__(secrets_file)
-
-        self.consumer_key: str = ''
-        self.consumer_secret: str = ''
-        self.access_token: str = ''
-        self.access_token_secret: str = ''
-
-        self.set_secrets()
-
-    def set_secrets(self):
-        self.consumer_key = self.file_contents['twitter']['CONSUMER_KEY']
-        self.consumer_secret = self.file_contents['twitter']['CONSUMER_SECRET']
-        self.access_token = self.file_contents['twitter']['ACCESS_TOKEN']
-        self.access_token_secret = self.file_contents['twitter']['ACCESS_TOKEN_SECRET']
-
-    def get_auth(self):
-        """
-        Authenticate to twitter's api using provided secrets
-        :return: OAuth1 authenticated token
-        """
-        return OAuth1(self.consumer_key, self.consumer_secret,
-                      self.access_token, self.access_token_secret)

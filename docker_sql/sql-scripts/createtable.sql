@@ -21,12 +21,6 @@ UNIQUE KEY ukey_unique_id_string (unique_id_string)
 CREATE INDEX idx_unique_id_string ON fetchlinks.posts(unique_id_string);
 ALTER TABLE fetchlinks.posts CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
 
-CREATE TABLE fetchlinks.twitter (
-idx INT AUTO_INCREMENT PRIMARY KEY,
-last_accessed_id VARCHAR(100),
-time_created DATETIME
-);
-
 CREATE TABLE fetchlinks.urls (
 idx INT AUTO_INCREMENT PRIMARY KEY,
 url VARCHAR(4000),

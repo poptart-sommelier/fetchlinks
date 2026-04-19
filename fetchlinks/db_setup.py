@@ -43,18 +43,6 @@ def table_posts_configure(conn):
         logger.error(e)
 
 
-def table_twitter_configure(conn):
-    try:
-        conn.execute("""
-    CREATE TABLE twitter (
-    idx INTEGER PRIMARY KEY,
-    last_accessed_id TEXT,
-    time_created INTEGER )
-    """)
-    except sqlite3.OperationalError as e:
-        logger.error(e)
-
-
 def table_urls_configure(conn):
     try:
         conn.execute("""
@@ -72,7 +60,6 @@ def db_initial_setup(db_location, db_name):
     logger.info(f'Creating {db_location+db_name}')
     conn = db_create(db_location, db_name)
     table_posts_configure(conn)
-    table_twitter_configure(conn)
     table_urls_configure(conn)
     logger.info('Successfully created DB')
 
