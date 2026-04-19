@@ -1,6 +1,7 @@
 import feedparser
 import concurrent.futures
 import logging
+from pathlib import Path
 from typing import List
 
 # Custom libraries.
@@ -13,21 +14,32 @@ THREADS = 25
 
 
 def get_feed(url: str) -> feedparser.FeedParserDict:
-    logging.debug(f'Parsing: {url}')
+    logger.debug('Parsing: %s', url)
 
     try:
         feed = feedparser.parse(url)
 
-        # Problems
+        # Some feeds are malformed but still return usable entries.
         if feed.bozo:
-            logger.error(
-                f'Feedparser has issues with: {url}: {feed.bozo_exception}.\nReturned {len(feed.entries)} posts.')
+            if len(feed.entries) == 0:
+                logger.warning(
+                    'Feed parser warning for %s: %s (entries=%s)',
+                    url,
+                    feed.bozo_exception,
+                    len(feed.entries),
+                )
+            else:
+                logger.debug(
+                    'Non-fatal feed parser warning for %s: %s (entries=%s)',
+                    url,
+                    feed.bozo_exception,
+                    len(feed.entries),
+                )
         if len(feed.feed) == 0:
-            logger.error(f'Feed has no contents: {url}')
+            logger.debug('Feed has no metadata: %s', url)
 
-    except Exception as e:
-        # Futures and/or feedparser is throwing a weird error. Tracking it down.
-        logging.error(e)
+    except Exception as exc:
+        logger.error('Failed to parse feed %s: %s', url, exc)
         return None
 
     return feed
@@ -36,11 +48,15 @@ def get_feed(url: str) -> feedparser.FeedParserDict:
 def parse_posts(feeds: list) -> List[RssPost]:
     posts = list()
     for feed in feeds:
-        try:
-            source = feed.feed['link']
-            author = feed.feed['title']
-        except KeyError as e:
-            logging.error(e)
+        source = feed.feed.get('link', '')
+        author = feed.feed.get('title', '')
+        if not source:
+            source = getattr(feed, 'href', '')
+        if not author:
+            author = source or 'Unknown feed'
+
+        if not source:
+            logger.warning('Skipping RSS feed with missing source link')
             continue
 
         for post in feed.entries:
@@ -64,9 +80,13 @@ def run(rss_feed_links: list, db_info: dict):
     fetched_feeds = get_feeds(rss_feed_links)
     parsed_posts = parse_posts(fetched_feeds)
 
-    if parsed_posts is not None:
-        db_full_path = db_info['db_location'] + db_info['db_name']
-        db_utils.db_insert(parsed_posts, db_full_path)
-        logger.info(f'Inserted {len(parsed_posts)} Rss posts into DB')
+    if parsed_posts:
+        db_full_path = Path(db_info['db_location']) / db_info['db_name']
+        inserted_count = db_utils.db_insert(parsed_posts, db_full_path)
+        logger.info(
+            'Parsed %s RSS posts, inserted %s new rows',
+            len(parsed_posts),
+            inserted_count,
+        )
     else:
-        logging.info('No new Rss posts found')
+        logger.info('No new RSS posts found')
