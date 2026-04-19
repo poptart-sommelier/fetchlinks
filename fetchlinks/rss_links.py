@@ -2,7 +2,7 @@ import feedparser
 import concurrent.futures
 import logging
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Optional, cast
 
 # Custom libraries.
 from utils import RssPost
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 THREADS = 25
 
 
-def get_feed(url: str) -> feedparser.FeedParserDict:
+def get_feed(url: str) -> Optional[feedparser.FeedParserDict]:
     logger.debug('Parsing: %s', url)
 
     try:
@@ -45,11 +45,12 @@ def get_feed(url: str) -> feedparser.FeedParserDict:
     return feed
 
 
-def parse_posts(feeds: list) -> List[RssPost]:
+def parse_posts(feeds: List[feedparser.FeedParserDict]) -> List[RssPost]:
     posts = list()
     for feed in feeds:
-        source = feed.feed.get('link', '')
-        author = feed.feed.get('title', '')
+        feed_meta = cast(Dict[str, str], feed.feed)
+        source = feed_meta.get('link', '')
+        author = feed_meta.get('title', '')
         if not source:
             source = getattr(feed, 'href', '')
         if not author:
@@ -66,13 +67,14 @@ def parse_posts(feeds: list) -> List[RssPost]:
     return posts
 
 
-def get_feeds(feeds: list) -> list:
-    results = list()
+def get_feeds(feeds: List[str]) -> List[feedparser.FeedParserDict]:
+    results: List[feedparser.FeedParserDict] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
         futures = [executor.submit(get_feed, feed) for feed in feeds]
         for future in concurrent.futures.as_completed(futures):
-            if future.result() is not None:
-                results.append(future.result())
+            result = future.result()
+            if result is not None:
+                results.append(result)
     return results
 
 
