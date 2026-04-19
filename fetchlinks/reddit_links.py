@@ -1,5 +1,6 @@
 import requests
 import logging
+from pathlib import Path
 from typing import List
 
 # Custom libraries
@@ -8,6 +9,7 @@ import db_utils
 from auth import RedditAuth
 
 logger = logging.getLogger(__name__)
+REQUEST_TIMEOUT_SECONDS = 20
 
 
 def get_subreddits(reddit_config: dict) -> List[dict]:
@@ -22,25 +24,42 @@ def get_subreddits(reddit_config: dict) -> List[dict]:
     return subreddit_posts
 
 
-def get_subreddit(subreddit: str, token: RedditAuth) -> List[dict]:
+def get_subreddit(subreddit: str, token: str) -> List[dict]:
     subreddit_url = f'https://oauth.reddit.com/r/{subreddit}/new/.json'
     params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100'}
     user_agent = 'Get_Links Agent'
     headers = {'authorization': f'Bearer {token}', 'User-agent': user_agent}
 
     try:
-        subreddit_resp = requests.get(url=subreddit_url, params=params, headers=headers)
-        subreddit_resp = subreddit_resp.json()
+        response = requests.get(
+            url=subreddit_url,
+            params=params,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        subreddit_resp = response.json()
+    except ValueError as err:
+        logger.error('Invalid JSON while retrieving r/%s: %s', subreddit, err)
+        return []
     except requests.exceptions.HTTPError as errh:
-        logger.error("Http Error:", errh)
+        logger.error('HTTP error while retrieving r/%s: %s', subreddit, errh)
+        return []
     except requests.exceptions.ConnectionError as errc:
-        logger.error("Error Connecting:", errc)
+        logger.error('Connection error while retrieving r/%s: %s', subreddit, errc)
+        return []
     except requests.exceptions.Timeout as errt:
-        logger.error("Timeout Error:", errt)
+        logger.error('Timeout while retrieving r/%s: %s', subreddit, errt)
+        return []
     except requests.exceptions.RequestException as err:
-        logger.error("OOps: Something Else", err)
+        logger.error('Request error while retrieving r/%s: %s', subreddit, err)
+        return []
 
-    subreddit_posts = subreddit_resp['data']['children']
+    subreddit_posts = subreddit_resp.get('data', {}).get('children', [])
+    if not isinstance(subreddit_posts, list):
+        logger.error('Unexpected Reddit payload shape for r/%s', subreddit)
+        return []
+
     logger.debug(f'{subreddit} returned {len(subreddit_posts)} entries')
 
     return subreddit_posts
@@ -60,9 +79,9 @@ def run(reddit_config: dict, db_info: dict):
     subreddit_posts = get_subreddits(reddit_config)
     parsed_posts = parse_posts(subreddit_posts)
 
-    if parsed_posts is not None:
-        db_full_path = db_info['db_location'] + db_info['db_name']
-        db_utils.db_insert(parsed_posts, db_full_path)
-        logger.info(f'Inserted {len(parsed_posts)} Rss posts into DB')
+    if parsed_posts:
+        db_full_path = Path(db_info['db_location']) / db_info['db_name']
+        inserted_count = db_utils.db_insert(parsed_posts, db_full_path)
+        logger.info('Inserted %s Reddit posts into DB', inserted_count)
     else:
-        logging.info('No new Rss posts found')
+        logger.info('No new Reddit posts found')

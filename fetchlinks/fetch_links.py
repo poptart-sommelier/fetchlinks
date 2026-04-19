@@ -14,7 +14,8 @@ def configure_logging(config):
     logging_levels = {"CRITICAL": 50, "ERROR": 40, "WARNING": 30, "INFO": 20, "DEBUG": 10}
 
     log_path = Path(config['log_info']['log_location'])
-    log_level = logging_levels[config['log_info'].get('log_level', 20)]
+    log_level_name = str(config['log_info'].get('log_level', 'INFO')).upper()
+    log_level = logging_levels.get(log_level_name, logging.INFO)
     logging.basicConfig(handlers=[RotatingFileHandler(log_path, maxBytes=1000000, backupCount=5, encoding="utf8"),
                                   StreamHandler()],
                         level=log_level,
@@ -34,14 +35,18 @@ def fetch_links(config: dict, sources: dict):
 
 
 def main():
-    # Sanity checks
-    config, sources = startup_and_validate.do_startup()
+    try:
+        # Sanity checks
+        config, sources = startup_and_validate.do_startup()
 
-    # Setup logging
-    configure_logging(config)
+        # Setup logging
+        configure_logging(config)
 
-    # Actually do stuff
-    fetch_links(config, sources)
+        # Actually do stuff
+        fetch_links(config, sources)
+    except Exception as exc:
+        logging.exception('Fetch links failed: %s', exc)
+        raise SystemExit(1) from exc
 
 
 if __name__ == '__main__':
