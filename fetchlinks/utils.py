@@ -3,6 +3,8 @@ import hashlib
 import dateutil.parser
 import datetime
 import logging
+import re
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,12 @@ def convert_date_string_for_mysql(rss_date: str) -> str:
 def convert_epoch_to_mysql(epoch: float) -> str:
     date_object = datetime.datetime.utcfromtimestamp(int(epoch))
     return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+
+
+def extract_urls_from_text(text: str) -> List[str]:
+    if not text:
+        return []
+    return re.findall(r'https?://[^\s)\]>"\']+', text)
 
 
 class Post:
@@ -100,3 +108,25 @@ class RedditPost(Post):
             url = post['data']['url']
             if not url.startswith('https://www.reddit.com/') and url != '':
                 self.urls[0] = url
+
+
+class BlueskyPost(Post):
+    def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str]):
+        super().__init__()
+        self.source = source
+        self.author = author
+        self.description = description
+        self.direct_link = direct_link
+        self.date_created = convert_date_string_for_mysql(created_at)
+        self._set_urls(urls)
+        self._generate_unique_url_string()
+
+    def _set_urls(self, urls: List[str]):
+        deduped = []
+        for url in urls:
+            if url and url not in deduped:
+                deduped.append(url)
+        for idx, url in enumerate(deduped[:6]):
+            self.urls[idx] = url
+        if len(deduped) > 6:
+            self.urls_not_parsed = len(deduped) - 6

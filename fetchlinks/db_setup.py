@@ -53,12 +53,25 @@ def table_urls_configure(conn):
         raise RuntimeError('Failed to configure urls table') from exc
 
 
+def table_bluesky_state_configure(conn):
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS bluesky_state (
+    idx INTEGER PRIMARY KEY,
+    cursor TEXT,
+    time_created TEXT)
+    """)
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure bluesky_state table') from exc
+
+
 def db_initial_setup(db_location, db_name):
     db_path = Path(db_location) / db_name
     logger.info(f'Creating or validating {db_path}')
     conn = db_create(db_location, db_name)
     table_posts_configure(conn)
     table_urls_configure(conn)
+    table_bluesky_state_configure(conn)
     conn.commit()
     conn.close()
     logger.info('Successfully created DB')

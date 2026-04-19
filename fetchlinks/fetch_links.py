@@ -7,6 +7,7 @@ from pathlib import Path
 # Custom libraries
 import rss_links
 import reddit_links
+import bluesky_links
 import startup_and_validate
 
 
@@ -30,8 +31,14 @@ def fetch_links(config: dict, sources: dict):
     :param sources: rss links, subreddits, etc...
     :return: Nothing
     """
-    rss_links.run(sources['rss']['feeds'], config['db_info'])
-    reddit_links.run(sources['reddit'], config['db_info'])
+    if sources.get('rss', {}).get('enabled', True):
+        rss_links.run(sources['rss']['feeds'], config['db_info'])
+
+    if sources.get('reddit', {}).get('enabled', True):
+        reddit_links.run(sources['reddit'], config['db_info'])
+
+    if sources.get('bluesky', {}).get('enabled', False):
+        bluesky_links.run(sources['bluesky'], config['db_info'])
 
 
 def main():
