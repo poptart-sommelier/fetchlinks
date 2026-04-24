@@ -44,9 +44,9 @@ class BlueskyLinksTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertTrue(parsed.post_has_urls)
         self.assertEqual(parsed.author, 'Alice')
-        self.assertIn('https://facet.example/one', parsed.urls.values())
-        self.assertIn('https://embed.example/two', parsed.urls.values())
-        self.assertIn('https://example.org/article', parsed.urls.values())
+        self.assertIn('https://facet.example/one', parsed.urls)
+        self.assertIn('https://embed.example/two', parsed.urls)
+        self.assertIn('https://example.org/article', parsed.urls)
 
     def test_bluesky_cursor_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

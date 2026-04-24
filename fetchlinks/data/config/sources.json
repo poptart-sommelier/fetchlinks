@@ -1,6 +1,6 @@
 {
     "reddit": {
-        "enabled": false,
+        "enabled": true,
         "subreddits": [
             "Netsec",
             "Malware",
@@ -16,7 +16,7 @@
         "timeline_limit": 50
     },
     "rss": {
-        "enabled": false,
+        "enabled": true,
         "feeds": [
             "http://addxorrol.blogspot.com/feeds/posts/default",
             "http://adsecurity.org/?feed=rss2",

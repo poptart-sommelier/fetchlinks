@@ -43,28 +43,35 @@ class Post:
         self.description = ''
         self.direct_link = ''
         self.date_created = ''
-        self.urls = dict()
-        self.urls_not_parsed = 0
+        self.urls: List[str] = []
         self.unique_id_string = ''
 
-    def _get_url_list(self):
-        return [url for url in self.urls.values()]
+    def add_url(self, url: str):
+        if url and url not in self.urls:
+            self.urls.append(url)
 
     def _generate_unique_url_string(self):
-        temp = list()
-        for url in sorted(self._get_url_list()):
-            if url != '':
-                temp.append(url)
-        self.unique_id_string = build_hash(','.join(temp))
+        sorted_urls = sorted(u for u in self.urls if u)
+        self.unique_id_string = build_hash(','.join(sorted_urls))
 
     @property
-    def post_has_urls(self):
-        return any(self._get_url_list())
+    def post_has_urls(self) -> bool:
+        return bool(self.urls)
 
-    def get_db_friendly_list(self):
-        return [self.source, self.author, self.description, self.direct_link, self.date_created, self.unique_id_string,
-                self.urls.get(0), self.urls.get(1, ''), self.urls.get(2, ''), self.urls.get(3, ''),
-                self.urls.get(4, ''), self.urls.get(5, ''), self.urls_not_parsed]
+    def get_post_row(self) -> tuple:
+        # Row for the `posts` table; matches db_utils.db_insert column order.
+        return (
+            self.source,
+            self.author,
+            self.description,
+            self.direct_link,
+            self.date_created,
+            self.unique_id_string,
+        )
+
+    def get_url_rows(self) -> List[tuple]:
+        # (position, url, url_hash) -- post_id is filled in by db_utils after insert.
+        return [(idx, url, build_hash(url)) for idx, url in enumerate(self.urls)]
 
 
 class RssPost(Post):
@@ -77,7 +84,7 @@ class RssPost(Post):
         self.author = feed_author
         self.description = post.title
         self.direct_link = None
-        self.urls[0] = post.link
+        self.add_url(post.link)
 
         if 'published' in post:
             self.date_created = convert_date_string_for_mysql(post.published)
@@ -107,7 +114,7 @@ class RedditPost(Post):
         if post['data'].get('url', False):
             url = post['data']['url']
             if not url.startswith('https://www.reddit.com/') and url != '':
-                self.urls[0] = url
+                self.add_url(url)
 
 
 class BlueskyPost(Post):
@@ -118,15 +125,6 @@ class BlueskyPost(Post):
         self.description = description
         self.direct_link = direct_link
         self.date_created = convert_date_string_for_mysql(created_at)
-        self._set_urls(urls)
-        self._generate_unique_url_string()
-
-    def _set_urls(self, urls: List[str]):
-        deduped = []
         for url in urls:
-            if url and url not in deduped:
-                deduped.append(url)
-        for idx, url in enumerate(deduped[:6]):
-            self.urls[idx] = url
-        if len(deduped) > 6:
-            self.urls_not_parsed = len(deduped) - 6
+            self.add_url(url)
+        self._generate_unique_url_string()
