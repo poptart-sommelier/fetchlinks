@@ -11,7 +11,7 @@
         "credential_location": "/home/rich/.fetchlinks/reddit.json"
     },
     "bluesky": {
-        "enabled": false,
+        "enabled": true,
         "credential_location": "/home/rich/.fetchlinks/bluesky.json",
         "timeline_limit": 50
     },
