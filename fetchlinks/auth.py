@@ -2,6 +2,11 @@ import requests
 import json
 import logging
 
+try:
+    from atproto import Client as AtprotoClient
+except ImportError:  # pragma: no cover - exercised in runtime when dependency missing
+    AtprotoClient = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,3 +80,32 @@ class RedditAuth(Auth):
             return self.access_token
         else:
             raise ValueError('Reddit authentication received an invalid access token')
+
+
+class BlueskyAuth(Auth):
+    """
+    Bluesky authentication class backed by the atproto SDK.
+    """
+
+    def __init__(self, secrets_file: str = ''):
+        super().__init__(secrets_file)
+
+        self.identifier: str = ''
+        self.app_password: str = ''
+
+        self.set_secrets()
+
+    def set_secrets(self):
+        try:
+            self.identifier = self.file_contents['bluesky']['IDENTIFIER']
+            self.app_password = self.file_contents['bluesky']['APP_PASSWORD']
+        except KeyError as exc:
+            raise ValueError('Missing required bluesky credential keys in secrets file') from exc
+
+    def get_client(self):
+        if AtprotoClient is None:
+            raise RuntimeError('atproto is not installed. Install dependencies from requirements.txt first.')
+
+        client = AtprotoClient()
+        client.login(self.identifier, self.app_password)
+        return client

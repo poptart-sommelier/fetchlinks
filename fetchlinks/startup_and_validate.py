@@ -33,13 +33,28 @@ def _validate_sources(sources: dict):
     """
     # check if our api config files exists
     for source, settings in sources.items():
+        if not isinstance(settings, dict):
+            raise ValueError(f'{source} source settings must be a JSON object')
+
+        if settings.get('enabled', True) is False:
+            continue
+
         if settings.get('credential_location', False):
             if not Path(settings.get('credential_location')).exists():
                 raise FileNotFoundError(f'{source} credential file could not be found at location: {settings.get("credential_location")}')
+
     if sources.get('rss', False):
-        if sources['rss'].get('feeds', False):
+        if sources['rss'].get('enabled', True) and sources['rss'].get('feeds', False):
             if len(sources['rss']['feeds']) < 1:
                 raise ValueError('The Rss config contains no feeds')
+
+    if sources.get('bluesky', False) and sources['bluesky'].get('enabled', False):
+        if not sources['bluesky'].get('credential_location', False):
+            raise ValueError('Bluesky source requires credential_location when enabled')
+
+        timeline_limit = sources['bluesky'].get('timeline_limit', 50)
+        if not isinstance(timeline_limit, int) or timeline_limit < 1:
+            raise ValueError('Bluesky source timeline_limit must be a positive integer')
 
 
 def parse_config(app_config_location: str) -> dict:
