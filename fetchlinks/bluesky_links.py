@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import db_utils
 from auth import BlueskyAuth
@@ -8,8 +9,20 @@ from utils import BlueskyPost, extract_urls_from_text
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMELINE_LIMIT = 50
+DEFAULT_TIMELINE_LIMIT = 100
 MAX_TIMELINE_LIMIT = 100
+MAX_PAGES = 10
+
+# Hosts to exclude from extracted links (we don't want to link back to Bluesky itself).
+EXCLUDED_HOSTS = ('bsky.app', 'bsky.social')
+
+
+def _is_excluded_host(url: str) -> bool:
+    try:
+        host = (urlparse(url).hostname or '').lower()
+    except ValueError:
+        return False
+    return any(host == h or host.endswith('.' + h) for h in EXCLUDED_HOSTS)
 
 
 def _as_dict(obj: Any) -> Dict[str, Any]:
@@ -18,9 +31,10 @@ def _as_dict(obj: Any) -> Dict[str, Any]:
     if isinstance(obj, dict):
         return obj
     if hasattr(obj, 'model_dump'):
-        return obj.model_dump(exclude_none=True)
+        # by_alias=True keeps wire-format camelCase keys (createdAt, displayName, etc.)
+        return obj.model_dump(exclude_none=True, by_alias=True)
     if hasattr(obj, 'dict'):
-        return obj.dict(exclude_none=True)
+        return obj.dict(exclude_none=True, by_alias=True)
     return {}
 
 
@@ -108,7 +122,10 @@ def _parse_feed_item(item: Dict[str, Any]) -> Optional[BlueskyPost]:
     links.extend(_extract_links_from_embed(post.get('embed')))
     links.extend(extract_urls_from_text(text))
 
-    external_links = [url for url in links if isinstance(url, str) and url.startswith('http')]
+    external_links = [
+        url for url in links
+        if isinstance(url, str) and url.startswith('http') and not _is_excluded_host(url)
+    ]
     if not external_links:
         return None
 
@@ -146,20 +163,70 @@ def run(bluesky_config: dict, db_info: dict):
     client = auth_client.get_client()
 
     previous_cursor = db_utils.db_get_bluesky_cursor(db_full_path)
-    feed_items, next_cursor = _fetch_timeline_page(client, previous_cursor, timeline_limit)
+
+    feed_items: List[Dict[str, Any]] = []
+    cursor = previous_cursor
+    next_cursor: Optional[str] = previous_cursor
+    pages_fetched = 0
+    for page_num in range(1, MAX_PAGES + 1):
+        page_items, page_cursor = _fetch_timeline_page(client, cursor, timeline_limit)
+        pages_fetched += 1
+        logger.debug(
+            'Bluesky page %s/%s: cursor=%s, items=%s, next_cursor=%s',
+            page_num,
+            MAX_PAGES,
+            cursor,
+            len(page_items),
+            page_cursor,
+        )
+
+        if not page_items:
+            next_cursor = page_cursor or cursor
+            break
+
+        feed_items.extend(page_items)
+        next_cursor = page_cursor
+
+        # No more pages available, or cursor did not advance (guard against loops).
+        if not page_cursor or page_cursor == cursor:
+            break
+
+        cursor = page_cursor
+
+    logger.info(
+        'Bluesky timeline fetch: starting_cursor=%s, pages=%s/%s, items_returned=%s, next_cursor=%s',
+        previous_cursor,
+        pages_fetched,
+        MAX_PAGES,
+        len(feed_items),
+        next_cursor,
+    )
 
     parsed_posts: List[BlueskyPost] = []
+    skipped_no_links = 0
+    skipped_missing_fields = 0
     for item in feed_items:
         parsed = _parse_feed_item(item)
-        if parsed is not None and parsed.post_has_urls:
+        if parsed is None:
+            # Distinguish missing-field skips from no-link skips for diagnostics.
+            post_dict = _as_dict(item.get('post') if isinstance(item, dict) else getattr(item, 'post', None))
+            record_dict = _as_dict(post_dict.get('record'))
+            if not record_dict.get('text') or not record_dict.get('createdAt'):
+                skipped_missing_fields += 1
+            else:
+                skipped_no_links += 1
+            continue
+        if parsed.post_has_urls:
             parsed_posts.append(parsed)
 
     inserted_count = db_utils.db_insert(parsed_posts, db_full_path)
     db_utils.db_set_bluesky_cursor(next_cursor, db_full_path)
 
     logger.info(
-        'Parsed %s Bluesky posts, inserted %s new rows, cursor advanced=%s',
+        'Parsed %s Bluesky posts (skipped %s no-links, %s missing-fields), inserted %s new rows, cursor advanced=%s',
         len(parsed_posts),
+        skipped_no_links,
+        skipped_missing_fields,
         inserted_count,
         bool(next_cursor),
     )
