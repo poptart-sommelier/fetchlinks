@@ -23,6 +23,7 @@ Create a credential directory:
 
 ```bash
 mkdir -p ~/.fetchlinks
+chmod 700 ~/.fetchlinks
 ```
 
 ### Reddit credential file
@@ -38,6 +39,12 @@ Create ~/.fetchlinks/reddit.json:
 }
 ```
 
+Restrict permissions so only your user can read it:
+
+```bash
+chmod 600 ~/.fetchlinks/reddit.json
+```
+
 ### Bluesky credential file (optional)
 
 Bluesky is disabled by default. If you want to enable it, create ~/.fetchlinks/bluesky.json:
@@ -49,6 +56,12 @@ Bluesky is disabled by default. If you want to enable it, create ~/.fetchlinks/b
 		"APP_PASSWORD": "xxxx-xxxx-xxxx-xxxx"
 	}
 }
+```
+
+Restrict permissions:
+
+```bash
+chmod 600 ~/.fetchlinks/bluesky.json
 ```
 
 ## 4) Configure sources
