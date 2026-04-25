@@ -1,94 +1,146 @@
-import feedparser
+"""RSS ingestion using requests + ETag/Last-Modified caching.
+
+Improvements over the prior feedparser-only implementation:
+- Uses requests with explicit timeouts so a single slow feed can't hang a worker.
+- Sends If-None-Match / If-Modified-Since headers; 304 responses skip parsing.
+- Per-feed state persisted in rss_feed_state table.
+- Connection pooling via shared requests.Session.
+- Hands raw bytes to feedparser.parse() (no second network round-trip).
+"""
 import concurrent.futures
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, cast
+from typing import Dict, List, Optional, Tuple
 
-# Custom libraries.
-from utils import RssPost
+import feedparser
+import requests
+
 import db_utils
+from utils import RssPost
 
 logger = logging.getLogger(__name__)
 
-THREADS = 25
+THREADS = 50
+REQUEST_TIMEOUT_SECONDS = 10
+USER_AGENT = 'fetchlinks-rss/0.1 (+https://github.com/poptart-sommelier/fetchlinks)'
+
+# What we pass between fetch and parse:
+#   (feed_url, parsed_feed_or_none, new_etag, new_last_modified, status_code)
+FetchResult = Tuple[str, Optional[feedparser.FeedParserDict], str, str, int]
 
 
-def get_feed(url: str) -> Optional[feedparser.FeedParserDict]:
-    logger.debug('Parsing: %s', url)
+def _fetch_one(
+    session: requests.Session,
+    url: str,
+    cached: Tuple[str, str],
+) -> FetchResult:
+    """Fetch a single feed using cached ETag/Last-Modified if present.
+
+    Returns (url, feed_or_none, etag, last_modified, status_code).
+    feed_or_none is None for 304/error cases (no parsing needed/possible).
+    """
+    cached_etag, cached_last_mod = cached
+    headers = {}
+    if cached_etag:
+        headers['If-None-Match'] = cached_etag
+    if cached_last_mod:
+        headers['If-Modified-Since'] = cached_last_mod
 
     try:
-        feed = feedparser.parse(url)
+        resp = session.get(url, timeout=REQUEST_TIMEOUT_SECONDS, headers=headers)
+    except requests.RequestException as exc:
+        logger.warning('Failed to fetch %s: %s', url, type(exc).__name__)
+        # Preserve cached values so we keep retrying with conditional headers.
+        return (url, None, cached_etag, cached_last_mod, 0)
 
-        # Some feeds are malformed but still return usable entries.
-        if feed.bozo:
-            if len(feed.entries) == 0:
-                logger.warning(
-                    'Feed parser warning for %s: %s (entries=%s)',
-                    url,
-                    feed.bozo_exception,
-                    len(feed.entries),
-                )
-            else:
-                logger.debug(
-                    'Non-fatal feed parser warning for %s: %s (entries=%s)',
-                    url,
-                    feed.bozo_exception,
-                    len(feed.entries),
-                )
-        if len(feed.feed) == 0:
-            logger.debug('Feed has no metadata: %s', url)
+    new_etag = resp.headers.get('ETag', cached_etag)
+    new_last_mod = resp.headers.get('Last-Modified', cached_last_mod)
 
+    if resp.status_code == 304:
+        logger.debug('Feed unchanged (304): %s', url)
+        return (url, None, new_etag, new_last_mod, 304)
+
+    if resp.status_code != 200:
+        logger.warning('Feed %s returned HTTP %s', url, resp.status_code)
+        return (url, None, new_etag, new_last_mod, resp.status_code)
+
+    try:
+        feed = feedparser.parse(resp.content)
     except Exception as exc:
-        logger.error('Failed to parse feed %s: %s', url, exc)
-        return None
+        logger.error('Failed to parse %s: %s', url, exc)
+        return (url, None, new_etag, new_last_mod, 200)
 
-    return feed
+    if feed.bozo and not feed.entries:
+        logger.warning('Feed %s parse error with no entries: %s', url, feed.bozo_exception)
+        return (url, None, new_etag, new_last_mod, 200)
 
-
-def parse_posts(feeds: List[feedparser.FeedParserDict]) -> List[RssPost]:
-    posts = list()
-    for feed in feeds:
-        feed_meta = cast(Dict[str, str], feed.feed)
-        source = feed_meta.get('link', '')
-        author = feed_meta.get('title', '')
-        if not source:
-            source = getattr(feed, 'href', '')
-        if not author:
-            author = source or 'Unknown feed'
-
-        if not source:
-            logger.warning('Skipping RSS feed with missing source link')
-            continue
-
-        for post in feed.entries:
-            parsed_post = RssPost(source, author, post)
-            posts.append(parsed_post)
-
-    return posts
+    return (url, feed, new_etag, new_last_mod, 200)
 
 
-def get_feeds(feeds: List[str]) -> List[feedparser.FeedParserDict]:
-    results: List[feedparser.FeedParserDict] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as executor:
-        futures = [executor.submit(get_feed, feed) for feed in feeds]
-        for future in concurrent.futures.as_completed(futures):
-            result = future.result()
-            if result is not None:
-                results.append(result)
+def fetch_feeds(urls: List[str], cached_states: Dict[str, Tuple[str, str]]) -> List[FetchResult]:
+    results: List[FetchResult] = []
+    with requests.Session() as session:
+        session.headers['User-Agent'] = USER_AGENT
+        session.headers['Accept-Encoding'] = 'gzip, deflate'
+        with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as pool:
+            futures = [
+                pool.submit(_fetch_one, session, url, cached_states.get(url, ('', '')))
+                for url in urls
+            ]
+            for future in concurrent.futures.as_completed(futures):
+                results.append(future.result())
     return results
 
 
+def parse_posts(fetch_results: List[FetchResult]) -> List[RssPost]:
+    posts: List[RssPost] = []
+    for url, feed, _etag, _lm, _status in fetch_results:
+        if feed is None:
+            continue
+        feed_meta = feed.feed if hasattr(feed, 'feed') else {}
+        source = feed_meta.get('link') or url
+        author = feed_meta.get('title') or source
+
+        for post in feed.entries:
+            try:
+                parsed = RssPost(source, author, post)
+            except Exception as exc:
+                logger.warning('Skipping malformed entry from %s: %s', url, exc)
+                continue
+            if parsed.post_has_urls:
+                posts.append(parsed)
+    return posts
+
+
 def run(rss_feed_links: list, db_info: dict):
-    fetched_feeds = get_feeds(rss_feed_links)
-    parsed_posts = parse_posts(fetched_feeds)
+    db_full_path = Path(db_info['db_location']) / db_info['db_name']
+    cached_states = db_utils.db_get_rss_feed_states(db_full_path)
+
+    fetch_results = fetch_feeds(rss_feed_links, cached_states)
+
+    state_rows = [(url, etag, lm, status) for (url, _f, etag, lm, status) in fetch_results]
+    db_utils.db_set_rss_feed_states(state_rows, db_full_path)
+
+    parsed_posts = parse_posts(fetch_results)
+
+    counts = {200: 0, 304: 0, 'error': 0}
+    for _u, _f, _e, _l, status in fetch_results:
+        if status == 200:
+            counts[200] += 1
+        elif status == 304:
+            counts[304] += 1
+        else:
+            counts['error'] += 1
 
     if parsed_posts:
-        db_full_path = Path(db_info['db_location']) / db_info['db_name']
         inserted_count = db_utils.db_insert(parsed_posts, db_full_path)
         logger.info(
-            'Parsed %s RSS posts, inserted %s new rows',
-            len(parsed_posts),
-            inserted_count,
+            'RSS: %s feeds (200=%s, 304=%s, errors=%s); %s posts parsed, %s inserted',
+            len(fetch_results), counts[200], counts[304], counts['error'],
+            len(parsed_posts), inserted_count,
         )
     else:
-        logger.info('No new RSS posts found')
+        logger.info(
+            'RSS: %s feeds (200=%s, 304=%s, errors=%s); no new posts',
+            len(fetch_results), counts[200], counts[304], counts['error'],
+        )
