@@ -113,8 +113,11 @@ class RedditPost(Post):
     def _extract_urls(self, post):
         if post['data'].get('url', False):
             url = post['data']['url']
-            if not url.startswith('https://www.reddit.com/') and url != '':
-                self.add_url(url)
+            if not url.startswith(('http://', 'https://')):
+                return
+            if url.startswith('https://www.reddit.com/'):
+                return
+            self.add_url(url)
 
 
 class BlueskyPost(Post):
