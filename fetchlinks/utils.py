@@ -110,7 +110,7 @@ class RssPost(Post):
         self.source = feed_source
         self.author = feed_author
         self.description = post.get('title', '')
-        self.direct_link = None
+        self.direct_link = ''
         # Resolve relative <link> values against the feed's site URL.
         self.add_url(post.get('link', ''), base=feed_source)
 

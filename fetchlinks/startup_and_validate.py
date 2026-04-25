@@ -97,11 +97,10 @@ def _validate_config(config: dict):
 
 def _validate_config_fields(config_keys, valid_keys):
     for field in valid_keys:
-        if config_keys.get(field, False):
-            if not isinstance(config_keys.get(field), str):
-                raise ValueError(f'Config file section has incorrect value in: {field}')
-        else:
+        if field not in config_keys:
             raise ValueError(f'Config file section has missing field: {field}')
+        if not isinstance(config_keys[field], str):
+            raise ValueError(f'Config file section has incorrect value in: {field}')
 
 
 def parse_arguments():

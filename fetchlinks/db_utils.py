@@ -32,7 +32,6 @@ def db_insert(fetched_data, db_location):
         'INSERT OR IGNORE INTO post_urls (post_id, position, url, url_hash) '
         'VALUES (?, ?, ?, ?)'
     )
-    lookup_post_sql = 'SELECT idx FROM posts WHERE unique_id_string = ?'
 
     inserted = 0
     try:
@@ -45,12 +44,6 @@ def db_insert(fetched_data, db_location):
                     # Post already exists; leave its URL rows alone.
                     continue
                 post_id = cur.lastrowid
-                if post_id is None:
-                    cur.execute(lookup_post_sql, (post.unique_id_string,))
-                    row = cur.fetchone()
-                    if not row:
-                        continue
-                    post_id = row[0]
                 url_rows = [
                     (post_id, position, url, url_hash)
                     for (position, url, url_hash) in post.get_url_rows()
