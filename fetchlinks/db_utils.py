@@ -65,6 +65,7 @@ def db_insert(fetched_data, db_location):
 
 
 def db_get_bluesky_cursor(db_location):
+    # Read latest by idx so we still work on legacy DBs that have multiple rows.
     db_command = """SELECT cursor FROM bluesky_state ORDER BY idx DESC LIMIT 1"""
 
     try:
@@ -82,13 +83,21 @@ def db_get_bluesky_cursor(db_location):
 
 
 def db_set_bluesky_cursor(cursor, db_location):
-    db_command = """INSERT INTO bluesky_state (cursor, time_created) values (?, ?)"""
+    # Upsert single-row state at idx=1 so the table doesn't grow unbounded.
+    # Also clean up any legacy rows from when this table grew on every run.
+    upsert_sql = (
+        'INSERT INTO bluesky_state (idx, cursor, time_created) VALUES (1, ?, ?) '
+        'ON CONFLICT(idx) DO UPDATE SET cursor = excluded.cursor, '
+        'time_created = excluded.time_created'
+    )
+    cleanup_sql = 'DELETE FROM bluesky_state WHERE idx != 1'
 
     try:
         with sqlite3.connect(db_location) as db:
             _ensure_bluesky_state_table(db)
             cur = db.cursor()
-            cur.execute(db_command, [cursor or '', datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')])
+            cur.execute(upsert_sql, [cursor or '', datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')])
+            cur.execute(cleanup_sql)
             db.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not persist bluesky cursor: {exc}') from exc
