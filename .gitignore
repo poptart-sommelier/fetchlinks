@@ -7,3 +7,4 @@ db/
 .idea/
 __pycache__/
 *.py[cod]
+links.txt
