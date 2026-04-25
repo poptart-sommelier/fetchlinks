@@ -8,3 +8,4 @@ db/
 __pycache__/
 *.py[cod]
 links.txt
+REVIEW_PLAN.md
