@@ -6,6 +6,7 @@ from datetime import UTC
 import logging
 import re
 from typing import List
+from urllib.parse import urljoin, urlsplit
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,30 @@ def extract_urls_from_text(text: str) -> List[str]:
     return re.findall(r'https?://[^\s)\]>"\']+', text)
 
 
+def normalize_url(url: str, base: str = '') -> str:
+    """Normalize a candidate URL or return '' if it can't be made valid.
+
+    - Strips whitespace.
+    - Resolves protocol-relative ('//host/path') and site-relative ('/path')
+      URLs against `base` when provided.
+    - Rejects anything whose final scheme isn't http/https or that has no host.
+    """
+    if not url:
+        return ''
+    url = url.strip()
+    if not url:
+        return ''
+
+    # Resolve relative forms against the feed/site base when we have one.
+    if base and (url.startswith('//') or url.startswith('/') or not urlsplit(url).scheme):
+        url = urljoin(base, url)
+
+    parts = urlsplit(url)
+    if parts.scheme not in ('http', 'https') or not parts.netloc:
+        return ''
+    return url
+
+
 class Post:
     def __init__(self):
         self.source = ''
@@ -47,9 +72,10 @@ class Post:
         self.urls: List[str] = []
         self.unique_id_string = ''
 
-    def add_url(self, url: str):
-        if url and url not in self.urls:
-            self.urls.append(url)
+    def add_url(self, url: str, base: str = ''):
+        cleaned = normalize_url(url, base)
+        if cleaned and cleaned not in self.urls:
+            self.urls.append(cleaned)
 
     def _generate_unique_url_string(self):
         sorted_urls = sorted(u for u in self.urls if u)
@@ -85,7 +111,8 @@ class RssPost(Post):
         self.author = feed_author
         self.description = post.get('title', '')
         self.direct_link = None
-        self.add_url(post.get('link', ''))
+        # Resolve relative <link> values against the feed's site URL.
+        self.add_url(post.get('link', ''), base=feed_source)
 
         if 'published' in post:
             self.date_created = convert_date_string_for_mysql(post.published)
