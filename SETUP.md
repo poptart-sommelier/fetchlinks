@@ -34,10 +34,13 @@ Create ~/.fetchlinks/reddit.json:
 {
 	"reddit": {
 		"APP_CLIENT_ID": "your_client_id",
-		"APP_CLIENT_SECRET": "your_client_secret"
+		"APP_CLIENT_SECRET": "your_client_secret",
+		"USERNAME": "your_reddit_username"
 	}
 }
 ```
+
+The `USERNAME` field is recommended — Reddit's API rules ask for a unique User-Agent of the form `<platform>:<app>:<version> (by /u/<username>)`. Without it, requests are more likely to be rate-limited.
 
 Restrict permissions so only your user can read it:
 
