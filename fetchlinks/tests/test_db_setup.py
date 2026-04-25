@@ -27,7 +27,7 @@ class DbSetupTests(unittest.TestCase):
                 }
 
             self.assertIn("posts", tables)
-            self.assertIn("urls", tables)
+            self.assertIn("post_urls", tables)
 
 
 if __name__ == "__main__":
