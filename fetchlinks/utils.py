@@ -2,6 +2,7 @@
 import hashlib
 import dateutil.parser
 import datetime
+from datetime import UTC
 import logging
 import re
 from typing import List
@@ -19,15 +20,15 @@ def convert_date_string_for_mysql(rss_date: str) -> str:
         date_object = dateutil.parser.parse(rss_date)
         date_created = datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
     except dateutil.parser.ParserError as e:
-        # We couldn't parse the date for some reason. Make it "now"
+        # We couldn't parse the date for some reason. Make it "now" (UTC)
         logger.error(f'Could not parse date. Error:\n{e}')
-        date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+        date_created = datetime.datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
     return date_created
 
 
 def convert_epoch_to_mysql(epoch: float) -> str:
-    date_object = datetime.datetime.utcfromtimestamp(int(epoch))
-    return datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
+    date_object = datetime.datetime.fromtimestamp(int(epoch), tz=UTC)
+    return date_object.strftime('%Y-%m-%d %H:%M:%S')
 
 
 def extract_urls_from_text(text: str) -> List[str]:
@@ -91,7 +92,7 @@ class RssPost(Post):
         elif 'updated' in post:
             self.date_created = convert_date_string_for_mysql(post.updated)
         else:
-            self.date_created = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')
+            self.date_created = datetime.datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
 
         self._generate_unique_url_string()
 
