@@ -19,16 +19,15 @@ def get_subreddits(reddit_config: dict) -> List[dict]:
     token = reddit_auth.get_auth()
 
     for subreddit in reddit_config['subreddits']:
-        subreddit_posts.extend(get_subreddit(subreddit, token))
+        subreddit_posts.extend(get_subreddit(subreddit, token, reddit_auth.user_agent))
 
     return subreddit_posts
 
 
-def get_subreddit(subreddit: str, token: str) -> List[dict]:
+def get_subreddit(subreddit: str, token: str, user_agent: str) -> List[dict]:
     subreddit_url = f'https://oauth.reddit.com/r/{subreddit}/new/.json'
     params = {'sort': 'new', 'show': 'all', 't': 'all', 'limit': '100'}
-    user_agent = 'Get_Links Agent'
-    headers = {'authorization': f'Bearer {token}', 'User-agent': user_agent}
+    headers = {'Authorization': f'Bearer {token}', 'User-Agent': user_agent}
 
     try:
         response = requests.get(

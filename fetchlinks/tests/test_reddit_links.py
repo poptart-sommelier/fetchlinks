@@ -9,7 +9,7 @@ class RedditLinksTests(unittest.TestCase):
     def test_get_subreddit_returns_empty_on_request_error(self, mock_get):
         mock_get.side_effect = reddit_links.requests.exceptions.Timeout("timeout")
 
-        posts = reddit_links.get_subreddit("netsec", "token")
+        posts = reddit_links.get_subreddit("netsec", "token", "test-ua/0.1")
 
         self.assertEqual(posts, [])
 
@@ -24,7 +24,7 @@ class RedditLinksTests(unittest.TestCase):
         }
         mock_get.return_value = mock_response
 
-        posts = reddit_links.get_subreddit("netsec", "token")
+        posts = reddit_links.get_subreddit("netsec", "token", "test-ua/0.1")
 
         self.assertEqual(len(posts), 1)
 

@@ -45,6 +45,7 @@ class RedditAuth(Auth):
 
         self.app_client_secret: str = ''
         self.app_client_id: str = ''
+        self.username: str = ''
         self.reddit_auth_api_url: str = 'https://www.reddit.com/api/v1/access_token'
         self.access_token: str = ''
 
@@ -54,15 +55,21 @@ class RedditAuth(Auth):
         try:
             self.app_client_id = self.file_contents['reddit']['APP_CLIENT_ID']
             self.app_client_secret = self.file_contents['reddit']['APP_CLIENT_SECRET']
+            self.username = self.file_contents['reddit'].get('USERNAME', '')
         except KeyError as exc:
             raise ValueError('Missing required reddit credential keys in secrets file') from exc
+
+    @property
+    def user_agent(self) -> str:
+        suffix = f' (by /u/{self.username})' if self.username else ''
+        return f'linux:fetchlinks:0.1{suffix}'
 
     def get_auth(self):
         """
         Authenticate to Reddit's api endpoint and return an access token
         :return: a string representing reddit api access token
         """
-        headers = {'User-agent': 'fetch_links'}
+        headers = {'User-Agent': self.user_agent}
         data = {'grant_type': 'client_credentials'}
 
         response = requests.post(self.reddit_auth_api_url,
