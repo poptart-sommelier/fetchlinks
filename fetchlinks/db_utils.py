@@ -92,3 +92,49 @@ def db_set_bluesky_cursor(cursor, db_location):
             db.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not persist bluesky cursor: {exc}') from exc
+
+
+def _ensure_rss_feed_state_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS rss_feed_state (
+    feed_url TEXT PRIMARY KEY,
+    etag TEXT,
+    last_modified TEXT,
+    last_status INTEGER,
+    last_fetched TEXT)
+    """)
+
+
+def db_get_rss_feed_states(db_location):
+    """Return a {feed_url: (etag, last_modified)} map for all known feeds."""
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_rss_feed_state_table(db)
+            cur = db.cursor()
+            cur.execute('SELECT feed_url, etag, last_modified FROM rss_feed_state')
+            return {row[0]: (row[1] or '', row[2] or '') for row in cur.fetchall()}
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load RSS feed state: {exc}') from exc
+
+
+def db_set_rss_feed_states(states, db_location):
+    """Persist a list of (feed_url, etag, last_modified, last_status) tuples."""
+    if not states:
+        return
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    rows = [(url, etag or '', last_mod or '', status, now) for (url, etag, last_mod, status) in states]
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_rss_feed_state_table(db)
+            db.executemany("""
+                INSERT INTO rss_feed_state (feed_url, etag, last_modified, last_status, last_fetched)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(feed_url) DO UPDATE SET
+                    etag=excluded.etag,
+                    last_modified=excluded.last_modified,
+                    last_status=excluded.last_status,
+                    last_fetched=excluded.last_fetched
+            """, rows)
+            db.commit()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not persist RSS feed state: {exc}') from exc
