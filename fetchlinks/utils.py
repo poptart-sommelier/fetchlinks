@@ -82,9 +82,9 @@ class RssPost(Post):
     def extract_data_from_post(self, feed_source, feed_author, post):
         self.source = feed_source
         self.author = feed_author
-        self.description = post.title
+        self.description = post.get('title', '')
         self.direct_link = None
-        self.add_url(post.link)
+        self.add_url(post.get('link', ''))
 
         if 'published' in post:
             self.date_created = convert_date_string_for_mysql(post.published)
