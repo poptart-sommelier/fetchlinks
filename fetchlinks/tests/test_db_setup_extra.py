@@ -23,7 +23,7 @@ class TablesAndSchemaTests(unittest.TestCase):
                 row[0]
                 for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             }
-        for expected in ('posts', 'post_urls', 'bluesky_state', 'rss_feed_state', 'mastodon_state'):
+        for expected in ('posts', 'post_urls', 'bluesky_state', 'rss_feed_state', 'reddit_state', 'mastodon_state'):
             self.assertIn(expected, tables)
 
     def test_unique_id_string_constraint(self):

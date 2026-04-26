@@ -144,6 +144,27 @@ class RssFeedStateTests(_TmpDbCase):
         self.assertEqual(db_utils.db_get_rss_feed_states(self.db_path), {})
 
 
+class RedditStateTests(_TmpDbCase):
+    def test_get_returns_empty_dict_on_empty_table(self):
+        self.assertEqual(db_utils.db_get_reddit_states(self.db_path), {})
+
+    def test_set_then_get_round_trip(self):
+        db_utils.db_set_reddit_states([('netsec', 't3_abc')], self.db_path)
+
+        self.assertEqual(db_utils.db_get_reddit_states(self.db_path), {'netsec': 't3_abc'})
+
+    def test_set_upserts_existing_row(self):
+        db_utils.db_set_reddit_states([('netsec', 't3_abc')], self.db_path)
+        db_utils.db_set_reddit_states([('netsec', 't3_def')], self.db_path)
+
+        states = db_utils.db_get_reddit_states(self.db_path)
+        self.assertEqual(states, {'netsec': 't3_def'})
+
+    def test_set_with_empty_list_is_noop(self):
+        db_utils.db_set_reddit_states([], self.db_path)
+        self.assertEqual(db_utils.db_get_reddit_states(self.db_path), {})
+
+
 class MastodonStateTests(_TmpDbCase):
     def test_get_returns_none_on_empty(self):
         self.assertIsNone(db_utils.db_get_mastodon_last_seen_id('infosec', self.db_path))

@@ -115,7 +115,9 @@ class ParseSourcesTests(unittest.TestCase):
             creds.write_text('{}', encoding='utf-8')
 
             sources_path = Path(tmp) / 'sources.json'
-            _write(sources_path, {'reddit': {'credential_location': '~/creds.json'}})
+            _write(sources_path, {
+                'reddit': {'credential_location': '~/creds.json', 'subreddits': ['netsec']}
+            })
 
             old_home = os.environ.get('HOME')
             os.environ['HOME'] = str(home)
@@ -152,6 +154,60 @@ class ParseSourcesTests(unittest.TestCase):
             p = Path(tmp) / 'sources.json'
             _write(p, {'rss': {'enabled': False, 'feeds': []}})
             sv.parse_sources(str(p))
+
+    def test_reddit_enabled_without_creds_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'reddit': {'enabled': True, 'subreddits': ['netsec']}})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_reddit_enabled_requires_subreddits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            creds = Path(tmp) / 'reddit.json'
+            creds.write_text('{}', encoding='utf-8')
+            p = Path(tmp) / 'sources.json'
+            _write(p, {
+                'reddit': {
+                    'enabled': True,
+                    'credential_location': str(creds),
+                    'subreddits': [],
+                }
+            })
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_reddit_listing_limit_must_be_positive_integer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            creds = Path(tmp) / 'reddit.json'
+            creds.write_text('{}', encoding='utf-8')
+            p = Path(tmp) / 'sources.json'
+            _write(p, {
+                'reddit': {
+                    'enabled': True,
+                    'credential_location': str(creds),
+                    'subreddits': ['netsec'],
+                    'listing_limit': 0,
+                }
+            })
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_reddit_max_pages_must_be_positive_integer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            creds = Path(tmp) / 'reddit.json'
+            creds.write_text('{}', encoding='utf-8')
+            p = Path(tmp) / 'sources.json'
+            _write(p, {
+                'reddit': {
+                    'enabled': True,
+                    'credential_location': str(creds),
+                    'subreddits': ['netsec'],
+                    'max_pages': 'many',
+                }
+            })
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
 
     def test_bluesky_enabled_without_creds_raises(self):
         with tempfile.TemporaryDirectory() as tmp:

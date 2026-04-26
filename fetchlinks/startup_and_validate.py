@@ -74,6 +74,9 @@ def _validate_sources(sources: dict):
         if not isinstance(feeds, list) or len(feeds) < 1:
             raise ValueError('The Rss config contains no feeds')
 
+    if sources.get('reddit') and sources['reddit'].get('enabled', True):
+        _validate_reddit_source(sources['reddit'])
+
     if sources.get('bluesky') and sources['bluesky'].get('enabled', False):
         if not sources['bluesky'].get('credential_location'):
             raise ValueError('Bluesky source requires credential_location when enabled')
@@ -84,6 +87,25 @@ def _validate_sources(sources: dict):
 
     if sources.get('mastodon') and sources['mastodon'].get('enabled', False):
         _validate_mastodon_source(sources['mastodon'])
+
+
+def _validate_reddit_source(reddit_settings: dict):
+    if not reddit_settings.get('credential_location'):
+        raise ValueError('Reddit source requires credential_location when enabled')
+
+    subreddits = reddit_settings.get('subreddits')
+    if not isinstance(subreddits, list) or len(subreddits) < 1:
+        raise ValueError('Reddit source requires at least one subreddit')
+    if any(not isinstance(subreddit, str) or not subreddit.strip() for subreddit in subreddits):
+        raise ValueError('Reddit subreddits must be non-empty strings')
+
+    listing_limit = reddit_settings.get('listing_limit', 100)
+    if not isinstance(listing_limit, int) or listing_limit < 1:
+        raise ValueError('Reddit source listing_limit must be a positive integer')
+
+    max_pages = reddit_settings.get('max_pages', 5)
+    if not isinstance(max_pages, int) or max_pages < 1:
+        raise ValueError('Reddit source max_pages must be a positive integer')
 
 
 def _validate_mastodon_source(mastodon_settings: dict):
