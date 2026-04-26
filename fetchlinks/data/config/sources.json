@@ -17,6 +17,18 @@
         "credential_location": "~/.fetchlinks/bluesky.json",
         "timeline_limit": 50
     },
+    "mastodon": {
+        "enabled": false,
+        "instances": [
+            {
+                "name": "infosec",
+                "instance_url": "https://infosec.exchange",
+                "credential_location": "~/.fetchlinks/mastodon-infosec.json",
+                "timeline": "home",
+                "timeline_limit": 40
+            }
+        ]
+    },
     "rss": {
         "enabled": true,
         "feeds": [

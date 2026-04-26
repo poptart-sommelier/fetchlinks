@@ -116,3 +116,32 @@ class BlueskyAuth(Auth):
         client = AtprotoClient()
         client.login(self.identifier, self.app_password)
         return client
+
+
+class MastodonAuth(Auth):
+    """
+    Mastodon authentication class for bearer-token API access.
+    """
+
+    def __init__(self, secrets_file: str = ''):
+        super().__init__(secrets_file)
+
+        self.access_token: str = ''
+
+        self.set_secrets()
+
+    def set_secrets(self):
+        try:
+            self.access_token = self.file_contents['mastodon']['ACCESS_TOKEN']
+        except KeyError as exc:
+            raise ValueError('Missing required mastodon credential keys in secrets file') from exc
+
+        if not isinstance(self.access_token, str) or not self.access_token.strip():
+            raise ValueError('Mastodon access token must be a non-empty string')
+
+    @property
+    def headers(self) -> dict:
+        return {
+            'Authorization': f'Bearer {self.access_token}',
+            'User-Agent': 'fetchlinks-mastodon/0.1',
+        }

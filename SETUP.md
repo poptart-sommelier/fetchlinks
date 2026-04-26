@@ -67,12 +67,33 @@ Restrict permissions:
 chmod 600 ~/.fetchlinks/bluesky.json
 ```
 
+### Mastodon credential files (optional)
+
+Mastodon is disabled by default. Each Mastodon instance/account gets its own
+credential file so multiple instances can be configured independently. For
+example, create ~/.fetchlinks/mastodon-infosec.json:
+
+```json
+{
+	"mastodon": {
+		"ACCESS_TOKEN": "your_read_only_access_token"
+	}
+}
+```
+
+Restrict permissions:
+
+```bash
+chmod 600 ~/.fetchlinks/mastodon-infosec.json
+```
+
 ## 4) Configure sources
 
 Edit fetchlinks/data/config/sources.json:
 
 - Keep rss.enabled and reddit.enabled as needed.
 - Bluesky defaults to disabled. Set bluesky.enabled to true only if you created a Bluesky credential file.
+- Mastodon defaults to disabled. Set mastodon.enabled to true only if every enabled mastodon.instances entry has a credential file.
 - Ensure each credential_location path matches your local files.
 
 ## 5) Run the backend

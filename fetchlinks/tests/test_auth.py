@@ -150,5 +150,33 @@ class BlueskyAuthTests(unittest.TestCase):
             self.assertIs(returned, fake_client)
 
 
+def _write_mastodon_creds(tmp, contents):
+    p = Path(tmp) / 'mastodon.json'
+    p.write_text(json.dumps(contents), encoding='utf-8')
+    return str(p)
+
+
+class MastodonAuthTests(unittest.TestCase):
+    def test_missing_keys_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_mastodon_creds(tmp, {'mastodon': {}})
+            with self.assertRaises(ValueError):
+                auth.MastodonAuth(path)
+
+    def test_empty_token_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_mastodon_creds(tmp, {'mastodon': {'ACCESS_TOKEN': ''}})
+            with self.assertRaises(ValueError):
+                auth.MastodonAuth(path)
+
+    def test_headers_include_bearer_token_and_user_agent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_mastodon_creds(tmp, {'mastodon': {'ACCESS_TOKEN': 'tok'}})
+            a = auth.MastodonAuth(path)
+
+        self.assertEqual(a.headers['Authorization'], 'Bearer tok')
+        self.assertIn('fetchlinks-mastodon', a.headers['User-Agent'])
+
+
 if __name__ == '__main__':
     unittest.main()

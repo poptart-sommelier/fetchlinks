@@ -190,6 +190,120 @@ class ParseSourcesTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sv.parse_sources(str(p))
 
+    def test_disabled_mastodon_allows_missing_instance_creds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {
+                'mastodon': {
+                    'enabled': False,
+                    'instances': [
+                        {
+                            'name': 'infosec',
+                            'instance_url': 'https://infosec.exchange',
+                            'credential_location': '/no/such/mastodon.json',
+                        }
+                    ],
+                }
+            })
+            sv.parse_sources(str(p))
+
+    def test_mastodon_enabled_requires_instances(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'mastodon': {'enabled': True}})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_mastodon_instance_credential_location_is_expanded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / 'home'
+            home.mkdir()
+            creds = home / 'mastodon.json'
+            creds.write_text('{}', encoding='utf-8')
+            p = Path(tmp) / 'sources.json'
+            _write(p, {
+                'mastodon': {
+                    'enabled': True,
+                    'instances': [
+                        {
+                            'name': 'infosec',
+                            'instance_url': 'https://infosec.exchange',
+                            'credential_location': '~/mastodon.json',
+                        }
+                    ],
+                }
+            })
+
+            old_home = os.environ.get('HOME')
+            os.environ['HOME'] = str(home)
+            try:
+                sources = sv.parse_sources(str(p))
+            finally:
+                if old_home is None:
+                    os.environ.pop('HOME', None)
+                else:
+                    os.environ['HOME'] = old_home
+
+            self.assertEqual(
+                sources['mastodon']['instances'][0]['credential_location'],
+                str(creds),
+            )
+
+    def test_mastodon_requires_unique_instance_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            creds = Path(tmp) / 'mastodon.json'
+            creds.write_text('{}', encoding='utf-8')
+            p = Path(tmp) / 'sources.json'
+            instance = {
+                'name': 'infosec',
+                'instance_url': 'https://infosec.exchange',
+                'credential_location': str(creds),
+            }
+            _write(p, {'mastodon': {'enabled': True, 'instances': [instance, instance.copy()]}})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_mastodon_instance_url_must_be_https(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            creds = Path(tmp) / 'mastodon.json'
+            creds.write_text('{}', encoding='utf-8')
+            p = Path(tmp) / 'sources.json'
+            _write(p, {
+                'mastodon': {
+                    'enabled': True,
+                    'instances': [
+                        {
+                            'name': 'infosec',
+                            'instance_url': 'http://infosec.exchange',
+                            'credential_location': str(creds),
+                        }
+                    ],
+                }
+            })
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_mastodon_timeline_limit_must_be_positive_integer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            creds = Path(tmp) / 'mastodon.json'
+            creds.write_text('{}', encoding='utf-8')
+            p = Path(tmp) / 'sources.json'
+            _write(p, {
+                'mastodon': {
+                    'enabled': True,
+                    'instances': [
+                        {
+                            'name': 'infosec',
+                            'instance_url': 'https://infosec.exchange',
+                            'credential_location': str(creds),
+                            'timeline_limit': 0,
+                        }
+                    ],
+                }
+            })
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
 
 class ResolveRelativePathTests(unittest.TestCase):
     def test_absolute_path_returned_as_is(self):

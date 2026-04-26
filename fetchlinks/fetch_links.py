@@ -8,6 +8,7 @@ from pathlib import Path
 import rss_links
 import reddit_links
 import bluesky_links
+import mastodon_links
 import db_setup
 import startup_and_validate
 
@@ -43,6 +44,10 @@ def fetch_links(config: dict, sources: dict):
     bluesky_config = sources.get('bluesky')
     if bluesky_config and bluesky_config.get('enabled', False):
         bluesky_links.run(bluesky_config, config['db_info'])
+
+    mastodon_config = sources.get('mastodon')
+    if mastodon_config and mastodon_config.get('enabled', False):
+        mastodon_links.run(mastodon_config, config['db_info'])
 
 
 def main():

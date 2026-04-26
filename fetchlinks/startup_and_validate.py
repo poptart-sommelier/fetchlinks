@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import db_setup
 
@@ -41,6 +42,13 @@ def parse_sources(sources_location: str) -> dict:
     return sources
 
 
+def _expand_credential_location(settings: dict, source: str):
+    expanded = str(Path(settings['credential_location']).expanduser())
+    settings['credential_location'] = expanded
+    if not Path(expanded).exists():
+        raise FileNotFoundError(f'{source} credential file could not be found at location: {expanded}')
+
+
 def _validate_sources(sources: dict):
     """
     Validates critical sources fields, mainly the creds field. Returns nothing, raises on error
@@ -58,10 +66,7 @@ def _validate_sources(sources: dict):
         if settings.get('credential_location'):
             # Expand ~ so committed sources.json can use ~/.fetchlinks/...
             # instead of hardcoded absolute paths.
-            expanded = str(Path(settings['credential_location']).expanduser())
-            settings['credential_location'] = expanded
-            if not Path(expanded).exists():
-                raise FileNotFoundError(f'{source} credential file could not be found at location: {expanded}')
+            _expand_credential_location(settings, source)
 
     rss_settings = sources.get('rss')
     if rss_settings and rss_settings.get('enabled', True):
@@ -76,6 +81,47 @@ def _validate_sources(sources: dict):
         timeline_limit = sources['bluesky'].get('timeline_limit', 50)
         if not isinstance(timeline_limit, int) or timeline_limit < 1:
             raise ValueError('Bluesky source timeline_limit must be a positive integer')
+
+    if sources.get('mastodon') and sources['mastodon'].get('enabled', False):
+        _validate_mastodon_source(sources['mastodon'])
+
+
+def _validate_mastodon_source(mastodon_settings: dict):
+    instances = mastodon_settings.get('instances')
+    if not isinstance(instances, list) or len(instances) < 1:
+        raise ValueError('Mastodon source requires at least one instance')
+
+    names = set()
+    for instance in instances:
+        if not isinstance(instance, dict):
+            raise ValueError('Mastodon instance settings must be JSON objects')
+
+        if instance.get('enabled', True) is False:
+            continue
+
+        source_name = instance.get('name')
+        if not isinstance(source_name, str) or not source_name.strip():
+            raise ValueError('Mastodon instances require a non-empty name')
+        if source_name in names:
+            raise ValueError(f'Duplicate Mastodon instance name: {source_name}')
+        names.add(source_name)
+
+        instance_url = instance.get('instance_url')
+        parsed_url = urlparse(instance_url) if isinstance(instance_url, str) else None
+        if parsed_url is None or parsed_url.scheme != 'https' or not parsed_url.netloc:
+            raise ValueError('Mastodon instance_url must be an https URL')
+
+        if not instance.get('credential_location'):
+            raise ValueError('Mastodon instances require credential_location when enabled')
+        _expand_credential_location(instance, f'mastodon instance {source_name}')
+
+        timeline = instance.get('timeline', 'home')
+        if timeline != 'home':
+            raise ValueError('Mastodon timeline must be home')
+
+        timeline_limit = instance.get('timeline_limit', 40)
+        if not isinstance(timeline_limit, int) or timeline_limit < 1:
+            raise ValueError('Mastodon timeline_limit must be a positive integer')
 
 
 def parse_config(app_config_location: str) -> dict:

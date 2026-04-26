@@ -107,6 +107,16 @@ def _ensure_rss_feed_state_table(db):
     """)
 
 
+def _ensure_mastodon_state_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS mastodon_state (
+    source_name TEXT PRIMARY KEY,
+    instance_url TEXT NOT NULL,
+    last_seen_id TEXT,
+    time_created TEXT)
+    """)
+
+
 def db_get_rss_feed_states(db_location):
     """Return a {feed_url: (etag, last_modified)} map for all known feeds."""
     try:
@@ -140,3 +150,43 @@ def db_set_rss_feed_states(states, db_location):
             db.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not persist RSS feed state: {exc}') from exc
+
+
+def db_get_mastodon_last_seen_id(source_name, db_location):
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_mastodon_state_table(db)
+            cur = db.cursor()
+            cur.execute('SELECT last_seen_id FROM mastodon_state WHERE source_name = ?', [source_name])
+            result = cur.fetchone()
+            if not result:
+                return None
+            last_seen_id = result[0]
+            return last_seen_id if last_seen_id else None
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not retrieve mastodon state for {source_name}: {exc}') from exc
+
+
+def db_set_mastodon_last_seen_id(source_name, instance_url, last_seen_id, db_location):
+    upsert_sql = (
+        'INSERT INTO mastodon_state (source_name, instance_url, last_seen_id, time_created) '
+        'VALUES (?, ?, ?, ?) '
+        'ON CONFLICT(source_name) DO UPDATE SET instance_url = excluded.instance_url, '
+        'last_seen_id = excluded.last_seen_id, time_created = excluded.time_created'
+    )
+
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_mastodon_state_table(db)
+            db.execute(
+                upsert_sql,
+                [
+                    source_name,
+                    instance_url,
+                    last_seen_id or '',
+                    datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S'),
+                ],
+            )
+            db.commit()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not persist mastodon state for {source_name}: {exc}') from exc
