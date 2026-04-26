@@ -107,6 +107,15 @@ def _ensure_rss_feed_state_table(db):
     """)
 
 
+def _ensure_reddit_state_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS reddit_state (
+    subreddit TEXT PRIMARY KEY,
+    last_seen_fullname TEXT,
+    time_created TEXT)
+    """)
+
+
 def _ensure_mastodon_state_table(db):
     db.execute("""
     CREATE TABLE IF NOT EXISTS mastodon_state (
@@ -150,6 +159,37 @@ def db_set_rss_feed_states(states, db_location):
             db.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not persist RSS feed state: {exc}') from exc
+
+
+def db_get_reddit_states(db_location):
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_reddit_state_table(db)
+            cur = db.cursor()
+            cur.execute('SELECT subreddit, last_seen_fullname FROM reddit_state')
+            return {row[0]: row[1] for row in cur.fetchall() if row[1]}
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load Reddit state: {exc}') from exc
+
+
+def db_set_reddit_states(states, db_location):
+    if not states:
+        return
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    rows = [(subreddit, fullname or '', now) for (subreddit, fullname) in states]
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_reddit_state_table(db)
+            db.executemany("""
+                INSERT INTO reddit_state (subreddit, last_seen_fullname, time_created)
+                VALUES (?, ?, ?)
+                ON CONFLICT(subreddit) DO UPDATE SET
+                    last_seen_fullname=excluded.last_seen_fullname,
+                    time_created=excluded.time_created
+            """, rows)
+            db.commit()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not persist Reddit state: {exc}') from exc
 
 
 def db_get_mastodon_last_seen_id(source_name, db_location):

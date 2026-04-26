@@ -80,6 +80,18 @@ def table_rss_feed_state_configure(conn):
         raise RuntimeError('Failed to configure rss_feed_state table') from exc
 
 
+def table_reddit_state_configure(conn):
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS reddit_state (
+    subreddit TEXT PRIMARY KEY,
+    last_seen_fullname TEXT,
+    time_created TEXT)
+    """)
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure reddit_state table') from exc
+
+
 def table_mastodon_state_configure(conn):
     try:
         conn.execute("""
@@ -103,6 +115,7 @@ def db_initial_setup(db_location, db_name):
     table_post_urls_configure(conn)
     table_bluesky_state_configure(conn)
     table_rss_feed_state_configure(conn)
+    table_reddit_state_configure(conn)
     table_mastodon_state_configure(conn)
     conn.commit()
     conn.close()
