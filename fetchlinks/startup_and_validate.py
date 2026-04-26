@@ -53,8 +53,12 @@ def _validate_sources(sources: dict):
             continue
 
         if settings.get('credential_location'):
-            if not Path(settings['credential_location']).exists():
-                raise FileNotFoundError(f'{source} credential file could not be found at location: {settings["credential_location"]}')
+            # Expand ~ so committed sources.json can use ~/.fetchlinks/...
+            # instead of hardcoded absolute paths.
+            expanded = str(Path(settings['credential_location']).expanduser())
+            settings['credential_location'] = expanded
+            if not Path(expanded).exists():
+                raise FileNotFoundError(f'{source} credential file could not be found at location: {expanded}')
 
     if sources.get('rss'):
         if sources['rss'].get('enabled', True) and sources['rss'].get('feeds'):

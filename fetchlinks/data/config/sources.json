@@ -10,15 +10,15 @@
             "InfoSecNews",
             "redteamsec"
         ],
-        "credential_location": "/home/rich/.fetchlinks/reddit.json"
+        "credential_location": "~/.fetchlinks/reddit.json"
     },
     "bluesky": {
         "enabled": true,
-        "credential_location": "/home/rich/.fetchlinks/bluesky.json",
+        "credential_location": "~/.fetchlinks/bluesky.json",
         "timeline_limit": 50
     },
     "rss": {
-        "enabled": true,
+        "enabled": false,
         "feeds": [
             "http://0pointer.de/blog/index.rss20",
             "http://addxorrol.blogspot.com/feeds/posts/default",
