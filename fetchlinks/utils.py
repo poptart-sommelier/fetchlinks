@@ -139,7 +139,7 @@ class RedditPost(Post):
         self.date_created = convert_epoch_to_mysql(post['data']['created_utc'])
 
     def _extract_urls(self, post):
-        if post['data'].get('url', False):
+        if post['data'].get('url'):
             url = post['data']['url']
             if not url.startswith(('http://', 'https://')):
                 return
