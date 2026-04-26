@@ -10,7 +10,6 @@ Improvements over the prior feedparser-only implementation:
 import concurrent.futures
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import feedparser
 import requests
@@ -26,13 +25,13 @@ USER_AGENT = 'fetchlinks-rss/0.1 (+https://github.com/poptart-sommelier/fetchlin
 
 # What we pass between fetch and parse:
 #   (feed_url, parsed_feed_or_none, new_etag, new_last_modified, status_code)
-FetchResult = Tuple[str, Optional[feedparser.FeedParserDict], str, str, int]
+FetchResult = tuple[str, feedparser.FeedParserDict | None, str, str, int]
 
 
 def _fetch_one(
     session: requests.Session,
     url: str,
-    cached: Tuple[str, str],
+    cached: tuple[str, str],
 ) -> FetchResult:
     """Fetch a single feed using cached ETag/Last-Modified if present.
 
@@ -77,8 +76,8 @@ def _fetch_one(
     return (url, feed, new_etag, new_last_mod, 200)
 
 
-def fetch_feeds(urls: List[str], cached_states: Dict[str, Tuple[str, str]]) -> List[FetchResult]:
-    results: List[FetchResult] = []
+def fetch_feeds(urls: list[str], cached_states: dict[str, tuple[str, str]]) -> list[FetchResult]:
+    results: list[FetchResult] = []
     with requests.Session() as session:
         session.headers['User-Agent'] = USER_AGENT
         session.headers['Accept-Encoding'] = 'gzip, deflate'
@@ -92,8 +91,8 @@ def fetch_feeds(urls: List[str], cached_states: Dict[str, Tuple[str, str]]) -> L
     return results
 
 
-def parse_posts(fetch_results: List[FetchResult]) -> List[RssPost]:
-    posts: List[RssPost] = []
+def parse_posts(fetch_results: list[FetchResult]) -> list[RssPost]:
+    posts: list[RssPost] = []
     for url, feed, _etag, _lm, _status in fetch_results:
         if feed is None:
             continue
