@@ -79,8 +79,11 @@ Edit fetchlinks/data/config/sources.json:
 
 ```bash
 cd fetchlinks
-python3 fetch_links.py -config data/config/config.json -sources data/config/sources.json
+python3 fetch_links.py
 ```
+
+The default config files are `data/config/config.json` and `data/config/sources.json`.
+To use different files, pass `--config /path/to/config.json --sources /path/to/sources.json`.
 
 On first run, the backend initializes the SQLite database automatically if it does not exist.
 

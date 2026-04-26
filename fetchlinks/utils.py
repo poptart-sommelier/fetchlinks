@@ -22,7 +22,7 @@ def convert_date_string_for_mysql(rss_date: str) -> str:
         date_created = datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
     except dateutil.parser.ParserError as e:
         # We couldn't parse the date for some reason. Make it "now" (UTC)
-        logger.error(f'Could not parse date. Error:\n{e}')
+        logger.error('Could not parse date. Error:\n%s', e)
         date_created = datetime.datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
     return date_created
 

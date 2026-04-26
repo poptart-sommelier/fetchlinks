@@ -82,7 +82,7 @@ def table_rss_feed_state_configure(conn):
 
 def db_initial_setup(db_location, db_name):
     db_path = Path(db_location) / db_name
-    logger.info(f'Creating or validating {db_path}')
+    logger.info('Creating or validating %s', db_path)
     conn = db_create(db_location, db_name)
     conn.execute('PRAGMA journal_mode=WAL')
     conn.execute('PRAGMA foreign_keys=ON')

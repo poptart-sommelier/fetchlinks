@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import db_setup
@@ -8,6 +9,8 @@ VALID_FIELDS = {'db_info': ['db_name', 'db_location'],
                 'log_info': ['log_config_location', 'log_location', 'log_level']}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_CONFIG = SCRIPT_DIR / 'data' / 'config' / 'config.json'
+DEFAULT_SOURCES = SCRIPT_DIR / 'data' / 'config' / 'sources.json'
 
 
 def _resolve_relative_to_script(path_str: str) -> Path:
@@ -126,9 +129,16 @@ def _validate_config_fields(config_keys, valid_keys):
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-config', help='Config location', type=str, required=True)
-    parser.add_argument('-sources', help='Sources location', type=str, required=True)
-    return parser.parse_args()
+    parser.add_argument('--config', help='Config location', type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument('--sources', help='Sources location', type=Path, default=DEFAULT_SOURCES)
+    # Backward-compatible aliases for the old single-dash spelling. argparse
+    # treats multi-character single-dash tokens as short-option clusters, so
+    # normalize them before parsing.
+    args = [
+        '--config' if arg == '-config' else '--sources' if arg == '-sources' else arg
+        for arg in sys.argv[1:]
+    ]
+    return parser.parse_args(args)
 
 
 def do_startup():
