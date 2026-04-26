@@ -47,6 +47,51 @@ class ParseStatusTests(unittest.TestCase):
 
         self.assertIsNone(mastodon_links._parse_status(status))
 
+    def test_truncated_anchor_text_does_not_add_fragment_url(self):
+        status = _status(
+            url='https://www.theregister.com/2026/04/23/claude_opus_47_auc_overzealous/?td=rt-3a',
+            card_url='',
+        )
+        status['content'] = (
+            '<p><a href="https://www.theregister.com/2026/04/23/claude_opus_47_auc_overzealous/?td=rt-3a">'
+            'https://www. theregister.com/2026/04/23/cla ude_opus_47_auc_overzealous/?td=rt-3a'
+            '</a> whoops</p>'
+        )
+
+        parsed = mastodon_links._parse_status(status)
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.urls, ['https://www.theregister.com/2026/04/23/claude_opus_47_auc_overzealous/?td=rt-3a'])
+
+    def test_bare_non_anchor_text_urls_are_still_extracted(self):
+        status = _status(url='', card_url='')
+        status['content'] = '<p>Read this https://example.com/from-text and enjoy</p>'
+        status['card'] = None
+
+        parsed = mastodon_links._parse_status(status)
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.urls, ['https://example.com/from-text'])
+
+    def test_tag_urls_are_ignored(self):
+        status = _status(url='', card_url='')
+        status['content'] = (
+            '<p><a href="https://mastodon.social/tags/nopesauce">#nopesauce</a> '
+            '<a href="https://infosec.exchange/tags/podcast">#podcast</a> '
+            '<a href="https://example.com/article">article</a></p>'
+        )
+
+        parsed = mastodon_links._parse_status(status)
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.urls, ['https://example.com/article'])
+
+    def test_tag_card_url_is_ignored(self):
+        status = _status(url='', card_url='https://infosec.exchange/tags/podcast')
+        status['content'] = '<p>No article links here</p>'
+
+        self.assertIsNone(mastodon_links._parse_status(status))
+
 
 class FetchTimelinePageTests(unittest.TestCase):
     def test_extracts_next_max_id_from_link_header(self):
