@@ -9,47 +9,69 @@ class FetchLinksRoutingTests(unittest.TestCase):
     def setUp(self):
         self.config = {'db_info': {'db_location': '/tmp', 'db_name': 'fetchlinks.db'}}
 
-    def test_runs_default_rss_and_reddit_and_enabled_bluesky(self):
+    def test_runs_default_rss_reddit_and_enabled_bluesky_and_mastodon(self):
         sources = {
             'rss': {'feeds': ['https://feed.example/rss.xml']},
             'reddit': {'subreddits': ['netsec']},
             'bluesky': {'enabled': True, 'credential_location': '/tmp/bsky.json'},
+            'mastodon': {'enabled': True, 'instances': [{'name': 'infosec'}]},
         }
 
         with patch.object(fetch_links.rss_links, 'run') as rss_run, \
              patch.object(fetch_links.reddit_links, 'run') as reddit_run, \
-             patch.object(fetch_links.bluesky_links, 'run') as bluesky_run:
+             patch.object(fetch_links.bluesky_links, 'run') as bluesky_run, \
+             patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
             fetch_links.fetch_links(self.config, sources)
 
         rss_run.assert_called_once_with(['https://feed.example/rss.xml'], self.config['db_info'])
         reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'])
         bluesky_run.assert_called_once_with(sources['bluesky'], self.config['db_info'])
+        mastodon_run.assert_called_once_with(sources['mastodon'], self.config['db_info'])
 
     def test_skips_disabled_sources(self):
         sources = {
             'rss': {'enabled': False, 'feeds': ['https://feed.example/rss.xml']},
             'reddit': {'enabled': False, 'subreddits': ['netsec']},
             'bluesky': {'enabled': False, 'credential_location': '/tmp/bsky.json'},
+            'mastodon': {'enabled': False, 'instances': [{'name': 'infosec'}]},
         }
 
         with patch.object(fetch_links.rss_links, 'run') as rss_run, \
              patch.object(fetch_links.reddit_links, 'run') as reddit_run, \
-             patch.object(fetch_links.bluesky_links, 'run') as bluesky_run:
+             patch.object(fetch_links.bluesky_links, 'run') as bluesky_run, \
+             patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
             fetch_links.fetch_links(self.config, sources)
 
         rss_run.assert_not_called()
         reddit_run.assert_not_called()
         bluesky_run.assert_not_called()
+        mastodon_run.assert_not_called()
 
     def test_missing_source_sections_are_skipped(self):
         with patch.object(fetch_links.rss_links, 'run') as rss_run, \
              patch.object(fetch_links.reddit_links, 'run') as reddit_run, \
-             patch.object(fetch_links.bluesky_links, 'run') as bluesky_run:
+             patch.object(fetch_links.bluesky_links, 'run') as bluesky_run, \
+             patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
             fetch_links.fetch_links(self.config, {})
 
         rss_run.assert_not_called()
         reddit_run.assert_not_called()
         bluesky_run.assert_not_called()
+        mastodon_run.assert_not_called()
+
+    def test_mastodon_is_disabled_by_default(self):
+        sources = {
+            'rss': {'feeds': ['https://feed.example/rss.xml']},
+            'reddit': {'subreddits': ['netsec']},
+            'mastodon': {'instances': [{'name': 'infosec'}]},
+        }
+
+        with patch.object(fetch_links.rss_links, 'run'), \
+             patch.object(fetch_links.reddit_links, 'run'), \
+             patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
+            fetch_links.fetch_links(self.config, sources)
+
+        mastodon_run.assert_not_called()
 
     def test_bluesky_is_disabled_by_default(self):
         sources = {

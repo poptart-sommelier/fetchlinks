@@ -144,5 +144,30 @@ class RssFeedStateTests(_TmpDbCase):
         self.assertEqual(db_utils.db_get_rss_feed_states(self.db_path), {})
 
 
+class MastodonStateTests(_TmpDbCase):
+    def test_get_returns_none_on_empty(self):
+        self.assertIsNone(db_utils.db_get_mastodon_last_seen_id('infosec', self.db_path))
+
+    def test_set_and_get_round_trip(self):
+        db_utils.db_set_mastodon_last_seen_id('infosec', 'https://infosec.exchange', '123', self.db_path)
+        self.assertEqual(db_utils.db_get_mastodon_last_seen_id('infosec', self.db_path), '123')
+
+    def test_state_is_keyed_by_source_name(self):
+        db_utils.db_set_mastodon_last_seen_id('infosec', 'https://infosec.exchange', '123', self.db_path)
+        db_utils.db_set_mastodon_last_seen_id('hachyderm', 'https://hachyderm.io', '456', self.db_path)
+
+        self.assertEqual(db_utils.db_get_mastodon_last_seen_id('infosec', self.db_path), '123')
+        self.assertEqual(db_utils.db_get_mastodon_last_seen_id('hachyderm', self.db_path), '456')
+
+    def test_set_upserts_existing_row(self):
+        db_utils.db_set_mastodon_last_seen_id('infosec', 'https://infosec.exchange', '123', self.db_path)
+        db_utils.db_set_mastodon_last_seen_id('infosec', 'https://infosec.exchange', '789', self.db_path)
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute('SELECT source_name, instance_url, last_seen_id FROM mastodon_state').fetchall()
+
+        self.assertEqual(rows, [('infosec', 'https://infosec.exchange', '789')])
+
+
 if __name__ == '__main__':
     unittest.main()

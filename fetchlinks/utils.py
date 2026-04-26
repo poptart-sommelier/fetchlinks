@@ -159,3 +159,16 @@ class BlueskyPost(Post):
         for url in urls:
             self.add_url(url)
         self._generate_unique_url_string()
+
+
+class MastodonPost(Post):
+    def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str]):
+        super().__init__()
+        self.source = source
+        self.author = author
+        self.description = description
+        self.direct_link = direct_link
+        self.date_created = convert_date_string_for_mysql(created_at)
+        for url in urls:
+            self.add_url(url)
+        self._generate_unique_url_string()

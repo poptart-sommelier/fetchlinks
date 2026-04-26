@@ -80,6 +80,19 @@ def table_rss_feed_state_configure(conn):
         raise RuntimeError('Failed to configure rss_feed_state table') from exc
 
 
+def table_mastodon_state_configure(conn):
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS mastodon_state (
+    source_name TEXT PRIMARY KEY,
+    instance_url TEXT NOT NULL,
+    last_seen_id TEXT,
+    time_created TEXT)
+    """)
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure mastodon_state table') from exc
+
+
 def db_initial_setup(db_location, db_name):
     db_path = Path(db_location) / db_name
     logger.info('Creating or validating %s', db_path)
@@ -90,6 +103,7 @@ def db_initial_setup(db_location, db_name):
     table_post_urls_configure(conn)
     table_bluesky_state_configure(conn)
     table_rss_feed_state_configure(conn)
+    table_mastodon_state_configure(conn)
     conn.commit()
     conn.close()
     logger.info('Successfully created DB')
