@@ -1,3 +1,4 @@
+import datetime as dt
 import unittest
 from unittest.mock import patch
 
@@ -54,9 +55,15 @@ class ConvertDateStringTests(unittest.TestCase):
         )
 
     def test_unparseable_string_falls_back_to_now_utc(self):
-        result = convert_date_string_for_mysql('not a date at all')
-        # Should be a 19-char "YYYY-MM-DD HH:MM:SS" string.
-        self.assertRegex(result, r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$')
+        class FixedDateTime(dt.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 4, 26, 12, 34, 56, tzinfo=tz)
+
+        with patch('utils.datetime.datetime', FixedDateTime):
+            result = convert_date_string_for_mysql('not a date at all')
+
+        self.assertEqual(result, '2026-04-26 12:34:56')
 
 
 class ConvertEpochTests(unittest.TestCase):
@@ -153,8 +160,16 @@ class RssPostTests(unittest.TestCase):
 
     def test_falls_back_to_now_when_no_dates(self):
         entry = _RssEntry(title='t', link='https://example.com/a')
-        post = RssPost('https://example.com/feed.xml', 'Example', entry)
-        self.assertRegex(post.date_created, r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$')
+
+        class FixedDateTime(dt.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 4, 26, 12, 34, 56, tzinfo=tz)
+
+        with patch('utils.datetime.datetime', FixedDateTime):
+            post = RssPost('https://example.com/feed.xml', 'Example', entry)
+
+        self.assertEqual(post.date_created, '2026-04-26 12:34:56')
 
     def test_missing_title_defaults_to_empty(self):
         entry = _RssEntry(link='https://example.com/a', published='2026-04-19T12:00:00Z')

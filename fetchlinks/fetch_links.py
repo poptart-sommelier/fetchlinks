@@ -32,14 +32,17 @@ def fetch_links(config: dict, sources: dict):
     :param sources: rss links, subreddits, etc...
     :return: Nothing
     """
-    if sources.get('rss', {}).get('enabled', True):
-        rss_links.run(sources['rss']['feeds'], config['db_info'])
+    rss_config = sources.get('rss')
+    if rss_config and rss_config.get('enabled', True):
+        rss_links.run(rss_config['feeds'], config['db_info'])
 
-    if sources.get('reddit', {}).get('enabled', True):
-        reddit_links.run(sources['reddit'], config['db_info'])
+    reddit_config = sources.get('reddit')
+    if reddit_config and reddit_config.get('enabled', True):
+        reddit_links.run(reddit_config, config['db_info'])
 
-    if sources.get('bluesky', {}).get('enabled', False):
-        bluesky_links.run(sources['bluesky'], config['db_info'])
+    bluesky_config = sources.get('bluesky')
+    if bluesky_config and bluesky_config.get('enabled', False):
+        bluesky_links.run(bluesky_config, config['db_info'])
 
 
 def main():

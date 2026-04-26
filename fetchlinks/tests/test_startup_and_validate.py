@@ -136,10 +136,21 @@ class ParseSourcesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / 'sources.json'
             _write(p, {'rss': {'feeds': []}})
-            # The validator only complains when feeds list is present and len < 1.
-            # An empty list is falsy so it currently passes validation; this asserts
-            # the documented behaviour: only a populated-but-empty feeds key trips it.
-            sv.parse_sources(str(p))  # should not raise
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_rss_feeds_must_be_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'rss': {'feeds': 'https://feed.example/rss.xml'}})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_disabled_rss_allows_empty_feeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'rss': {'enabled': False, 'feeds': []}})
+            sv.parse_sources(str(p))
 
     def test_bluesky_enabled_without_creds_raises(self):
         with tempfile.TemporaryDirectory() as tmp:

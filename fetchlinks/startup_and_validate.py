@@ -60,10 +60,11 @@ def _validate_sources(sources: dict):
             if not Path(expanded).exists():
                 raise FileNotFoundError(f'{source} credential file could not be found at location: {expanded}')
 
-    if sources.get('rss'):
-        if sources['rss'].get('enabled', True) and sources['rss'].get('feeds'):
-            if len(sources['rss']['feeds']) < 1:
-                raise ValueError('The Rss config contains no feeds')
+    rss_settings = sources.get('rss')
+    if rss_settings and rss_settings.get('enabled', True):
+        feeds = rss_settings.get('feeds')
+        if not isinstance(feeds, list) or len(feeds) < 1:
+            raise ValueError('The Rss config contains no feeds')
 
     if sources.get('bluesky') and sources['bluesky'].get('enabled', False):
         if not sources['bluesky'].get('credential_location'):

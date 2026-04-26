@@ -83,8 +83,16 @@ class RedditAuthTests(unittest.TestCase):
             mock_resp.raise_for_status.return_value = None
             mock_resp.json.return_value = {'access_token': 'tok'}
 
-            with patch('auth.requests.post', return_value=mock_resp):
+            with patch('auth.requests.post', return_value=mock_resp) as post:
                 self.assertEqual(a.get_auth(), 'tok')
+
+            post.assert_called_once_with(
+                a.reddit_auth_api_url,
+                headers={'User-Agent': a.user_agent},
+                data={'grant_type': 'client_credentials'},
+                auth=('c', 's'),
+                timeout=20,
+            )
             self.assertEqual(a.access_token, 'tok')
 
     def test_get_auth_missing_token_raises(self):

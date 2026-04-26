@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock, patch
 
 import bluesky_links
 
@@ -54,6 +55,61 @@ class ExtractLinksFromEmbedTests(unittest.TestCase):
         self.assertEqual(bluesky_links._extract_links_from_embed(None), [])
 
 
+class TimelineCallTests(unittest.TestCase):
+    def test_call_timeline_uses_sdk_nested_client_shape(self):
+        client = Mock()
+        client.app.bsky.feed.get_timeline.return_value = {'feed': [], 'cursor': 'next'}
+
+        response = bluesky_links._call_timeline(client, limit=25, cursor='cursor-1')
+
+        client.app.bsky.feed.get_timeline.assert_called_once_with(
+            params={'limit': 25, 'cursor': 'cursor-1'}
+        )
+        self.assertEqual(response, {'feed': [], 'cursor': 'next'})
+
+    def test_call_timeline_uses_legacy_client_shape(self):
+        class LegacyClient:
+            def __init__(self):
+                self.get_timeline = Mock(return_value={'feed': [], 'cursor': 'next'})
+
+        client = LegacyClient()
+
+        response = bluesky_links._call_timeline(client, limit=25, cursor=None)
+
+        client.get_timeline.assert_called_once_with(limit=25, cursor=None)
+        self.assertEqual(response, {'feed': [], 'cursor': 'next'})
+
+    def test_as_dict_accepts_model_dump_objects(self):
+        class ModelDumpObject:
+            def model_dump(self, exclude_none=True, by_alias=True):
+                return {'feed': [], 'cursor': 'next'}
+
+        client = Mock()
+        client.app.bsky.feed.get_timeline.return_value = ModelDumpObject()
+
+        self.assertEqual(
+            bluesky_links._call_timeline(client, limit=10, cursor='c'),
+            {'feed': [], 'cursor': 'next'},
+        )
+
+
+class FetchTimelinePageTests(unittest.TestCase):
+    def test_non_list_feed_payload_returns_empty_page(self):
+        with patch.object(bluesky_links, '_call_timeline', return_value={'feed': 'not-a-list', 'cursor': 'next'}):
+            items, cursor = bluesky_links._fetch_timeline_page(object(), cursor='old', limit=25)
+
+        self.assertEqual(items, [])
+        self.assertIsNone(cursor)
+
+    def test_valid_feed_payload_returns_items_and_cursor(self):
+        expected_items = [{'post': {'record': {'text': 'hi'}}}]
+        with patch.object(bluesky_links, '_call_timeline', return_value={'feed': expected_items, 'cursor': 'next'}):
+            items, cursor = bluesky_links._fetch_timeline_page(object(), cursor='old', limit=25)
+
+        self.assertEqual(items, expected_items)
+        self.assertEqual(cursor, 'next')
+
+
 class BuildDirectLinkTests(unittest.TestCase):
     def test_builds_url_from_handle_and_uri(self):
         author = {'handle': 'alice.bsky.social'}
@@ -106,6 +162,9 @@ def _item_with(text='hi', created_at='2026-04-19T12:00:00Z', facets=None, embed=
 
 
 class ParseFeedItemTests(unittest.TestCase):
+    def test_missing_post_returns_none(self):
+        self.assertIsNone(bluesky_links._parse_feed_item({}))
+
     def test_missing_text_returns_none(self):
         item = _item_with(text='')
         self.assertIsNone(bluesky_links._parse_feed_item(item))
