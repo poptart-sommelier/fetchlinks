@@ -18,7 +18,7 @@
         "timeline_limit": 50
     },
     "rss": {
-        "enabled": false,
+        "enabled": true,
         "feeds": [
             "http://0pointer.de/blog/index.rss20",
             "http://addxorrol.blogspot.com/feeds/posts/default",
