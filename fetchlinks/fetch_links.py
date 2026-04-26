@@ -10,6 +10,7 @@ import reddit_links
 import bluesky_links
 import mastodon_links
 import db_setup
+import ingest_limits
 import startup_and_validate
 
 
@@ -33,21 +34,23 @@ def fetch_links(config: dict, sources: dict):
     :param sources: rss links, subreddits, etc...
     :return: Nothing
     """
+    max_post_age_months = ingest_limits.max_post_age_months_from_sources(sources)
+
     rss_config = sources.get('rss')
     if rss_config and rss_config.get('enabled', True):
-        rss_links.run(rss_config['feeds'], config['db_info'])
+        rss_links.run(rss_config['feeds'], config['db_info'], max_post_age_months)
 
     reddit_config = sources.get('reddit')
     if reddit_config and reddit_config.get('enabled', True):
-        reddit_links.run(reddit_config, config['db_info'])
+        reddit_links.run(reddit_config, config['db_info'], max_post_age_months)
 
     bluesky_config = sources.get('bluesky')
     if bluesky_config and bluesky_config.get('enabled', False):
-        bluesky_links.run(bluesky_config, config['db_info'])
+        bluesky_links.run(bluesky_config, config['db_info'], max_post_age_months)
 
     mastodon_config = sources.get('mastodon')
     if mastodon_config and mastodon_config.get('enabled', False):
-        mastodon_links.run(mastodon_config, config['db_info'])
+        mastodon_links.run(mastodon_config, config['db_info'], max_post_age_months)
 
 
 def main():

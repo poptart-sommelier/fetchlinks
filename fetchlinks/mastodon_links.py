@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import requests
 
 import db_utils
+import ingest_limits
 from auth import MastodonAuth
 from utils import MastodonPost, extract_urls_from_text
 
@@ -196,7 +197,11 @@ def _parse_status(status: dict) -> MastodonPost | None:
     )
 
 
-def _run_instance(instance_config: dict, db_path: Path) -> int:
+def _run_instance(
+    instance_config: dict,
+    db_path: Path,
+    max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+) -> int:
     if instance_config.get('enabled', True) is False:
         logger.info('Mastodon source %s is disabled; skipping', instance_config.get('name', '<unnamed>'))
         return 0
@@ -224,24 +229,30 @@ def _run_instance(instance_config: dict, db_path: Path) -> int:
         if parsed.post_has_urls:
             parsed_posts.append(parsed)
 
-    inserted_count = db_utils.db_insert(parsed_posts, db_path)
+    recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, f'Mastodon {source_name}')
+    inserted_count = db_utils.db_insert(recent_posts, db_path)
     highest_id = _highest_status_id(statuses)
     if highest_id:
         db_utils.db_set_mastodon_last_seen_id(source_name, instance_url, highest_id, db_path)
 
     logger.info(
-        'Mastodon %s: fetched %s statuses, parsed %s posts (skipped %s no-links, %s missing-fields), inserted %s',
+        'Mastodon %s: fetched %s statuses, parsed %s posts (skipped %s no-links, %s missing-fields), %s age-eligible, inserted %s',
         source_name,
         len(statuses),
         len(parsed_posts),
         skipped_no_links,
         skipped_missing_fields,
+        len(recent_posts),
         inserted_count,
     )
     return inserted_count
 
 
-def run(mastodon_config: dict, db_info: dict):
+def run(
+    mastodon_config: dict,
+    db_info: dict,
+    max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+):
     if not mastodon_config.get('enabled', False):
         logger.info('Mastodon source is disabled; skipping')
         return
@@ -249,6 +260,6 @@ def run(mastodon_config: dict, db_info: dict):
     db_path = Path(db_info['db_location']) / db_info['db_name']
     total_inserted = 0
     for instance_config in mastodon_config['instances']:
-        total_inserted += _run_instance(instance_config, db_path)
+        total_inserted += _run_instance(instance_config, db_path, max_post_age_months)
 
     logger.info('Inserted %s Mastodon posts into DB', total_inserted)

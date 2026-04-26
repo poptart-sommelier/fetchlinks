@@ -1,4 +1,7 @@
 {
+    "ingest": {
+        "max_post_age_months": 3
+    },
     "reddit": {
         "enabled": true,
         "subreddits": [
@@ -13,12 +16,12 @@
         "credential_location": "~/.fetchlinks/reddit.json"
     },
     "bluesky": {
-        "enabled": true,
+        "enabled": false,
         "credential_location": "~/.fetchlinks/bluesky.json",
         "timeline_limit": 50
     },
     "mastodon": {
-        "enabled": true,
+        "enabled": false,
         "instances": [
             {
                 "name": "infosec",
@@ -30,7 +33,7 @@
         ]
     },
     "rss": {
-        "enabled": true,
+        "enabled": false,
         "feeds": [
             "http://0pointer.de/blog/index.rss20",
             "http://addxorrol.blogspot.com/feeds/posts/default",

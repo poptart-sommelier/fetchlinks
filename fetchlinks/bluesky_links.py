@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import db_utils
+import ingest_limits
 from auth import BlueskyAuth
 from utils import BlueskyPost, extract_urls_from_text
 
@@ -150,7 +151,11 @@ def _fetch_timeline_page(client, cursor: Optional[str], limit: int) -> Tuple[Lis
     return feed_items, next_cursor
 
 
-def run(bluesky_config: dict, db_info: dict):
+def run(
+    bluesky_config: dict,
+    db_info: dict,
+    max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+):
     if not bluesky_config.get('enabled', False):
         logger.info('Bluesky source is disabled; skipping')
         return
@@ -219,14 +224,16 @@ def run(bluesky_config: dict, db_info: dict):
         if parsed.post_has_urls:
             parsed_posts.append(parsed)
 
-    inserted_count = db_utils.db_insert(parsed_posts, db_full_path)
+    recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Bluesky')
+    inserted_count = db_utils.db_insert(recent_posts, db_full_path)
     db_utils.db_set_bluesky_cursor(next_cursor, db_full_path)
 
     logger.info(
-        'Parsed %s Bluesky posts (skipped %s no-links, %s missing-fields), inserted %s new rows, cursor advanced=%s',
+        'Parsed %s Bluesky posts (skipped %s no-links, %s missing-fields), %s age-eligible, inserted %s new rows, cursor advanced=%s',
         len(parsed_posts),
         skipped_no_links,
         skipped_missing_fields,
+        len(recent_posts),
         inserted_count,
         bool(next_cursor),
     )

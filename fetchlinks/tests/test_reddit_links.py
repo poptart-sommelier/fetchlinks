@@ -6,7 +6,7 @@ import reddit_links
 from utils import RedditPost
 
 
-def _make_reddit_post(url, name='t3_abc', post_id='abc'):
+def _make_reddit_post(url, name='t3_abc', post_id='abc', created_utc=4102444800):
     return {
         'data': {
             'id': post_id,
@@ -15,7 +15,7 @@ def _make_reddit_post(url, name='t3_abc', post_id='abc'):
             'author': 'someone',
             'title': 'a post',
             'permalink': f'/r/netsec/comments/{post_id}/a_post/',
-            'created_utc': 1700000000,
+            'created_utc': created_utc,
             'url': url,
         }
     }
@@ -212,6 +212,27 @@ class RedditRunTests(unittest.TestCase):
 
         db_path = reddit_links.Path('/tmp/db') / 'fetchlinks.db'
         db_insert.assert_called_once_with(parsed_posts, db_path)
+        set_states.assert_called_once_with(state_updates, db_path)
+
+    def test_run_filters_old_posts_before_insert_but_persists_state(self):
+        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['netsec']}
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        old_post = RedditPost(_make_reddit_post('https://example.com/old', created_utc=946684800))
+        recent_post = RedditPost(_make_reddit_post('https://example.com/recent', created_utc=4102444800))
+        state_updates = [('netsec', 't3_new')]
+
+        with patch.object(
+            reddit_links,
+            'get_subreddits',
+            return_value=([_make_reddit_post('https://example.com/recent')], state_updates),
+        ), \
+             patch.object(reddit_links, 'parse_posts', return_value=[old_post, recent_post]), \
+             patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
+             patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
+            reddit_links.run(reddit_config, db_info, max_post_age_months=3)
+
+        db_path = reddit_links.Path('/tmp/db') / 'fetchlinks.db'
+        db_insert.assert_called_once_with([recent_post], db_path)
         set_states.assert_called_once_with(state_updates, db_path)
 
 

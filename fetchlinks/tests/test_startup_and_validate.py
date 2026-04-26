@@ -155,6 +155,26 @@ class ParseSourcesTests(unittest.TestCase):
             _write(p, {'rss': {'enabled': False, 'feeds': []}})
             sv.parse_sources(str(p))
 
+    def test_empty_ingest_settings_use_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'ingest': {}})
+            sv.parse_sources(str(p))
+
+    def test_ingest_settings_must_be_object(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'ingest': 'oops'})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_ingest_max_post_age_months_must_be_positive_integer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'ingest': {'max_post_age_months': 0}})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
     def test_reddit_enabled_without_creds_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / 'sources.json'
