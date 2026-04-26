@@ -1,7 +1,9 @@
+import io
 import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import db_setup
@@ -96,6 +98,26 @@ class ExportLinksTests(_ExportCase):
 
         self.assertEqual(count, 2)
         self.assertEqual(len(self.out_path.read_text(encoding='utf-8').splitlines()), 2)
+
+
+class MainTests(_ExportCase):
+    def test_main_accepts_cli_args_writes_file_and_prints_count(self):
+        self._seed([
+            ('https://b.example/', None),
+            ('https://a.example/', None),
+        ])
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout):
+            result = export_links.main([
+                '--db', str(self.db_path),
+                '--out', str(self.out_path),
+                '--limit', '1',
+            ])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(self.out_path.read_text(encoding='utf-8').splitlines(), ['https://a.example/'])
+        self.assertIn(f'Wrote 1 URLs to {self.out_path}', stdout.getvalue())
 
 
 if __name__ == '__main__':

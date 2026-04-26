@@ -13,6 +13,14 @@ class _FakeResponse:
         self.headers = headers or {}
 
 
+class _FeedEntry(dict):
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
 def _atom_bytes(link='https://example.com/post', title='entry'):
     # Minimal Atom feed feedparser will parse cleanly.
     return (
@@ -125,6 +133,31 @@ class ParsePostsTests(unittest.TestCase):
 
         self.assertEqual(rss_links.parse_posts(fetch_results), [])
 
+    def test_skips_malformed_entry_without_stopping_feed(self):
+        feed = MagicMock()
+        feed.feed = {'link': 'https://example.com/', 'title': 'Example'}
+        feed.entries = [object()]
+        fetch_results = [('https://feedurl/', feed, '', '', 200)]
+
+        with patch.object(rss_links, 'RssPost', side_effect=RuntimeError('bad entry')):
+            self.assertEqual(rss_links.parse_posts(fetch_results), [])
+
+    def test_falls_back_to_feed_url_when_feed_metadata_missing(self):
+        feed = MagicMock()
+        feed.feed = {}
+        feed.entries = [_FeedEntry(
+            title='Example post',
+            link='https://example.com/post',
+            published='2026-04-19T12:00:00Z',
+        )]
+        fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
+
+        posts = rss_links.parse_posts(fetch_results)
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].source, 'https://feedurl.example/rss.xml')
+        self.assertEqual(posts[0].author, 'https://feedurl.example/rss.xml')
+
 
 class FetchFeedsTests(unittest.TestCase):
     def test_fetches_each_url_once(self):
@@ -139,6 +172,47 @@ class FetchFeedsTests(unittest.TestCase):
         called_with = {call.args[1]: call.args[2] for call in mock_fetch.call_args_list}
         self.assertEqual(called_with['https://a/'], ('e', 'l'))
         self.assertEqual(called_with['https://b/'], ('', ''))
+
+
+class RunTests(unittest.TestCase):
+    def test_run_persists_feed_state_even_when_no_posts(self):
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        feed_links = ['https://a.example/feed.xml', 'https://b.example/feed.xml']
+        cached_states = {'https://a.example/feed.xml': ('old-etag', 'old-lm')}
+        fetch_results = [
+            ('https://a.example/feed.xml', None, 'new-etag', 'new-lm', 304),
+            ('https://b.example/feed.xml', None, '', '', 0),
+        ]
+
+        with patch.object(rss_links.db_utils, 'db_get_rss_feed_states', return_value=cached_states) as get_states, \
+             patch.object(rss_links, 'fetch_feeds', return_value=fetch_results) as fetch_feeds, \
+             patch.object(rss_links.db_utils, 'db_set_rss_feed_states') as set_states, \
+             patch.object(rss_links, 'parse_posts', return_value=[]) as parse_posts, \
+             patch.object(rss_links.db_utils, 'db_insert') as db_insert:
+            rss_links.run(feed_links, db_info)
+
+        db_path = rss_links.Path('/tmp/db') / 'fetchlinks.db'
+        get_states.assert_called_once_with(db_path)
+        fetch_feeds.assert_called_once_with(feed_links, cached_states)
+        set_states.assert_called_once_with([
+            ('https://a.example/feed.xml', 'new-etag', 'new-lm', 304),
+            ('https://b.example/feed.xml', '', '', 0),
+        ], db_path)
+        parse_posts.assert_called_once_with(fetch_results)
+        db_insert.assert_not_called()
+
+    def test_run_inserts_parsed_posts(self):
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        parsed_posts = [object()]
+
+        with patch.object(rss_links.db_utils, 'db_get_rss_feed_states', return_value={}), \
+             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links.db_utils, 'db_set_rss_feed_states'), \
+             patch.object(rss_links, 'parse_posts', return_value=parsed_posts), \
+             patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
+            rss_links.run(['https://feed.example/rss.xml'], db_info)
+
+        db_insert.assert_called_once_with(parsed_posts, rss_links.Path('/tmp/db') / 'fetchlinks.db')
 
 
 if __name__ == '__main__':

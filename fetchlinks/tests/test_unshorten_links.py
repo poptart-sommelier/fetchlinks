@@ -62,6 +62,40 @@ class IsSafeTargetTests(unittest.TestCase):
             self.assertTrue(unshorten_links._is_safe_target('https://example.com/x'))
 
 
+class RequestNoFollowTests(unittest.TestCase):
+    def test_uses_head_without_following_redirects(self):
+        session = mock.Mock()
+        response = mock.Mock(status_code=200)
+        session.head.return_value = response
+
+        result = unshorten_links._request_no_follow(session, 'https://bit.ly/abc')
+
+        self.assertIs(result, response)
+        session.head.assert_called_once_with(
+            'https://bit.ly/abc',
+            allow_redirects=False,
+            timeout=unshorten_links.REQUEST_TIMEOUT_SECONDS,
+        )
+        session.get.assert_not_called()
+
+    def test_falls_back_to_get_on_head_not_allowed_and_closes_response(self):
+        session = mock.Mock()
+        session.head.return_value = mock.Mock(status_code=405)
+        get_response = mock.Mock(status_code=200)
+        session.get.return_value = get_response
+
+        result = unshorten_links._request_no_follow(session, 'https://bit.ly/abc')
+
+        self.assertIs(result, get_response)
+        session.get.assert_called_once_with(
+            'https://bit.ly/abc',
+            allow_redirects=False,
+            timeout=unshorten_links.REQUEST_TIMEOUT_SECONDS,
+            stream=True,
+        )
+        get_response.close.assert_called_once_with()
+
+
 class UnshortenUrlTests(unittest.TestCase):
     def test_follows_redirect_chain(self):
         responses = [
