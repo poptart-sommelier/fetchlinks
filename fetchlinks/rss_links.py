@@ -9,10 +9,13 @@ Improvements over the prior feedparser-only implementation:
 """
 import concurrent.futures
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
+import dateutil.parser
 import feedparser
 import requests
+from dateutil.relativedelta import relativedelta
 
 import db_utils
 from utils import RssPost
@@ -21,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 THREADS = 50
 REQUEST_TIMEOUT_SECONDS = 10
+MAX_ENTRY_AGE_MONTHS = 3
 USER_AGENT = 'fetchlinks-rss/0.1 (+https://github.com/poptart-sommelier/fetchlinks)'
 
 # What we pass between fetch and parse:
@@ -91,7 +95,35 @@ def fetch_feeds(urls: list[str], cached_states: dict[str, tuple[str, str]]) -> l
     return results
 
 
-def parse_posts(fetch_results: list[FetchResult]) -> list[RssPost]:
+def _entry_datetime(post) -> datetime | None:
+    if not hasattr(post, 'get'):
+        return None
+
+    date_value = post.get('published') or post.get('updated')
+    if not date_value:
+        return None
+
+    try:
+        parsed = dateutil.parser.parse(date_value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _entry_is_recent(post, now: datetime | None = None) -> bool:
+    entry_dt = _entry_datetime(post)
+    if entry_dt is None:
+        return True
+
+    now = now or datetime.now(UTC)
+    cutoff = now - relativedelta(months=MAX_ENTRY_AGE_MONTHS)
+    return entry_dt >= cutoff
+
+
+def parse_posts(fetch_results: list[FetchResult], now: datetime | None = None) -> list[RssPost]:
     posts: list[RssPost] = []
     for url, feed, _etag, _lm, _status in fetch_results:
         if feed is None:
@@ -101,6 +133,9 @@ def parse_posts(fetch_results: list[FetchResult]) -> list[RssPost]:
         author = feed_meta.get('title') or source
 
         for post in feed.entries:
+            if not _entry_is_recent(post, now):
+                logger.debug('Skipping old RSS entry from %s: %s', url, post.get('title', ''))
+                continue
             try:
                 parsed = RssPost(source, author, post)
             except Exception as exc:

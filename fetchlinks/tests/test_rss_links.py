@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -157,6 +158,72 @@ class ParsePostsTests(unittest.TestCase):
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0].source, 'https://feedurl.example/rss.xml')
         self.assertEqual(posts[0].author, 'https://feedurl.example/rss.xml')
+
+    def test_skips_entries_older_than_three_months(self):
+        feed = MagicMock()
+        feed.feed = {'link': 'https://example.com/', 'title': 'Example'}
+        feed.entries = [_FeedEntry(
+            title='Old post',
+            link='https://example.com/old',
+            published='2026-01-25T12:00:00Z',
+        )]
+        fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
+
+        posts = rss_links.parse_posts(
+            fetch_results,
+            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(posts, [])
+
+    def test_skips_entries_older_than_three_months_by_updated_date(self):
+        feed = MagicMock()
+        feed.feed = {'link': 'https://example.com/', 'title': 'Example'}
+        feed.entries = [_FeedEntry(
+            title='Old post',
+            link='https://example.com/old',
+            updated='2026-01-25T12:00:00Z',
+        )]
+        fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
+
+        posts = rss_links.parse_posts(
+            fetch_results,
+            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(posts, [])
+
+    def test_keeps_entries_within_three_months(self):
+        feed = MagicMock()
+        feed.feed = {'link': 'https://example.com/', 'title': 'Example'}
+        feed.entries = [_FeedEntry(
+            title='Recent post',
+            link='https://example.com/recent',
+            published='2026-01-26T12:00:00Z',
+        )]
+        fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
+
+        posts = rss_links.parse_posts(
+            fetch_results,
+            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].urls, ['https://example.com/recent'])
+
+    def test_keeps_entries_without_dates(self):
+        feed = MagicMock()
+        feed.feed = {'link': 'https://example.com/', 'title': 'Example'}
+        feed.entries = [_FeedEntry(title='No date', link='https://example.com/no-date')]
+        fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
+
+        posts = rss_links.parse_posts(
+            fetch_results,
+            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].urls, ['https://example.com/no-date'])
 
 
 class FetchFeedsTests(unittest.TestCase):

@@ -1,6 +1,6 @@
 {
     "reddit": {
-        "enabled": false,
+        "enabled": true,
         "subreddits": [
             "Netsec",
             "Malware",
@@ -13,7 +13,7 @@
         "credential_location": "~/.fetchlinks/reddit.json"
     },
     "bluesky": {
-        "enabled": false,
+        "enabled": true,
         "credential_location": "~/.fetchlinks/bluesky.json",
         "timeline_limit": 50
     },
@@ -30,7 +30,7 @@
         ]
     },
     "rss": {
-        "enabled": false,
+        "enabled": true,
         "feeds": [
             "http://0pointer.de/blog/index.rss20",
             "http://addxorrol.blogspot.com/feeds/posts/default",
@@ -152,7 +152,6 @@
             "http://www.hexacorn.com/blog/feed/",
             "http://www.intezer.com/feed/",
             "http://www.j4vv4d.com/feed/",
-            "http://www.kb.cert.org/vulfeed/",
             "http://www.loopinsight.com/feed/",
             "http://www.macrumors.com/macrumors.xml",
             "http://www.madirish.net/rss.php",
@@ -274,9 +273,6 @@
             "https://catchingphish.com/posts/f.atom",
             "https://catless.ncl.ac.uk/risksrss2.xml",
             "https://cendyne.dev/feed.xml",
-            "https://cert-portal.siemens.com/productcert/rss/advisories.atom",
-            "https://cert.at/cert-at.en.blog.rss_2.0.xml",
-            "https://cert.lv/en/feed/rss/all",
             "https://chair6.net/feeds/all.atom.xml",
             "https://chocolatecoat4n6.com/feed/",
             "https://chovid99.github.io/posts/index.xml",
@@ -296,7 +292,6 @@
             "https://crankysec.com/feed/feed.xml",
             "https://csdl-api.computer.org/api/rss/periodicals/mags/sp/rss.xml",
             "https://csdl-api.computer.org/api/rss/periodicals/trans/tq/rss.xml",
-            "https://cve.threatint.com/rss/new",
             "https://cyber.gc.ca/webservice/en/rss/alerts",
             "https://cyber.gc.ca/webservice/en/rss/news",
             "https://cyberroute.github.io/index.xml",
@@ -582,8 +577,6 @@
             "https://www.bof.nl/feed/",
             "https://www.brighttalk.com/channel/7451/feed/rss",
             "https://www.c4isrnet.com/arc/outboundfeeds/rss/category/cyber/?outputType=xml",
-            "https://www.cert.pl/en/feed/",
-            "https://www.cert.si/en/category/news/feed/",
             "https://www.ciodive.com/feeds/news/",
             "https://www.cisa.gov/uscert/ncas/all.xml",
             "https://www.cisecurity.org/feed/advisories",
@@ -633,7 +626,6 @@
             "https://www.greynoise.io/blog/rss.xml",
             "https://www.helpnetsecurity.com/feed",
             "https://www.hezmatt.org/~mpalmer/blog/rss.xml",
-            "https://www.hkcert.org/getrss/security-bulletin",
             "https://www.home-assistant.io/atom.xml",
             "https://www.huntress.com/blog/rss.xml",
             "https://www.icij.org/feed/",
