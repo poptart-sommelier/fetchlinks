@@ -24,17 +24,26 @@ class _StatusContentParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.links = []
         self.text_parts = []
+        self.non_anchor_text_parts = []
+        self._anchor_depth = 0
 
     def handle_starttag(self, tag, attrs):
         if tag == 'a':
+            self._anchor_depth += 1
             attrs_dict = dict(attrs)
             href = attrs_dict.get('href')
             if href:
                 self.links.append(href)
 
+    def handle_endtag(self, tag):
+        if tag == 'a' and self._anchor_depth > 0:
+            self._anchor_depth -= 1
+
     def handle_data(self, data):
         if data:
             self.text_parts.append(data)
+            if self._anchor_depth == 0:
+                self.non_anchor_text_parts.append(data)
 
 
 def _normalize_instance_url(instance_url: str) -> str:
@@ -47,24 +56,39 @@ def _build_timeline_url(instance_url: str, timeline: str) -> str:
     return urljoin(_normalize_instance_url(instance_url) + '/', 'api/v1/timelines/home')
 
 
-def _parse_content(content: str) -> tuple[str, list[str]]:
+def _join_text_parts(parts: list[str]) -> str:
+    return html.unescape(' '.join(part.strip() for part in parts if part.strip()))
+
+
+def _parse_content(content: str) -> tuple[str, list[str], str]:
     parser = _StatusContentParser()
     parser.feed(content or '')
-    text = html.unescape(' '.join(part.strip() for part in parser.text_parts if part.strip()))
-    return text, parser.links
+    return _join_text_parts(parser.text_parts), parser.links, _join_text_parts(parser.non_anchor_text_parts)
+
+
+def _is_tag_url(url: str) -> bool:
+    try:
+        path = urlparse(url).path.rstrip('/').lower()
+    except ValueError:
+        return False
+    return path == '/tags' or path.startswith('/tags/')
+
+
+def _filter_links(links: list[str]) -> list[str]:
+    return [link for link in links if not _is_tag_url(link)]
 
 
 def _extract_links_from_status(status: dict) -> list[str]:
     links = []
-    _text, content_links = _parse_content(status.get('content', ''))
+    _text, content_links, non_anchor_text = _parse_content(status.get('content', ''))
     links.extend(content_links)
-    links.extend(extract_urls_from_text(_text))
+    links.extend(extract_urls_from_text(non_anchor_text))
 
     card = status.get('card')
     if isinstance(card, dict) and isinstance(card.get('url'), str):
         links.append(card['url'])
 
-    return links
+    return _filter_links(links)
 
 
 def _highest_status_id(statuses: list[dict]) -> str | None:
@@ -154,7 +178,7 @@ def _parse_status(status: dict) -> MastodonPost | None:
     if not created_at:
         return None
 
-    description, _content_links = _parse_content(status.get('content', ''))
+    description, _content_links, _non_anchor_text = _parse_content(status.get('content', ''))
     links = _extract_links_from_status(status)
     if not links:
         return None
