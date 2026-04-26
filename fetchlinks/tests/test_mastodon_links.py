@@ -7,10 +7,15 @@ import requests
 import mastodon_links
 
 
-def _status(status_id='11', url='https://example.com/article', card_url='https://card.example/story'):
+def _status(
+    status_id='11',
+    url='https://example.com/article',
+    card_url='https://card.example/story',
+    created_at='2026-04-26T12:00:00.000Z',
+):
     return {
         'id': status_id,
-        'created_at': '2026-04-26T12:00:00.000Z',
+        'created_at': created_at,
         'url': f'https://infosec.exchange/@alice/{status_id}',
         'content': f'<p>Read <a href="{url}">the article</a></p>',
         'card': {'url': card_url} if card_url else None,
@@ -233,6 +238,33 @@ class RunInstanceTests(unittest.TestCase):
         self.assertEqual(inserted, 0)
         auth_cls.assert_not_called()
 
+    def test_run_instance_filters_old_posts_before_insert_but_persists_state(self):
+        instance_config = {
+            'name': 'infosec',
+            'instance_url': 'https://infosec.exchange/',
+            'credential_location': '/tmp/mastodon.json',
+        }
+        auth_client = Mock()
+        auth_client.headers = {'Authorization': 'Bearer tok'}
+        statuses = [
+            _status('11', 'https://example.com/old', created_at='2000-01-01T00:00:00.000Z'),
+            _status('12', 'https://example.com/recent', created_at='2999-01-01T00:00:00.000Z'),
+        ]
+        db_path = Path('/tmp/db/fetchlinks.db')
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links.db_utils, 'db_get_mastodon_last_seen_id', return_value='10'), \
+             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=statuses), \
+             patch.object(mastodon_links.db_utils, 'db_insert', return_value=1) as db_insert, \
+             patch.object(mastodon_links.db_utils, 'db_set_mastodon_last_seen_id') as set_state:
+            inserted = mastodon_links._run_instance(instance_config, db_path, max_post_age_months=3)
+
+        self.assertEqual(inserted, 1)
+        inserted_posts = db_insert.call_args.args[0]
+        self.assertEqual(len(inserted_posts), 1)
+        self.assertEqual(inserted_posts[0].urls[0], 'https://example.com/recent')
+        set_state.assert_called_once_with('infosec', 'https://infosec.exchange', '12', db_path)
+
 
 class RunTests(unittest.TestCase):
     def test_run_skips_when_disabled(self):
@@ -255,8 +287,8 @@ class RunTests(unittest.TestCase):
             mastodon_links.run(config, db_info)
 
         db_path = Path('/tmp/db') / 'fetchlinks.db'
-        self.assertEqual(run_instance.call_args_list[0].args, ({'name': 'infosec'}, db_path))
-        self.assertEqual(run_instance.call_args_list[1].args, ({'name': 'hachyderm'}, db_path))
+        self.assertEqual(run_instance.call_args_list[0].args, ({'name': 'infosec'}, db_path, 3))
+        self.assertEqual(run_instance.call_args_list[1].args, ({'name': 'hachyderm'}, db_path, 3))
 
 
 if __name__ == '__main__':

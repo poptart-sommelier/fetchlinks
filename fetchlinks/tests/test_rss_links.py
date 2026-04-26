@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -159,7 +159,7 @@ class ParsePostsTests(unittest.TestCase):
         self.assertEqual(posts[0].source, 'https://feedurl.example/rss.xml')
         self.assertEqual(posts[0].author, 'https://feedurl.example/rss.xml')
 
-    def test_skips_entries_older_than_three_months(self):
+    def test_parse_posts_preserves_old_entries_for_shared_age_filter(self):
         feed = MagicMock()
         feed.feed = {'link': 'https://example.com/', 'title': 'Example'}
         feed.entries = [_FeedEntry(
@@ -169,14 +169,12 @@ class ParsePostsTests(unittest.TestCase):
         )]
         fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
 
-        posts = rss_links.parse_posts(
-            fetch_results,
-            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
-        )
+        posts = rss_links.parse_posts(fetch_results)
 
-        self.assertEqual(posts, [])
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].date_created, '2026-01-25 12:00:00')
 
-    def test_skips_entries_older_than_three_months_by_updated_date(self):
+    def test_parse_posts_uses_updated_date_when_no_published(self):
         feed = MagicMock()
         feed.feed = {'link': 'https://example.com/', 'title': 'Example'}
         feed.entries = [_FeedEntry(
@@ -186,12 +184,10 @@ class ParsePostsTests(unittest.TestCase):
         )]
         fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
 
-        posts = rss_links.parse_posts(
-            fetch_results,
-            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
-        )
+        posts = rss_links.parse_posts(fetch_results)
 
-        self.assertEqual(posts, [])
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(posts[0].date_created, '2026-01-25 12:00:00')
 
     def test_keeps_entries_within_three_months(self):
         feed = MagicMock()
@@ -203,10 +199,7 @@ class ParsePostsTests(unittest.TestCase):
         )]
         fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
 
-        posts = rss_links.parse_posts(
-            fetch_results,
-            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
-        )
+        posts = rss_links.parse_posts(fetch_results)
 
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0].urls, ['https://example.com/recent'])
@@ -217,10 +210,7 @@ class ParsePostsTests(unittest.TestCase):
         feed.entries = [_FeedEntry(title='No date', link='https://example.com/no-date')]
         fetch_results = [('https://feedurl.example/rss.xml', feed, '', '', 200)]
 
-        posts = rss_links.parse_posts(
-            fetch_results,
-            now=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
-        )
+        posts = rss_links.parse_posts(fetch_results)
 
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0].urls, ['https://example.com/no-date'])
@@ -280,6 +270,20 @@ class RunTests(unittest.TestCase):
             rss_links.run(['https://feed.example/rss.xml'], db_info)
 
         db_insert.assert_called_once_with(parsed_posts, rss_links.Path('/tmp/db') / 'fetchlinks.db')
+
+    def test_run_filters_old_posts_before_insert(self):
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        old_post = SimpleNamespace(date_created='2000-01-01 00:00:00')
+        recent_post = SimpleNamespace(date_created='2999-01-01 00:00:00')
+
+        with patch.object(rss_links.db_utils, 'db_get_rss_feed_states', return_value={}), \
+             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links.db_utils, 'db_set_rss_feed_states'), \
+             patch.object(rss_links, 'parse_posts', return_value=[old_post, recent_post]), \
+             patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
+            rss_links.run(['https://feed.example/rss.xml'], db_info, max_post_age_months=3)
+
+        db_insert.assert_called_once_with([recent_post], rss_links.Path('/tmp/db') / 'fetchlinks.db')
 
 
 if __name__ == '__main__':

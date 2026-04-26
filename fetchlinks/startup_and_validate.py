@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import db_setup
+import ingest_limits
 
 VALID_FIELDS = {'db_info': ['db_name', 'db_location'],
                 'log_info': ['log_config_location', 'log_location', 'log_level']}
@@ -55,8 +56,13 @@ def _validate_sources(sources: dict):
     :param sources: parsed sources as dict
     :return: Nothing
     """
+    _validate_ingest_settings(sources.get('ingest', {}))
+
     # check if our api config files exists
     for source, settings in sources.items():
+        if source == 'ingest':
+            continue
+
         if not isinstance(settings, dict):
             raise ValueError(f'{source} source settings must be a JSON object')
 
@@ -87,6 +93,18 @@ def _validate_sources(sources: dict):
 
     if sources.get('mastodon') and sources['mastodon'].get('enabled', False):
         _validate_mastodon_source(sources['mastodon'])
+
+
+def _validate_ingest_settings(ingest_settings: dict):
+    if not isinstance(ingest_settings, dict):
+        raise ValueError('Ingest settings must be a JSON object')
+
+    max_post_age_months = ingest_settings.get(
+        'max_post_age_months',
+        ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+    )
+    if not isinstance(max_post_age_months, int) or max_post_age_months < 1:
+        raise ValueError('Ingest max_post_age_months must be a positive integer')
 
 
 def _validate_reddit_source(reddit_settings: dict):

@@ -5,6 +5,7 @@ from pathlib import Path
 # Custom libraries
 from utils import RedditPost
 import db_utils
+import ingest_limits
 from auth import RedditAuth
 
 logger = logging.getLogger(__name__)
@@ -164,13 +165,18 @@ def parse_posts(posts: list[dict]) -> list[RedditPost]:
     return parsed_posts
 
 
-def run(reddit_config: dict, db_info: dict):
+def run(
+    reddit_config: dict,
+    db_info: dict,
+    max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+):
     db_full_path = Path(db_info['db_location']) / db_info['db_name']
     subreddit_posts, state_updates = get_subreddits(reddit_config, db_full_path)
     parsed_posts = parse_posts(subreddit_posts)
+    recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Reddit')
 
-    if parsed_posts:
-        inserted_count = db_utils.db_insert(parsed_posts, db_full_path)
+    if recent_posts:
+        inserted_count = db_utils.db_insert(recent_posts, db_full_path)
         logger.info('Inserted %s Reddit posts into DB', inserted_count)
     else:
         logger.info('No new Reddit posts found')

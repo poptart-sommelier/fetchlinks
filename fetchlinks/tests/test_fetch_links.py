@@ -16,6 +16,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
             'bluesky': {'enabled': True, 'credential_location': '/tmp/bsky.json'},
             'mastodon': {'enabled': True, 'instances': [{'name': 'infosec'}]},
         }
+        default_age = fetch_links.ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS
 
         with patch.object(fetch_links.rss_links, 'run') as rss_run, \
              patch.object(fetch_links.reddit_links, 'run') as reddit_run, \
@@ -23,10 +24,21 @@ class FetchLinksRoutingTests(unittest.TestCase):
              patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
             fetch_links.fetch_links(self.config, sources)
 
-        rss_run.assert_called_once_with(['https://feed.example/rss.xml'], self.config['db_info'])
-        reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'])
-        bluesky_run.assert_called_once_with(sources['bluesky'], self.config['db_info'])
-        mastodon_run.assert_called_once_with(sources['mastodon'], self.config['db_info'])
+        rss_run.assert_called_once_with(['https://feed.example/rss.xml'], self.config['db_info'], default_age)
+        reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'], default_age)
+        bluesky_run.assert_called_once_with(sources['bluesky'], self.config['db_info'], default_age)
+        mastodon_run.assert_called_once_with(sources['mastodon'], self.config['db_info'], default_age)
+
+    def test_passes_configured_ingest_age_limit_to_sources(self):
+        sources = {
+            'ingest': {'max_post_age_months': 6},
+            'reddit': {'subreddits': ['netsec']},
+        }
+
+        with patch.object(fetch_links.reddit_links, 'run') as reddit_run:
+            fetch_links.fetch_links(self.config, sources)
+
+        reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'], 6)
 
     def test_skips_disabled_sources(self):
         sources = {
