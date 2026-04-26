@@ -43,11 +43,16 @@ def fetch_links(config: dict, sources: dict):
 
 def main():
     try:
-        # Sanity checks
-        config, sources = startup_and_validate.do_startup()
+        # Parse args + config first so we know where to log to.
+        args = startup_and_validate.parse_arguments()
+        config = startup_and_validate.parse_config(args.config)
 
-        # Setup logging
+        # Setup logging BEFORE further validation so any errors below
+        # (e.g. bad sources file, missing credentials) hit the log file.
         configure_logging(config)
+
+        # Validate sources now that logging is up.
+        sources = startup_and_validate.parse_sources(args.sources)
 
         # Actually do stuff
         fetch_links(config, sources)
