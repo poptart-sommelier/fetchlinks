@@ -7,6 +7,19 @@ import db_setup
 VALID_FIELDS = {'db_info': ['db_name', 'db_location'],
                 'log_info': ['log_config_location', 'log_location', 'log_level']}
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def _resolve_relative_to_script(path_str: str) -> Path:
+    """Resolve a path string relative to the script directory if not absolute.
+
+    Same convention as export_links.py so the app works regardless of cwd.
+    """
+    p = Path(path_str)
+    if not p.is_absolute():
+        p = SCRIPT_DIR / p
+    return p
+
 
 def parse_sources(sources_location: str) -> dict:
     """
@@ -39,17 +52,17 @@ def _validate_sources(sources: dict):
         if settings.get('enabled', True) is False:
             continue
 
-        if settings.get('credential_location', False):
-            if not Path(settings.get('credential_location')).exists():
-                raise FileNotFoundError(f'{source} credential file could not be found at location: {settings.get("credential_location")}')
+        if settings.get('credential_location'):
+            if not Path(settings['credential_location']).exists():
+                raise FileNotFoundError(f'{source} credential file could not be found at location: {settings["credential_location"]}')
 
-    if sources.get('rss', False):
-        if sources['rss'].get('enabled', True) and sources['rss'].get('feeds', False):
+    if sources.get('rss'):
+        if sources['rss'].get('enabled', True) and sources['rss'].get('feeds'):
             if len(sources['rss']['feeds']) < 1:
                 raise ValueError('The Rss config contains no feeds')
 
-    if sources.get('bluesky', False) and sources['bluesky'].get('enabled', False):
-        if not sources['bluesky'].get('credential_location', False):
+    if sources.get('bluesky') and sources['bluesky'].get('enabled', False):
+        if not sources['bluesky'].get('credential_location'):
             raise ValueError('Bluesky source requires credential_location when enabled')
 
         timeline_limit = sources['bluesky'].get('timeline_limit', 50)
@@ -84,15 +97,18 @@ def _validate_config(config: dict):
         else:
             raise ValueError(f'Config file is missing config info: {header}.')
 
-    # check if our log location exists
-    log_path = Path(config['log_info']['log_location'])
-    if not log_path.exists():
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+    # Anchor relative paths to the script directory so the app works
+    # regardless of the current working directory.
+    config['db_info']['db_location'] = str(
+        _resolve_relative_to_script(config['db_info']['db_location'])
+    )
+    config['log_info']['log_location'] = str(
+        _resolve_relative_to_script(config['log_info']['log_location'])
+    )
 
-    # check if we already have a db
-    db_path = Path(config['db_info']['db_location']) / config['db_info']['db_name']
-    if not db_path.exists():
-        db_setup.db_initial_setup(config['db_info']['db_location'], config['db_info']['db_name'])
+    # Make sure the log directory exists.
+    log_path = Path(config['log_info']['log_location'])
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _validate_config_fields(config_keys, valid_keys):

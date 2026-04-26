@@ -8,6 +8,7 @@ from pathlib import Path
 import rss_links
 import reddit_links
 import bluesky_links
+import db_setup
 import startup_and_validate
 
 
@@ -50,6 +51,11 @@ def main():
         # Setup logging BEFORE further validation so any errors below
         # (e.g. bad sources file, missing credentials) hit the log file.
         configure_logging(config)
+
+        # Ensure DB schema exists. db_initial_setup is idempotent
+        # (CREATE TABLE IF NOT EXISTS), so it's safe to run every time
+        # and means new tables added later get created automatically.
+        db_setup.db_initial_setup(config['db_info']['db_location'], config['db_info']['db_name'])
 
         # Validate sources now that logging is up.
         sources = startup_and_validate.parse_sources(args.sources)
