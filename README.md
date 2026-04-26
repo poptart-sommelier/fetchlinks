@@ -17,8 +17,10 @@ Once setup is complete, run:
 
 ```bash
 cd fetchlinks/fetchlinks
-python3 fetch_links.py -config data/config/config.json -sources data/config/sources.json
+python3 fetch_links.py
 ```
+
+To use non-default config files, pass `--config` and `--sources`.
 
 ## Config files
 

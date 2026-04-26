@@ -59,7 +59,7 @@ def get_subreddit(subreddit: str, token: str, user_agent: str) -> List[dict]:
         logger.error('Unexpected Reddit payload shape for r/%s', subreddit)
         return []
 
-    logger.debug(f'{subreddit} returned {len(subreddit_posts)} entries')
+    logger.debug('%s returned %s entries', subreddit, len(subreddit_posts))
 
     return subreddit_posts
 

@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import startup_and_validate as sv
 
@@ -199,6 +200,37 @@ class ResolveRelativePathTests(unittest.TestCase):
         result = sv._resolve_relative_to_script('db/x.db')
         self.assertTrue(result.is_absolute())
         self.assertEqual(result.parent.parent, sv.SCRIPT_DIR)
+
+
+class ParseArgumentsTests(unittest.TestCase):
+    def test_defaults_to_packaged_config_files(self):
+        with patch('sys.argv', ['fetch_links.py']):
+            args = sv.parse_arguments()
+
+        self.assertEqual(args.config, sv.DEFAULT_CONFIG)
+        self.assertEqual(args.sources, sv.DEFAULT_SOURCES)
+
+    def test_accepts_standard_long_options(self):
+        with patch('sys.argv', [
+            'fetch_links.py',
+            '--config', '/tmp/config.json',
+            '--sources', '/tmp/sources.json',
+        ]):
+            args = sv.parse_arguments()
+
+        self.assertEqual(args.config, Path('/tmp/config.json'))
+        self.assertEqual(args.sources, Path('/tmp/sources.json'))
+
+    def test_legacy_single_dash_options_still_work(self):
+        with patch('sys.argv', [
+            'fetch_links.py',
+            '-config', '/tmp/config.json',
+            '-sources', '/tmp/sources.json',
+        ]):
+            args = sv.parse_arguments()
+
+        self.assertEqual(args.config, Path('/tmp/config.json'))
+        self.assertEqual(args.sources, Path('/tmp/sources.json'))
 
 
 if __name__ == '__main__':
