@@ -16,12 +16,12 @@
         "credential_location": "~/.fetchlinks/reddit.json"
     },
     "bluesky": {
-        "enabled": false,
+        "enabled": true,
         "credential_location": "~/.fetchlinks/bluesky.json",
         "timeline_limit": 50
     },
     "mastodon": {
-        "enabled": false,
+        "enabled": true,
         "instances": [
             {
                 "name": "infosec",
@@ -33,7 +33,7 @@
         ]
     },
     "rss": {
-        "enabled": false,
+        "enabled": true,
         "feeds": [
             "http://0pointer.de/blog/index.rss20",
             "http://addxorrol.blogspot.com/feeds/posts/default",
@@ -75,7 +75,6 @@
             "http://feeds.feedburner.com/akamai/blog",
             "http://feeds.feedburner.com/biometricupdate",
             "http://feeds.feedburner.com/brettshavers/oSyq",
-            "http://feeds.feedburner.com/businessinsider/science",
             "http://feeds.feedburner.com/Clamav",
             "http://feeds.feedburner.com/darknethackers",
             "http://feeds.feedburner.com/eset/blog",
@@ -135,14 +134,12 @@
             "http://thehackernews.com/feeds/posts/default",
             "http://tinyhack.com/feed/",
             "http://tisiphone.net/feed/",
-            "http://tools.cisco.com/security/center/psirtrss20/CiscoSecurityAdvisory.xml",
             "http://windowsir.blogspot.com/feeds/posts/default",
             "http://www.andrea-allievi.com/feed/",
             "http://www.brainonfire.net/blog/feed/",
             "http://www.bunniestudios.com/blog/?feed=rss2",
             "http://www.cerias.purdue.edu/feeds/main",
             "http://www.dfirnotes.net/feed.xml",
-            "http://www.exploit-db.com/rss.xml",
             "http://www.exploitalert.com/feed/",
             "http://www.fortiguard.com/rss/ir.xml",
             "http://www.hexacorn.com/blog/feed/",
@@ -158,7 +155,6 @@
             "http://www.skullsecurity.org/feed",
             "http://www.smashingsecurity.com/rss",
             "http://www.social-engineer.org/feed/",
-            "http://www.splunk.com/page/securityportal/rss",
             "http://www.theregister.co.uk/security/headlines.atom",
             "http://www.vanimpe.eu/feed/rss/",
             "http://www.xylibox.com/feeds/posts/default",
@@ -299,7 +295,6 @@
             "https://facecrooks.com/feed",
             "https://feeds.bloomberg.com/technology/news.rss",
             "https://feeds.feedburner.com/feedburner/Talos",
-            "https://feeds.feedburner.com/HealthTechMagazine",
             "https://feeds.feedburner.com/tenable/qaXL",
             "https://feeds.feedburner.com/TheHackersNews",
             "https://feeds.feedburner.com/TroyHunt",
@@ -521,8 +516,6 @@
             "https://www.bof.nl/feed/",
             "https://www.brighttalk.com/channel/7451/feed/rss",
             "https://www.ciodive.com/feeds/news/",
-            "https://www.cisa.gov/uscert/ncas/all.xml",
-            "https://www.cisecurity.org/feed/advisories",
             "https://www.clearskysec.com/feed",
             "https://www.cloudvulndb.org/rss/feed.xml",
             "https://www.crowdstrike.com/blog/feed",
@@ -557,7 +550,6 @@
             "https://www.forescout.com/feed/",
             "https://www.gabrielvasseur.com/blog-feed.xml",
             "https://www.globalencryption.org/feed/",
-            "https://www.govinfosecurity.com/rss-feeds",
             "https://www.grahamcluley.com/feed/",
             "https://www.greyhatdev.com/feed/",
             "https://www.greynoise.io/blog/rss.xml",
