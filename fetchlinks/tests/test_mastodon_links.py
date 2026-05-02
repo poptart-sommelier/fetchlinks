@@ -248,7 +248,7 @@ class RunInstanceTests(unittest.TestCase):
         auth_client.headers = {'Authorization': 'Bearer tok'}
         statuses = [
             _status('11', 'https://example.com/old', created_at='2000-01-01T00:00:00.000Z'),
-            _status('12', 'https://example.com/recent', created_at='2999-01-01T00:00:00.000Z'),
+            _status('12', 'https://example.com/recent', card_url='', created_at='2999-01-01T00:00:00.000Z'),
         ]
         db_path = Path('/tmp/db/fetchlinks.db')
 
@@ -264,6 +264,36 @@ class RunInstanceTests(unittest.TestCase):
         self.assertEqual(len(inserted_posts), 1)
         self.assertEqual(inserted_posts[0].urls[0], 'https://example.com/recent')
         set_state.assert_called_once_with('infosec', 'https://infosec.exchange', '12', db_path)
+
+    def test_run_instance_filters_denied_host_keywords_before_insert(self):
+        instance_config = {
+            'name': 'infosec',
+            'instance_url': 'https://infosec.exchange/',
+            'credential_location': '/tmp/mastodon.json',
+        }
+        auth_client = Mock()
+        auth_client.headers = {'Authorization': 'Bearer tok'}
+        statuses = [
+            _status('11', 'https://www.businessinsider.com/story', card_url='', created_at='2999-01-01T00:00:00.000Z'),
+            _status('12', 'https://example.com/recent', card_url='', created_at='2999-01-01T00:00:00.000Z'),
+        ]
+        db_path = Path('/tmp/db/fetchlinks.db')
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links.db_utils, 'db_get_mastodon_last_seen_id', return_value='10'), \
+             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=statuses), \
+             patch.object(mastodon_links.db_utils, 'db_insert', return_value=1) as db_insert, \
+             patch.object(mastodon_links.db_utils, 'db_set_mastodon_last_seen_id'):
+            inserted = mastodon_links._run_instance(
+                instance_config,
+                db_path,
+                excluded_url_host_keywords=['insider'],
+            )
+
+        self.assertEqual(inserted, 1)
+        inserted_posts = db_insert.call_args.args[0]
+        self.assertEqual(len(inserted_posts), 1)
+        self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
 
 
 class RunTests(unittest.TestCase):
@@ -287,8 +317,8 @@ class RunTests(unittest.TestCase):
             mastodon_links.run(config, db_info)
 
         db_path = Path('/tmp/db') / 'fetchlinks.db'
-        self.assertEqual(run_instance.call_args_list[0].args, ({'name': 'infosec'}, db_path, 3))
-        self.assertEqual(run_instance.call_args_list[1].args, ({'name': 'hachyderm'}, db_path, 3))
+        self.assertEqual(run_instance.call_args_list[0].args, ({'name': 'infosec'}, db_path, 3, []))
+        self.assertEqual(run_instance.call_args_list[1].args, ({'name': 'hachyderm'}, db_path, 3, []))
 
 
 if __name__ == '__main__':

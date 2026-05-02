@@ -152,6 +152,27 @@ class BlueskyRunTests(unittest.TestCase):
         self.assertEqual(len(inserted_posts), 1)
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
 
+    def test_run_filters_denied_host_keywords_before_insert(self):
+        config = {'enabled': True, 'credential_location': '/tmp/bsky.json'}
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        auth_client = Mock()
+        auth_client.get_client.return_value = object()
+        feed_items = [
+            _timeline_item('https://www.businessinsider.com/story', created_at='2999-01-01T00:00:00.000Z'),
+            _timeline_item('https://example.com/recent', created_at='2999-01-01T00:00:00.000Z'),
+        ]
+
+        with patch.object(bluesky_links, 'BlueskyAuth', return_value=auth_client), \
+             patch.object(bluesky_links.db_utils, 'db_get_bluesky_cursor', return_value=None), \
+             patch.object(bluesky_links, '_fetch_timeline_page', return_value=(feed_items, None)), \
+             patch.object(bluesky_links.db_utils, 'db_insert', return_value=1) as db_insert, \
+             patch.object(bluesky_links.db_utils, 'db_set_bluesky_cursor'):
+            bluesky_links.run(config, db_info, excluded_url_host_keywords=['insider'])
+
+        inserted_posts = db_insert.call_args.args[0]
+        self.assertEqual(len(inserted_posts), 1)
+        self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
+
 
 if __name__ == '__main__':
     unittest.main()

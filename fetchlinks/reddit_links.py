@@ -6,6 +6,7 @@ from pathlib import Path
 from utils import RedditPost
 import db_utils
 import ingest_limits
+import url_filters
 from auth import RedditAuth
 
 logger = logging.getLogger(__name__)
@@ -169,11 +170,17 @@ def run(
     reddit_config: dict,
     db_info: dict,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+    excluded_url_host_keywords: list[str] | None = None,
 ):
     db_full_path = Path(db_info['db_location']) / db_info['db_name']
     subreddit_posts, state_updates = get_subreddits(reddit_config, db_full_path)
     parsed_posts = parse_posts(subreddit_posts)
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Reddit')
+    recent_posts = url_filters.filter_posts_by_url_host_keywords(
+        recent_posts,
+        excluded_url_host_keywords or [],
+        'Reddit',
+    )
 
     if recent_posts:
         inserted_count = db_utils.db_insert(recent_posts, db_full_path)

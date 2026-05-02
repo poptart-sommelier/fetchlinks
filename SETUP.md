@@ -92,6 +92,7 @@ chmod 600 ~/.fetchlinks/mastodon-infosec.json
 Edit fetchlinks/data/config/sources.json:
 
 - Keep rss.enabled and reddit.enabled as needed.
+- To exclude extracted URLs by hostname keyword, add `ingest.excluded_url_host_keywords`. For example, `"insider"` blocks `www.businessinsider.com`, while `"businessinsider.com"` blocks that domain and its subdomains. Matching is case-insensitive and only checks URL hostnames, not paths or titles.
 - Bluesky defaults to disabled. Set bluesky.enabled to true only if you created a Bluesky credential file.
 - Mastodon defaults to disabled. Set mastodon.enabled to true only if every enabled mastodon.instances entry has a credential file.
 - Ensure each credential_location path matches your local files.

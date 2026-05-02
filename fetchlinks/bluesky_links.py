@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 import db_utils
 import ingest_limits
+import url_filters
 from auth import BlueskyAuth
 from utils import BlueskyPost, extract_urls_from_text
 
@@ -155,6 +156,7 @@ def run(
     bluesky_config: dict,
     db_info: dict,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+    excluded_url_host_keywords: List[str] | None = None,
 ):
     if not bluesky_config.get('enabled', False):
         logger.info('Bluesky source is disabled; skipping')
@@ -225,6 +227,11 @@ def run(
             parsed_posts.append(parsed)
 
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Bluesky')
+    recent_posts = url_filters.filter_posts_by_url_host_keywords(
+        recent_posts,
+        excluded_url_host_keywords or [],
+        'Bluesky',
+    )
     inserted_count = db_utils.db_insert(recent_posts, db_full_path)
     db_utils.db_set_bluesky_cursor(next_cursor, db_full_path)
 
