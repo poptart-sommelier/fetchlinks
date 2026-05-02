@@ -112,6 +112,12 @@ def _validate_ingest_settings(ingest_settings: dict):
     if any(not isinstance(keyword, str) or not keyword.strip() for keyword in excluded_url_host_keywords):
         raise ValueError('Ingest excluded_url_host_keywords must contain non-empty strings')
 
+    excluded_url_or_description_keywords = ingest_settings.get('excluded_url_or_description_keywords', [])
+    if not isinstance(excluded_url_or_description_keywords, list):
+        raise ValueError('Ingest excluded_url_or_description_keywords must be a list of strings')
+    if any(not isinstance(keyword, str) or not keyword.strip() for keyword in excluded_url_or_description_keywords):
+        raise ValueError('Ingest excluded_url_or_description_keywords must contain non-empty strings')
+
 
 def _validate_reddit_source(reddit_settings: dict):
     if not reddit_settings.get('credential_location'):

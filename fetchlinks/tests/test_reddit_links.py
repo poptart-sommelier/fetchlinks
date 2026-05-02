@@ -255,6 +255,33 @@ class RedditRunTests(unittest.TestCase):
         inserted_posts = db_insert.call_args.args[0]
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/allowed'])
 
+    def test_run_filters_denied_url_or_description_keywords_before_insert(self):
+        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['netsec']}
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        state_updates = [('netsec', 't3_new')]
+        blocked = Post()
+        blocked.date_created = '2999-01-01 00:00:00'
+        blocked.description = 'Politics story'
+        blocked.add_url('https://example.com/story')
+        blocked._generate_unique_url_string()
+        allowed = Post()
+        allowed.date_created = '2999-01-01 00:00:00'
+        allowed.description = 'Technology story'
+        allowed.add_url('https://example.com/allowed')
+        allowed._generate_unique_url_string()
+
+        with patch.object(reddit_links, 'get_subreddits', return_value=([], state_updates)), \
+             patch.object(reddit_links, 'parse_posts', return_value=[blocked, allowed]), \
+             patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
+             patch.object(reddit_links.db_utils, 'db_set_reddit_states'):
+            reddit_links.run(
+                reddit_config,
+                db_info,
+                excluded_url_or_description_keywords=['politics'],
+            )
+
+        db_insert.assert_called_once_with([allowed], reddit_links.Path('/tmp/db') / 'fetchlinks.db')
+
 
 if __name__ == '__main__':
     unittest.main()

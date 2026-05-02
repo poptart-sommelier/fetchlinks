@@ -24,10 +24,10 @@ class FetchLinksRoutingTests(unittest.TestCase):
              patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
             fetch_links.fetch_links(self.config, sources)
 
-        rss_run.assert_called_once_with(['https://feed.example/rss.xml'], self.config['db_info'], default_age, [])
-        reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'], default_age, [])
-        bluesky_run.assert_called_once_with(sources['bluesky'], self.config['db_info'], default_age, [])
-        mastodon_run.assert_called_once_with(sources['mastodon'], self.config['db_info'], default_age, [])
+        rss_run.assert_called_once_with(['https://feed.example/rss.xml'], self.config['db_info'], default_age, [], [])
+        reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'], default_age, [], [])
+        bluesky_run.assert_called_once_with(sources['bluesky'], self.config['db_info'], default_age, [], [])
+        mastodon_run.assert_called_once_with(sources['mastodon'], self.config['db_info'], default_age, [], [])
 
     def test_passes_configured_ingest_age_limit_to_sources(self):
         sources = {
@@ -38,7 +38,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
         with patch.object(fetch_links.reddit_links, 'run') as reddit_run:
             fetch_links.fetch_links(self.config, sources)
 
-        reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'], 6, [])
+        reddit_run.assert_called_once_with(sources['reddit'], self.config['db_info'], 6, [], [])
 
     def test_passes_excluded_url_host_keywords_to_sources(self):
         sources = {
@@ -54,6 +54,24 @@ class FetchLinksRoutingTests(unittest.TestCase):
             self.config['db_info'],
             fetch_links.ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
             ['insider', 'businessinsider.com'],
+            [],
+        )
+
+    def test_passes_excluded_url_or_description_keywords_to_sources(self):
+        sources = {
+            'ingest': {'excluded_url_or_description_keywords': ['Politics', ' trump ']},
+            'rss': {'feeds': ['https://feed.example/rss.xml']},
+        }
+
+        with patch.object(fetch_links.rss_links, 'run') as rss_run:
+            fetch_links.fetch_links(self.config, sources)
+
+        rss_run.assert_called_once_with(
+            ['https://feed.example/rss.xml'],
+            self.config['db_info'],
+            fetch_links.ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+            [],
+            ['politics', 'trump'],
         )
 
     def test_skips_disabled_sources(self):

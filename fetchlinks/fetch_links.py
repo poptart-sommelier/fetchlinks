@@ -37,22 +37,47 @@ def fetch_links(config: dict, sources: dict):
     """
     max_post_age_months = ingest_limits.max_post_age_months_from_sources(sources)
     excluded_url_host_keywords = url_filters.excluded_url_host_keywords_from_sources(sources)
+    excluded_url_or_description_keywords = url_filters.excluded_url_or_description_keywords_from_sources(sources)
 
     rss_config = sources.get('rss')
     if rss_config and rss_config.get('enabled', True):
-        rss_links.run(rss_config['feeds'], config['db_info'], max_post_age_months, excluded_url_host_keywords)
+        rss_links.run(
+            rss_config['feeds'],
+            config['db_info'],
+            max_post_age_months,
+            excluded_url_host_keywords,
+            excluded_url_or_description_keywords,
+        )
 
     reddit_config = sources.get('reddit')
     if reddit_config and reddit_config.get('enabled', True):
-        reddit_links.run(reddit_config, config['db_info'], max_post_age_months, excluded_url_host_keywords)
+        reddit_links.run(
+            reddit_config,
+            config['db_info'],
+            max_post_age_months,
+            excluded_url_host_keywords,
+            excluded_url_or_description_keywords,
+        )
 
     bluesky_config = sources.get('bluesky')
     if bluesky_config and bluesky_config.get('enabled', False):
-        bluesky_links.run(bluesky_config, config['db_info'], max_post_age_months, excluded_url_host_keywords)
+        bluesky_links.run(
+            bluesky_config,
+            config['db_info'],
+            max_post_age_months,
+            excluded_url_host_keywords,
+            excluded_url_or_description_keywords,
+        )
 
     mastodon_config = sources.get('mastodon')
     if mastodon_config and mastodon_config.get('enabled', False):
-        mastodon_links.run(mastodon_config, config['db_info'], max_post_age_months, excluded_url_host_keywords)
+        mastodon_links.run(
+            mastodon_config,
+            config['db_info'],
+            max_post_age_months,
+            excluded_url_host_keywords,
+            excluded_url_or_description_keywords,
+        )
 
 
 def main():

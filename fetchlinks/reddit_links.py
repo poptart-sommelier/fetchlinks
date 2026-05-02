@@ -171,6 +171,7 @@ def run(
     db_info: dict,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
+    excluded_url_or_description_keywords: list[str] | None = None,
 ):
     db_full_path = Path(db_info['db_location']) / db_info['db_name']
     subreddit_posts, state_updates = get_subreddits(reddit_config, db_full_path)
@@ -179,6 +180,11 @@ def run(
     recent_posts = url_filters.filter_posts_by_url_host_keywords(
         recent_posts,
         excluded_url_host_keywords or [],
+        'Reddit',
+    )
+    recent_posts = url_filters.filter_posts_by_url_or_description_keywords(
+        recent_posts,
+        excluded_url_or_description_keywords or [],
         'Reddit',
     )
 

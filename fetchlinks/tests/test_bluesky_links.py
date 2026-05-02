@@ -63,13 +63,13 @@ class BlueskyLinksTests(unittest.TestCase):
             self.assertEqual(db_utils.db_get_bluesky_cursor(db_path), 'cursor-123')
 
 
-def _timeline_item(url='https://example.com/article', created_at='2026-04-19T12:00:00.000Z'):
+def _timeline_item(url='https://example.com/article', created_at='2026-04-19T12:00:00.000Z', text=None):
     return {
         'post': {
             'uri': 'at://did:plc:alice/app.bsky.feed.post/xyz123',
             'author': {'handle': 'alice.bsky.social', 'displayName': 'Alice'},
             'record': {
-                'text': f'Interesting writeup {url}',
+                'text': text or f'Interesting writeup {url}',
                 'createdAt': created_at,
             },
         }
@@ -168,6 +168,27 @@ class BlueskyRunTests(unittest.TestCase):
              patch.object(bluesky_links.db_utils, 'db_insert', return_value=1) as db_insert, \
              patch.object(bluesky_links.db_utils, 'db_set_bluesky_cursor'):
             bluesky_links.run(config, db_info, excluded_url_host_keywords=['insider'])
+
+        inserted_posts = db_insert.call_args.args[0]
+        self.assertEqual(len(inserted_posts), 1)
+        self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
+
+    def test_run_filters_denied_url_or_description_keywords_before_insert(self):
+        config = {'enabled': True, 'credential_location': '/tmp/bsky.json'}
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        auth_client = Mock()
+        auth_client.get_client.return_value = object()
+        feed_items = [
+            _timeline_item('https://example.com/story', created_at='2999-01-01T00:00:00.000Z', text='Politics story https://example.com/story'),
+            _timeline_item('https://example.com/recent', created_at='2999-01-01T00:00:00.000Z', text='Technology story https://example.com/recent'),
+        ]
+
+        with patch.object(bluesky_links, 'BlueskyAuth', return_value=auth_client), \
+             patch.object(bluesky_links.db_utils, 'db_get_bluesky_cursor', return_value=None), \
+             patch.object(bluesky_links, '_fetch_timeline_page', return_value=(feed_items, None)), \
+             patch.object(bluesky_links.db_utils, 'db_insert', return_value=1) as db_insert, \
+             patch.object(bluesky_links.db_utils, 'db_set_bluesky_cursor'):
+            bluesky_links.run(config, db_info, excluded_url_or_description_keywords=['politics'])
 
         inserted_posts = db_insert.call_args.args[0]
         self.assertEqual(len(inserted_posts), 1)

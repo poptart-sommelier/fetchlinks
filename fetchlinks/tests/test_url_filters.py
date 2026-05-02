@@ -4,11 +4,11 @@ import url_filters
 from utils import Post
 
 
-def _make_post(urls):
+def _make_post(urls, description='description'):
     post = Post()
     post.source = 'https://source.example'
     post.author = 'author'
-    post.description = 'description'
+    post.description = description
     post.direct_link = 'https://source.example/post'
     post.date_created = '2026-05-02 12:00:00'
     for url in urls:
@@ -102,6 +102,56 @@ class FilterPostsTests(unittest.TestCase):
         self.assertEqual(
             url_filters.excluded_url_host_keywords_from_sources(sources),
             ['insider', 'businessinsider.com'],
+        )
+
+    def test_full_url_keyword_skips_post(self):
+        blocked = _make_post(['https://example.com/news/politics/story'])
+        allowed = _make_post(['https://example.com/news/technology/story'])
+
+        filtered = url_filters.filter_posts_by_url_or_description_keywords(
+            [blocked, allowed],
+            ['politics'],
+            'test',
+        )
+
+        self.assertEqual(filtered, [allowed])
+
+    def test_description_keyword_skips_post_case_insensitive(self):
+        blocked = _make_post(['https://example.com/story'], description='A Politics story')
+        allowed = _make_post(['https://example.com/other'], description='A technology story')
+
+        filtered = url_filters.filter_posts_by_url_or_description_keywords(
+            [blocked, allowed],
+            ['politics'],
+            'test',
+        )
+
+        self.assertEqual(filtered, [allowed])
+
+    def test_description_keyword_uses_word_boundary(self):
+        post = _make_post(['https://example.com/story'], description='A trumpet lesson')
+
+        filtered = url_filters.filter_posts_by_url_or_description_keywords([post], ['trump'], 'test')
+
+        self.assertEqual(filtered, [post])
+
+    def test_empty_url_or_description_keywords_is_noop(self):
+        post = _make_post(['https://example.com/news/politics/story'], description='Politics')
+
+        filtered = url_filters.filter_posts_by_url_or_description_keywords([post], [], 'test')
+
+        self.assertEqual(filtered, [post])
+
+    def test_reads_url_or_description_keywords_from_sources(self):
+        sources = {
+            'ingest': {
+                'excluded_url_or_description_keywords': [' Politics ', '', 12, 'trump'],
+            },
+        }
+
+        self.assertEqual(
+            url_filters.excluded_url_or_description_keywords_from_sources(sources),
+            ['politics', 'trump'],
         )
 
 

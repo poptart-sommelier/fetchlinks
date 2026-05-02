@@ -157,6 +157,7 @@ def run(
     db_info: dict,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: List[str] | None = None,
+    excluded_url_or_description_keywords: List[str] | None = None,
 ):
     if not bluesky_config.get('enabled', False):
         logger.info('Bluesky source is disabled; skipping')
@@ -230,6 +231,11 @@ def run(
     recent_posts = url_filters.filter_posts_by_url_host_keywords(
         recent_posts,
         excluded_url_host_keywords or [],
+        'Bluesky',
+    )
+    recent_posts = url_filters.filter_posts_by_url_or_description_keywords(
+        recent_posts,
+        excluded_url_or_description_keywords or [],
         'Bluesky',
     )
     inserted_count = db_utils.db_insert(recent_posts, db_full_path)

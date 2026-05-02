@@ -195,6 +195,26 @@ class ParseSourcesTests(unittest.TestCase):
             _write(p, {'ingest': {'excluded_url_host_keywords': ['insider', 'businessinsider.com']}})
             sv.parse_sources(str(p))
 
+    def test_ingest_excluded_url_or_description_keywords_must_be_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'ingest': {'excluded_url_or_description_keywords': 'politics'}})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_ingest_excluded_url_or_description_keywords_must_be_non_empty_strings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'ingest': {'excluded_url_or_description_keywords': ['politics', '']}})
+            with self.assertRaises(ValueError):
+                sv.parse_sources(str(p))
+
+    def test_ingest_excluded_url_or_description_keywords_accepts_strings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'sources.json'
+            _write(p, {'ingest': {'excluded_url_or_description_keywords': ['politics', 'trump']}})
+            sv.parse_sources(str(p))
+
     def test_reddit_enabled_without_creds_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / 'sources.json'
