@@ -1,6 +1,10 @@
 {
     "ingest": {
-        "max_post_age_months": 3
+        "max_post_age_months": 3,
+        "excluded_url_host_keywords": [
+            "businessinsider",
+            "economist.com"
+        ]
     },
     "reddit": {
         "enabled": true,
@@ -386,7 +390,6 @@
             "https://neimanslab.org/feed.xml",
             "https://neroteam.com/blog/feed",
             "https://news.sophos.com/feed/",
-            "https://news.ycombinator.com/rss",
             "https://nixintel.info/feed/",
             "https://not-matthias.github.io/atom.xml",
             "https://ntietz.com/atom.xml",
@@ -541,7 +544,6 @@
             "https://www.electrospaces.net/feeds/posts/default",
             "https://www.ericconrad.com/feeds/posts/default?alt=rss",
             "https://www.esecurityplanet.com/feed",
-            "https://www.europol.europa.eu/rss.xml",
             "https://www.evilsocket.net/atom.xml",
             "https://www.f5.com/labs/rss-feeds/all.xml",
             "https://www.feistyduck.com/bulletproof-tls-newsletter/feed",
