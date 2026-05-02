@@ -16,6 +16,7 @@ import requests
 
 import db_utils
 import ingest_limits
+import url_filters
 from utils import RssPost
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,7 @@ def run(
     rss_feed_links: list,
     db_info: dict,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
+    excluded_url_host_keywords: list[str] | None = None,
 ):
     db_full_path = Path(db_info['db_location']) / db_info['db_name']
     cached_states = db_utils.db_get_rss_feed_states(db_full_path)
@@ -127,6 +129,11 @@ def run(
 
     parsed_posts = parse_posts(fetch_results)
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'RSS')
+    recent_posts = url_filters.filter_posts_by_url_host_keywords(
+        recent_posts,
+        excluded_url_host_keywords or [],
+        'RSS',
+    )
 
     counts = {200: 0, 304: 0, 'error': 0}
     for _u, _f, _e, _l, status in fetch_results:

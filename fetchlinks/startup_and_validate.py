@@ -106,6 +106,12 @@ def _validate_ingest_settings(ingest_settings: dict):
     if not isinstance(max_post_age_months, int) or max_post_age_months < 1:
         raise ValueError('Ingest max_post_age_months must be a positive integer')
 
+    excluded_url_host_keywords = ingest_settings.get('excluded_url_host_keywords', [])
+    if not isinstance(excluded_url_host_keywords, list):
+        raise ValueError('Ingest excluded_url_host_keywords must be a list of strings')
+    if any(not isinstance(keyword, str) or not keyword.strip() for keyword in excluded_url_host_keywords):
+        raise ValueError('Ingest excluded_url_host_keywords must contain non-empty strings')
+
 
 def _validate_reddit_source(reddit_settings: dict):
     if not reddit_settings.get('credential_location'):

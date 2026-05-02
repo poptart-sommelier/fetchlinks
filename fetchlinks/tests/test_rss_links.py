@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import requests
 
 import rss_links
+from utils import Post
 
 
 class _FakeResponse:
@@ -284,6 +285,24 @@ class RunTests(unittest.TestCase):
             rss_links.run(['https://feed.example/rss.xml'], db_info, max_post_age_months=3)
 
         db_insert.assert_called_once_with([recent_post], rss_links.Path('/tmp/db') / 'fetchlinks.db')
+
+    def test_run_filters_denied_host_keywords_before_insert(self):
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        post = Post()
+        post.date_created = '2999-01-01 00:00:00'
+        post.add_url('https://www.businessinsider.com/story')
+        post.add_url('https://example.com/allowed')
+        post._generate_unique_url_string()
+
+        with patch.object(rss_links.db_utils, 'db_get_rss_feed_states', return_value={}), \
+             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links.db_utils, 'db_set_rss_feed_states'), \
+             patch.object(rss_links, 'parse_posts', return_value=[post]), \
+             patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
+            rss_links.run(['https://feed.example/rss.xml'], db_info, excluded_url_host_keywords=['insider'])
+
+        inserted_posts = db_insert.call_args.args[0]
+        self.assertEqual(inserted_posts[0].urls, ['https://example.com/allowed'])
 
 
 if __name__ == '__main__':
