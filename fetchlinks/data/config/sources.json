@@ -4,6 +4,10 @@
         "excluded_url_host_keywords": [
             "businessinsider",
             "economist.com"
+        ],
+        "excluded_url_or_description_keywords": [
+            "trump",
+            "covid"
         ]
     },
     "reddit": {
