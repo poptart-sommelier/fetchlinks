@@ -776,7 +776,8 @@
             "https://www.davebucklin.com/feed.xml",
             "https://www.gendigital.com/blog/rss/v1/blogs/rss.xml/15299,15040,15041",
             "https://www.iru.com/blog/archive/rss.xml",
-            "https://www.sygnia.co/feed/"
+            "https://www.sygnia.co/feed/",
+            "https://windows-internals.com/feed/"
         ]
     }
 }
