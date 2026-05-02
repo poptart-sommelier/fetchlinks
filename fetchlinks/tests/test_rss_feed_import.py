@@ -10,15 +10,22 @@ from unittest.mock import patch
 import rss_feed_import as importer
 
 
-def _rss_feed(item_date: str | None = 'Sat, 01 May 2026 12:00:00 GMT') -> bytes:
+def _rss_feed(
+        item_date: str | None = 'Sat, 01 May 2026 12:00:00 GMT',
+        title: str = 'Example Feed',
+        feed_link: str = 'https://example.com/',
+        item_link: str = 'https://example.com/post',
+        item_title: str = 'Example item',
+) -> bytes:
     date_xml = f'<pubDate>{item_date}</pubDate>' if item_date else ''
     return f'''<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0">
   <channel>
-    <title>Example Feed</title>
+        <title>{title}</title>
+        <link>{feed_link}</link>
     <item>
-      <title>Example item</title>
-      <link>https://example.com/post</link>
+            <title>{item_title}</title>
+            <link>{item_link}</link>
       {date_xml}
     </item>
   </channel>
@@ -79,6 +86,12 @@ class ExtractUrlTests(unittest.TestCase):
         self.assertEqual(new_candidates, ['https://new.example/rss'])
         self.assertEqual(already_present, ['https://example.com/feed.xml'])
         self.assertEqual(duplicate_in_input, ['https://new.example/rss#fragment'])
+
+    def test_feed_site_key_strips_www(self):
+        self.assertEqual(
+            importer.feed_site_key('https://www.trustedsec.com/feed/'),
+            importer.feed_site_key('https://trustedsec.com/feed.rss'),
+        )
 
 
 class FeedCheckTests(unittest.TestCase):
@@ -147,6 +160,86 @@ class FeedCheckTests(unittest.TestCase):
         self.assertEqual(check.status, 'active')
         self.assertEqual(check.feed_url, 'https://example.com/feed.xml')
 
+    def test_checks_are_duplicate_when_feed_link_matches(self):
+        candidate = importer.FeedCheck(
+            input_url='https://trustedsec.com/feed.rss',
+            feed_url='https://trustedsec.com/feed.rss',
+            final_url='https://trustedsec.com/feed.rss',
+            status='active',
+            title='TrustedSec Blog',
+            feed_link='https://trustedsec.com/blog',
+            entry_links=('https://trustedsec.com/blog/a',),
+        )
+        existing = importer.FeedCheck(
+            input_url='https://www.trustedsec.com/feed/',
+            feed_url='https://www.trustedsec.com/feed/',
+            final_url='https://www.trustedsec.com/feed/',
+            status='active',
+            title='TrustedSec',
+            feed_link='https://trustedsec.com/blog',
+            entry_links=('https://trustedsec.com/blog/b',),
+        )
+
+        is_duplicate, reason = importer.checks_are_duplicate_feed(candidate, existing)
+
+        self.assertTrue(is_duplicate)
+        self.assertIn('feed link matches existing', reason)
+
+    def test_checks_are_duplicate_when_recent_entry_links_overlap(self):
+        candidate = importer.FeedCheck(
+            input_url='https://trustedsec.com/feed.rss',
+            feed_url='https://trustedsec.com/feed.rss',
+            final_url='https://trustedsec.com/feed.rss',
+            status='active',
+            entry_links=(
+                'https://trustedsec.com/blog/a',
+                'https://trustedsec.com/blog/b',
+                'https://trustedsec.com/blog/c',
+            ),
+        )
+        existing = importer.FeedCheck(
+            input_url='https://www.trustedsec.com/feed/',
+            feed_url='https://www.trustedsec.com/feed/',
+            final_url='https://www.trustedsec.com/feed/',
+            status='active',
+            entry_links=(
+                'https://www.trustedsec.com/blog/a',
+                'https://www.trustedsec.com/blog/b',
+                'https://www.trustedsec.com/blog/c',
+            ),
+        )
+
+        is_duplicate, reason = importer.checks_are_duplicate_feed(candidate, existing)
+
+        self.assertTrue(is_duplicate)
+        self.assertIn('entry link', reason)
+
+    def test_checks_allow_distinct_same_site_feeds(self):
+        candidate = importer.FeedCheck(
+            input_url='https://example.com/security.rss',
+            feed_url='https://example.com/security.rss',
+            final_url='https://example.com/security.rss',
+            status='active',
+            title='Example Security',
+            feed_link='https://example.com/security',
+            entry_links=('https://example.com/security/a',),
+            entry_titles=('security story',),
+        )
+        existing = importer.FeedCheck(
+            input_url='https://example.com/news.rss',
+            feed_url='https://example.com/news.rss',
+            final_url='https://example.com/news.rss',
+            status='active',
+            title='Example News',
+            feed_link='https://example.com/news',
+            entry_links=('https://example.com/news/a',),
+            entry_titles=('news story',),
+        )
+
+        is_duplicate, _reason = importer.checks_are_duplicate_feed(candidate, existing)
+
+        self.assertFalse(is_duplicate)
+
 
 class ImportWorkflowTests(unittest.TestCase):
     def test_dry_run_writes_pruned_without_modifying_sources(self):
@@ -170,6 +263,38 @@ class ImportWorkflowTests(unittest.TestCase):
             self.assertEqual(added, 0)
             self.assertEqual(sources_path.read_text(encoding='utf-8'), original_sources)
             self.assertEqual((Path(tmp) / 'rss-list.txt.pruned').read_text(encoding='utf-8'), 'https://new.example/feed.xml\n')
+
+    def test_dry_run_excludes_same_site_duplicate_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            input_path = Path(tmp) / 'rss-list.txt'
+            sources_path = Path(tmp) / 'sources.json'
+            input_path.write_text('https://trustedsec.com/feed.rss\n', encoding='utf-8')
+            _write_sources(sources_path, ['https://www.trustedsec.com/feed/'])
+            candidate_check = importer.FeedCheck(
+                input_url='https://trustedsec.com/feed.rss',
+                feed_url='https://trustedsec.com/feed.rss',
+                final_url='https://trustedsec.com/feed.rss',
+                status='active',
+                feed_link='https://trustedsec.com/blog',
+                entry_links=('https://trustedsec.com/blog/a',),
+                latest_entry=datetime(2026, 5, 1, tzinfo=UTC),
+            )
+            existing_check = importer.FeedCheck(
+                input_url='https://www.trustedsec.com/feed/',
+                feed_url='https://www.trustedsec.com/feed/',
+                final_url='https://www.trustedsec.com/feed/',
+                status='active',
+                feed_link='https://trustedsec.com/blog',
+                entry_links=('https://trustedsec.com/blog/b',),
+                latest_entry=datetime(2026, 5, 1, tzinfo=UTC),
+            )
+
+            with patch.object(importer, 'check_candidates', return_value=[candidate_check]), \
+                 patch.object(importer, 'check_feed', return_value=existing_check):
+                added = _quiet_call(importer.import_from_input, input_path, sources_path, dry_run=True, abandoned_days=365)
+
+            self.assertEqual(added, 0)
+            self.assertEqual((Path(tmp) / 'rss-list.txt.pruned').read_text(encoding='utf-8'), '')
 
     def test_default_input_mode_applies_and_writes_backup(self):
         with tempfile.TemporaryDirectory() as tmp:
