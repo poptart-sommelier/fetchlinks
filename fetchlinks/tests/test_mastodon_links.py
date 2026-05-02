@@ -12,12 +12,13 @@ def _status(
     url='https://example.com/article',
     card_url='https://card.example/story',
     created_at='2026-04-26T12:00:00.000Z',
+    content=None,
 ):
     return {
         'id': status_id,
         'created_at': created_at,
         'url': f'https://infosec.exchange/@alice/{status_id}',
-        'content': f'<p>Read <a href="{url}">the article</a></p>',
+        'content': content or f'<p>Read <a href="{url}">the article</a></p>',
         'card': {'url': card_url} if card_url else None,
         'account': {
             'url': 'https://infosec.exchange/@alice',
@@ -295,6 +296,42 @@ class RunInstanceTests(unittest.TestCase):
         self.assertEqual(len(inserted_posts), 1)
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
 
+    def test_run_instance_filters_denied_url_or_description_keywords_before_insert(self):
+        instance_config = {
+            'name': 'infosec',
+            'instance_url': 'https://infosec.exchange/',
+            'credential_location': '/tmp/mastodon.json',
+        }
+        auth_client = Mock()
+        auth_client.headers = {'Authorization': 'Bearer tok'}
+        statuses = [
+            _status(
+                '11',
+                'https://example.com/story',
+                card_url='',
+                created_at='2999-01-01T00:00:00.000Z',
+                content='<p>Politics <a href="https://example.com/story">story</a></p>',
+            ),
+            _status('12', 'https://example.com/recent', card_url='', created_at='2999-01-01T00:00:00.000Z'),
+        ]
+        db_path = Path('/tmp/db/fetchlinks.db')
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links.db_utils, 'db_get_mastodon_last_seen_id', return_value='10'), \
+             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=statuses), \
+             patch.object(mastodon_links.db_utils, 'db_insert', return_value=1) as db_insert, \
+             patch.object(mastodon_links.db_utils, 'db_set_mastodon_last_seen_id'):
+            inserted = mastodon_links._run_instance(
+                instance_config,
+                db_path,
+                excluded_url_or_description_keywords=['politics'],
+            )
+
+        self.assertEqual(inserted, 1)
+        inserted_posts = db_insert.call_args.args[0]
+        self.assertEqual(len(inserted_posts), 1)
+        self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
+
 
 class RunTests(unittest.TestCase):
     def test_run_skips_when_disabled(self):
@@ -317,8 +354,8 @@ class RunTests(unittest.TestCase):
             mastodon_links.run(config, db_info)
 
         db_path = Path('/tmp/db') / 'fetchlinks.db'
-        self.assertEqual(run_instance.call_args_list[0].args, ({'name': 'infosec'}, db_path, 3, []))
-        self.assertEqual(run_instance.call_args_list[1].args, ({'name': 'hachyderm'}, db_path, 3, []))
+        self.assertEqual(run_instance.call_args_list[0].args, ({'name': 'infosec'}, db_path, 3, [], []))
+        self.assertEqual(run_instance.call_args_list[1].args, ({'name': 'hachyderm'}, db_path, 3, [], []))
 
 
 if __name__ == '__main__':

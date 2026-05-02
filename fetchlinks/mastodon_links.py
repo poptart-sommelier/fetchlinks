@@ -203,6 +203,7 @@ def _run_instance(
     db_path: Path,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
+    excluded_url_or_description_keywords: list[str] | None = None,
 ) -> int:
     if instance_config.get('enabled', True) is False:
         logger.info('Mastodon source %s is disabled; skipping', instance_config.get('name', '<unnamed>'))
@@ -237,6 +238,11 @@ def _run_instance(
         excluded_url_host_keywords or [],
         f'Mastodon {source_name}',
     )
+    recent_posts = url_filters.filter_posts_by_url_or_description_keywords(
+        recent_posts,
+        excluded_url_or_description_keywords or [],
+        f'Mastodon {source_name}',
+    )
     inserted_count = db_utils.db_insert(recent_posts, db_path)
     highest_id = _highest_status_id(statuses)
     if highest_id:
@@ -260,6 +266,7 @@ def run(
     db_info: dict,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
+    excluded_url_or_description_keywords: list[str] | None = None,
 ):
     if not mastodon_config.get('enabled', False):
         logger.info('Mastodon source is disabled; skipping')
@@ -273,6 +280,7 @@ def run(
             db_path,
             max_post_age_months,
             excluded_url_host_keywords or [],
+            excluded_url_or_description_keywords or [],
         )
 
     logger.info('Inserted %s Mastodon posts into DB', total_inserted)

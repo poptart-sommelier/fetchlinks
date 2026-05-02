@@ -304,6 +304,32 @@ class RunTests(unittest.TestCase):
         inserted_posts = db_insert.call_args.args[0]
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/allowed'])
 
+    def test_run_filters_denied_url_or_description_keywords_before_insert(self):
+        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        blocked = Post()
+        blocked.date_created = '2999-01-01 00:00:00'
+        blocked.description = 'Politics story'
+        blocked.add_url('https://example.com/story')
+        blocked._generate_unique_url_string()
+        allowed = Post()
+        allowed.date_created = '2999-01-01 00:00:00'
+        allowed.description = 'Technology story'
+        allowed.add_url('https://example.com/allowed')
+        allowed._generate_unique_url_string()
+
+        with patch.object(rss_links.db_utils, 'db_get_rss_feed_states', return_value={}), \
+             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links.db_utils, 'db_set_rss_feed_states'), \
+             patch.object(rss_links, 'parse_posts', return_value=[blocked, allowed]), \
+             patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
+            rss_links.run(
+                ['https://feed.example/rss.xml'],
+                db_info,
+                excluded_url_or_description_keywords=['politics'],
+            )
+
+        db_insert.assert_called_once_with([allowed], rss_links.Path('/tmp/db') / 'fetchlinks.db')
+
 
 if __name__ == '__main__':
     unittest.main()
