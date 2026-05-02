@@ -8,7 +8,7 @@ network checks.
 import argparse
 import calendar
 import concurrent.futures
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from html.parser import HTMLParser
 import json
@@ -39,6 +39,9 @@ class FeedCheck:
     final_url: str
     status: str
     title: str = ''
+    feed_link: str = ''
+    entry_links: tuple[str, ...] = ()
+    entry_titles: tuple[str, ...] = ()
     latest_entry: datetime | None = None
     entry_count: int = 0
     reason: str = ''
@@ -97,6 +100,30 @@ def normalize_feed_url(url: str) -> str:
     return urlunsplit((scheme, netloc, path, parts.query, ''))
 
 
+def canonical_hostname(url: str) -> str:
+    hostname = (urlsplit(url).hostname or '').lower()
+    return hostname[4:] if hostname.startswith('www.') else hostname
+
+
+def feed_site_key(url: str) -> str:
+    return canonical_hostname(url)
+
+
+def normalize_content_url(url: str) -> str:
+    cleaned, _fragment = urldefrag(str(url).strip())
+    parts = urlsplit(cleaned)
+    scheme = parts.scheme.lower()
+    netloc = parts.netloc.lower()
+    if netloc.startswith('www.'):
+        netloc = netloc[4:]
+    path = (parts.path or '/').rstrip('/') or '/'
+    return urlunsplit((scheme, netloc, path, parts.query, ''))
+
+
+def normalize_text(text: str) -> str:
+    return re.sub(r'\s+', ' ', str(text).strip().lower())
+
+
 def load_sources(sources_path: Path) -> dict:
     with sources_path.open('r', encoding='utf-8') as sources_file:
         return json.load(sources_file)
@@ -144,6 +171,36 @@ def latest_entry_datetime(feed) -> datetime | None:
     return latest
 
 
+def feed_entry_links(feed, limit: int = 10) -> tuple[str, ...]:
+    links = []
+    for entry in getattr(feed, 'entries', [])[:limit]:
+        link = getattr(entry, 'link', '')
+        if link:
+            links.append(normalize_content_url(link))
+    return tuple(links)
+
+
+def feed_entry_titles(feed, limit: int = 10) -> tuple[str, ...]:
+    titles = []
+    for entry in getattr(feed, 'entries', [])[:limit]:
+        title = normalize_text(getattr(entry, 'title', ''))
+        if title:
+            titles.append(title)
+    return tuple(titles)
+
+
+def feed_link(feed) -> str:
+    if not hasattr(feed, 'feed'):
+        return ''
+    link = feed.feed.get('link', '')
+    return normalize_content_url(link) if link else ''
+
+
+def feed_title(feed) -> str:
+    feed_meta = getattr(feed, 'feed', {})
+    return feed_meta.get('title', '') if hasattr(feed_meta, 'get') else ''
+
+
 def check_feed(
     url: str,
     session: requests.Session,
@@ -174,15 +231,119 @@ def check_feed(
         return FeedCheck(url, final_url, final_url, 'dead', reason='no entries')
 
     latest = latest_entry_datetime(parsed_feed)
-    title = parsed_feed.feed.get('title', '') if hasattr(parsed_feed, 'feed') else ''
+    title = feed_title(parsed_feed)
+    parsed_feed_link = feed_link(parsed_feed)
+    entry_links = feed_entry_links(parsed_feed)
+    entry_titles = feed_entry_titles(parsed_feed)
     feed_url = final_url
     if latest is None:
-        return FeedCheck(url, feed_url, final_url, 'unknown_date', title=title, entry_count=len(parsed_feed.entries), reason='no entry dates')
+        return FeedCheck(
+            url,
+            feed_url,
+            final_url,
+            'unknown_date',
+            title=title,
+            feed_link=parsed_feed_link,
+            entry_links=entry_links,
+            entry_titles=entry_titles,
+            entry_count=len(parsed_feed.entries),
+            reason='no entry dates',
+        )
 
     if latest < now - timedelta(days=abandoned_days):
-        return FeedCheck(url, feed_url, final_url, 'abandoned', title=title, latest_entry=latest, entry_count=len(parsed_feed.entries))
+        return FeedCheck(
+            url,
+            feed_url,
+            final_url,
+            'abandoned',
+            title=title,
+            feed_link=parsed_feed_link,
+            entry_links=entry_links,
+            entry_titles=entry_titles,
+            latest_entry=latest,
+            entry_count=len(parsed_feed.entries),
+        )
 
-    return FeedCheck(url, feed_url, final_url, 'active', title=title, latest_entry=latest, entry_count=len(parsed_feed.entries))
+    return FeedCheck(
+        url,
+        feed_url,
+        final_url,
+        'active',
+        title=title,
+        feed_link=parsed_feed_link,
+        entry_links=entry_links,
+        entry_titles=entry_titles,
+        latest_entry=latest,
+        entry_count=len(parsed_feed.entries),
+    )
+
+
+def checks_are_duplicate_feed(candidate: FeedCheck, existing: FeedCheck) -> tuple[bool, str]:
+    if normalize_feed_url(candidate.feed_url) == normalize_feed_url(existing.feed_url):
+        return True, f'final feed URL matches existing {existing.input_url}'
+
+    if candidate.feed_link and existing.feed_link and candidate.feed_link == existing.feed_link:
+        return True, f'feed link matches existing {existing.input_url}'
+
+    candidate_links = {normalize_content_url(link) for link in candidate.entry_links}
+    existing_links = {normalize_content_url(link) for link in existing.entry_links}
+    shared_links = candidate_links & existing_links
+    if candidate.entry_links and existing.entry_links and normalize_content_url(candidate.entry_links[0]) == normalize_content_url(existing.entry_links[0]):
+        return True, f'latest entry link matches existing {existing.input_url}'
+    if len(shared_links) >= 3:
+        return True, f'{len(shared_links)} recent entry link(s) match existing {existing.input_url}'
+
+    candidate_titles = set(candidate.entry_titles)
+    existing_titles = set(existing.entry_titles)
+    shared_titles = candidate_titles & existing_titles
+    if normalize_text(candidate.title) and normalize_text(candidate.title) == normalize_text(existing.title) and len(shared_titles) >= 2:
+        return True, f'feed title and {len(shared_titles)} recent entry title(s) match existing {existing.input_url}'
+
+    return False, ''
+
+
+def mark_same_site_content_duplicates(
+    checks: list[FeedCheck],
+    existing_feeds: list[str],
+    abandoned_days: int,
+) -> list[FeedCheck]:
+    existing_by_site: dict[str, list[str]] = {}
+    for feed in existing_feeds:
+        site_key = feed_site_key(feed)
+        if site_key:
+            existing_by_site.setdefault(site_key, []).append(feed)
+
+    existing_check_cache: dict[str, FeedCheck] = {}
+    updated_checks = []
+    with requests.Session() as session:
+        session.headers['User-Agent'] = USER_AGENT
+        session.headers['Accept-Encoding'] = 'gzip, deflate'
+        for check in checks:
+            if check.status != 'active':
+                updated_checks.append(check)
+                continue
+
+            site_key = feed_site_key(check.feed_url) or feed_site_key(check.input_url)
+            same_site_existing = existing_by_site.get(site_key, [])
+            duplicate_reason = ''
+            for existing_feed in same_site_existing:
+                existing_check = existing_check_cache.get(existing_feed)
+                if existing_check is None:
+                    existing_check = check_feed(existing_feed, session, abandoned_days)
+                    existing_check_cache[existing_feed] = existing_check
+                if existing_check.status not in {'active', 'abandoned', 'unknown_date'}:
+                    continue
+                is_duplicate, reason = checks_are_duplicate_feed(check, existing_check)
+                if is_duplicate:
+                    duplicate_reason = reason
+                    break
+
+            if duplicate_reason:
+                updated_checks.append(replace(check, status='duplicate_content', reason=duplicate_reason))
+            else:
+                updated_checks.append(check)
+
+    return updated_checks
 
 
 def discover_feed_url(base_url: str, html: str) -> str | None:
@@ -280,7 +441,7 @@ def append_feeds_to_sources(sources_path: Path, feeds_to_add: list[str]) -> int:
 
 
 def summarize_checks(checks: list[FeedCheck]) -> dict[str, list[FeedCheck]]:
-    statuses = {'active': [], 'abandoned': [], 'unknown_date': [], 'dead': []}
+    statuses = {'active': [], 'abandoned': [], 'unknown_date': [], 'dead': [], 'duplicate_content': []}
     for check in checks:
         statuses.setdefault(check.status, []).append(check)
     return statuses
@@ -305,6 +466,7 @@ def print_report(
     print(f'Abandoned: {len(statuses.get("abandoned", []))}')
     print(f'Unknown date: {len(statuses.get("unknown_date", []))}')
     print(f'Dead/invalid: {len(statuses.get("dead", []))}')
+    print(f'Duplicate content: {len(statuses.get("duplicate_content", []))}')
     print(f'Accepted: {len(accepted_feeds)}')
     print(f'Added: {added_count}')
 
@@ -328,10 +490,11 @@ def print_report(
         for feed in duplicate_in_input:
             print(f'  {feed} duplicate in input')
         for check in skipped_checks:
+            reason = f' {check.reason}' if check.reason else ''
             if check.latest_entry:
-                print(f'  {check.input_url} {check.status} latest={check.latest_entry.date().isoformat()}')
+                print(f'  {check.input_url} {check.status} latest={check.latest_entry.date().isoformat()}{reason}')
             else:
-                print(f'  {check.input_url} {check.status} {check.reason}'.rstrip())
+                print(f'  {check.input_url} {check.status}{reason}'.rstrip())
 
     if dry_run and pruned_path:
         print(f'\nWrote accepted feeds to {pruned_path}')
@@ -344,6 +507,7 @@ def import_from_input(input_path: Path, sources_path: Path, dry_run: bool, aband
     existing_feeds = load_existing_feeds(sources_path)
     candidates, already_present, duplicate_in_input = dedupe_against_existing(extracted, existing_feeds)
     checks = check_candidates(candidates, abandoned_days)
+    checks = mark_same_site_content_duplicates(checks, existing_feeds, abandoned_days)
     accepted_feeds = unique_feed_urls([check.feed_url for check in checks if check.status == 'active'])
 
     pruned_path = write_pruned(input_path, accepted_feeds) if dry_run else None
