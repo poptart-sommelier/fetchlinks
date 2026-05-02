@@ -98,6 +98,22 @@ Edit fetchlinks/data/config/sources.json:
 - Mastodon defaults to disabled. Set mastodon.enabled to true only if every enabled mastodon.instances entry has a credential file.
 - Ensure each credential_location path matches your local files.
 
+To import RSS feeds from a text file of URLs, run the RSS feed importer. By default it validates candidates, rejects feeds with no posts in the last 365 days, and appends active feeds to `sources.json`:
+
+```bash
+cd fetchlinks
+python3 rss_feed_import.py --input /tmp/rss-list.txt
+```
+
+To review first, use dry-run mode. It writes accepted feeds to `/tmp/rss-list.txt.pruned` without editing `sources.json`:
+
+```bash
+python3 rss_feed_import.py --input /tmp/rss-list.txt --dry-run
+python3 rss_feed_import.py --pruned /tmp/rss-list.txt.pruned
+```
+
+Use `--abandoned-days N` to change the cutoff for rejecting feeds with no recent posts.
+
 ## 5) Run the backend
 
 ```bash
