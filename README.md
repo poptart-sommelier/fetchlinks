@@ -48,4 +48,10 @@ cd web
 npm run validate
 ```
 
+## Deployment Examples
+
+Example systemd and nginx files for running the web app on a VM live in
+`deploy/`. They are adapted for a single checkout at `/opt/fetchlinks` with the
+web app at `/opt/fetchlinks/web`.
+
 For detailed setup notes, see `ingest/SETUP.md` and `web/README.md`.
