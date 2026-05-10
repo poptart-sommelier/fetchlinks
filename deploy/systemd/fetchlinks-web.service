@@ -1,0 +1,23 @@
+[Unit]
+Description=Fetchlinks Next.js web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fetchlinks
+Group=fetchlinks
+WorkingDirectory=/opt/fetchlinks/web
+EnvironmentFile=/etc/fetchlinks/web.env
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SyslogIdentifier=fetchlinks-web
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
