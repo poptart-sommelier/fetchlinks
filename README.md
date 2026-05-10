@@ -1,36 +1,51 @@
-# fetchlinks backend
+# Fetchlinks
 
-fetchlinks ingests posts with external links from configured sources and stores them in a local SQLite database.
+Fetchlinks collects posts with external links and presents them in a web UI.
 
-Current sources:
-- RSS feeds
-- Reddit subreddits
-- Bluesky home timeline (optional, disabled by default)
+The project is organized as a small monorepo with two runtime apps:
 
-The backend deduplicates rows using a hash of extracted URLs and stores results in the posts table.
+- `ingest/` - Python app that gathers links and writes the SQLite database.
+- `web/` - Next.js app that reads the SQLite database and renders the UI.
 
-## Quick start
+The shared boundary between the apps is the SQLite database. The ingest app owns
+creating and updating the database; the web app opens it read-only via the
+`FETCHLINKS_DB` environment variable.
 
-For complete setup steps, see SETUP.md.
+## Quick Start
 
-Once setup is complete, run:
+Install and run the ingest app:
 
 ```bash
-cd fetchlinks/fetchlinks
+python3 -m venv ../venv
+source ../venv/bin/activate
+cd ingest
+pip install -r requirements.txt
+cd fetchlinks
 python3 fetch_links.py
 ```
 
-To use non-default config files, pass `--config` and `--sources`.
+Run the web app against an existing database:
 
-## Config files
+```bash
+cd web
+npm install
+FETCHLINKS_DB=/absolute/path/to/fetchlinks.db npm run dev
+```
 
-- App config: fetchlinks/data/config/config.json
-- Source config: fetchlinks/data/config/sources.json
+## Validation
 
-Use source-level enabled flags to toggle providers without changing code.
+Run Python tests:
 
-## Notes
+```bash
+cd ingest/fetchlinks
+python -m unittest discover tests
+```
 
-- Bluesky uses the official atproto SDK.
-- Bluesky ingestion persists pagination cursor state in the database and resumes on later runs.
-- Log output is written to the path configured in config.json.
+Run web validation:
+
+```bash
+cd web
+npm run validate
+```
+
+For detailed setup notes, see `ingest/SETUP.md` and `web/README.md`.
