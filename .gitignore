@@ -1,4 +1,4 @@
-venv/
+.venv/
 data/logs/
 **/data/logs/
 fetch_links.log
@@ -11,3 +11,4 @@ __pycache__/
 *.py[cod]
 links.txt
 REVIEW_PLAN.md
+PLAN.md
