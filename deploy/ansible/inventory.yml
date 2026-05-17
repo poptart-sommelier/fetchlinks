@@ -1,0 +1,13 @@
+# Inventory for the Fetchlinks production VM.
+#
+# Replace ansible_host with the VM's public IP or DNS name.
+# `deploy` is the unprivileged SSH user with NOPASSWD sudo, created during
+# the one-time VM bootstrap (see PLAN.md, "VM Bootstrap").
+
+all:
+  hosts:
+    fetchlinks-prod:
+      ansible_host: REPLACE_WITH_VM_IP_OR_DNS
+      ansible_user: deploy
+      ansible_port: 22
+      ansible_python_interpreter: /usr/bin/python3

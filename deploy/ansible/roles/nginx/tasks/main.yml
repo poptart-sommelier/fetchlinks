@@ -1,0 +1,9 @@
+# nginx role
+# Placeholder — implemented in Phase F.
+# Will install nginx + certbot, template the site config from
+# deploy/nginx/fetchlinks-web.conf.example pointing at 127.0.0.1:3000,
+# and run certbot --nginx for fetchlinks_domain when set.
+
+- name: nginx role placeholder
+  ansible.builtin.debug:
+    msg: "nginx role not implemented yet (Phase F)."

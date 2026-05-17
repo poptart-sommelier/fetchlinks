@@ -1,0 +1,8 @@
+# node role
+# Placeholder — implemented in Phase E.
+# Will install Node.js LTS, run npm ci + npm run build in /opt/fetchlinks/web,
+# and install + enable the fetchlinks-web systemd service.
+
+- name: Node role placeholder
+  ansible.builtin.debug:
+    msg: "node role not implemented yet (Phase E)."

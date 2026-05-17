@@ -1,0 +1,23 @@
+# Top-level playbook. Applies every role in order to every host in inventory.
+# Run with:
+#   ansible-playbook site.yml
+# Dry-run with:
+#   ansible-playbook site.yml --check --diff
+# Limit to one role:
+#   ansible-playbook site.yml --tags common
+
+- name: Configure fetchlinks VM
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: common
+      tags: [common]
+    - role: python
+      tags: [python, ingest]
+    - role: node
+      tags: [node, web]
+    - role: web_app
+      tags: [web_app, env]
+    - role: nginx
+      tags: [nginx, tls]

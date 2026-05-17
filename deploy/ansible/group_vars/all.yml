@@ -1,0 +1,26 @@
+# Non-secret defaults shared by every host.
+# Secrets (env file contents, API keys) belong in an Ansible Vault file,
+# not here.
+
+fetchlinks_user: fetchlinks
+fetchlinks_group: fetchlinks
+
+fetchlinks_repo_url: https://github.com/poptart-sommelier/fetchlinks.git
+fetchlinks_repo_ref: master
+
+fetchlinks_app_dir: /opt/fetchlinks
+fetchlinks_data_dir: /var/lib/fetchlinks
+fetchlinks_etc_dir: /etc/fetchlinks
+
+fetchlinks_db_path: "{{ fetchlinks_data_dir }}/fetchlinks.db"
+
+# Versions
+fetchlinks_python_version: "3.12"
+fetchlinks_node_major: 24
+
+# Web service
+fetchlinks_web_port: 3000
+fetchlinks_web_host: 127.0.0.1
+
+# Ingest timer (systemd OnCalendar syntax)
+fetchlinks_ingest_oncalendar: "*:0/30"

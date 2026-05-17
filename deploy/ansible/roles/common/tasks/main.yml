@@ -1,0 +1,8 @@
+# common role
+# Placeholder — implemented in Phase C.
+# Will install base packages, create the fetchlinks user/dirs, configure
+# ufw, and harden sshd.
+
+- name: Common role placeholder
+  ansible.builtin.debug:
+    msg: "common role not implemented yet (Phase C)."

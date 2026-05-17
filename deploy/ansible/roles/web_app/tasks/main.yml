@@ -1,0 +1,9 @@
+# web_app role
+# Placeholder — implemented alongside Phases D/E.
+# Will render /etc/fetchlinks/{web,ingest}.env from Ansible Vault-encrypted
+# variables with correct ownership/permissions, and notify the systemd units
+# to restart on change.
+
+- name: web_app role placeholder
+  ansible.builtin.debug:
+    msg: "web_app role not implemented yet."

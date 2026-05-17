@@ -1,0 +1,6 @@
+# Per-host overrides for fetchlinks-prod. No secrets here.
+
+# Domain for nginx + certbot. Leave empty to skip TLS and serve HTTP only on
+# the configured server_name (or the public IP).
+fetchlinks_domain: ""
+fetchlinks_certbot_email: ""
