@@ -1,0 +1,20 @@
+# Build context for the web image is ./web, but keep this file at repo root
+# so docker honors it when context is ever expanded.
+**/.git
+**/.gitignore
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.next
+**/node_modules
+**/.vscode
+**/.idea
+**/*.log
+**/*.log.*
+**/data/logs
+**/db
+ingest/
+deploy/
+PLAN.md
+REVIEW_PLAN.md
+README.md
