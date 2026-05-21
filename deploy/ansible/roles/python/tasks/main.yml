@@ -1,8 +1,0 @@
-# python role
-# Placeholder — implemented in Phase D.
-# Will install Python, create the ingest venv, install ingest requirements,
-# and install the fetchlinks-ingest systemd service + timer.
-
-- name: Python role placeholder
-  ansible.builtin.debug:
-    msg: "python role not implemented yet (Phase D)."
