@@ -1,6 +1,0 @@
-# Galaxy roles and collections. Install with:
-#   ansible-galaxy install -r requirements.yml
-#
-# (Empty for now; add collections like community.general if a role needs them.)
-collections: []
-roles: []

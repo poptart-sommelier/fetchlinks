@@ -1,0 +1,24 @@
+[Unit]
+Description=Fetchlinks ingest (one-shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=fetchlinks
+Group=fetchlinks
+WorkingDirectory=/opt/fetchlinks/ingest/fetchlinks
+EnvironmentFile=-/etc/fetchlinks/ingest.env
+ExecStart=/opt/fetchlinks/.venv/bin/python /opt/fetchlinks/ingest/fetchlinks/fetch_links.py --config /etc/fetchlinks/config.json --sources /etc/fetchlinks/sources.json
+Nice=10
+TimeoutStartSec=30min
+SyslogIdentifier=fetchlinks-ingest
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fetchlinks /var/log/fetchlinks
+
+[Install]
+WantedBy=multi-user.target
