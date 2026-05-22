@@ -42,3 +42,7 @@ without changing code.
 - Bluesky ingestion persists pagination cursor state in the database and
   resumes on later runs.
 - Log output is written to `[paths].log_file` from `fetchlinks.toml`.
+- A separate one-shot, `retain.py`, prunes posts older than
+  `[retention].max_post_age_months` (falling back to
+  `[ingest].max_post_age_months`) and VACUUMs when enough pages are freed.
+  In production it runs weekly via `fetchlinks-retain.timer`.

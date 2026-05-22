@@ -14,6 +14,12 @@ max_post_age_months                  = 3
 excluded_url_host_keywords           = ["businessinsider", "economist.com"]
 excluded_url_or_description_keywords = ["trump", "covid"]
 
+[retention]
+# Pruning weekly via fetchlinks-retain.timer.
+# max_post_age_months omitted => falls back to [ingest].max_post_age_months.
+enabled                 = true
+vacuum_threshold_pages  = 1000
+
 # --- Sources ---------------------------------------------------------------
 # Credentials are read from the JSON files referenced by `credential_location`
 # (paths starting with ~ are expanded).

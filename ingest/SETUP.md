@@ -97,6 +97,9 @@ or relative to the TOML file's directory. The schema is:
 - `[paths]` — `db`, `log_file`, `log_level` (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`).
 - `[ingest]` — `max_post_age_months`, `excluded_url_host_keywords`,
   `excluded_url_or_description_keywords`.
+- `[retention]` — `enabled` (default `true`), optional `max_post_age_months`
+  (falls back to `[ingest].max_post_age_months`), `vacuum_threshold_pages`
+  (default `1000`). Drives the weekly retention job (`retain.py`).
 - `[sources.rss]` — `enabled`, `feeds_file` (path to a plain-text feed list).
 - `[sources.reddit]` — `enabled`, `credential_location`, `subreddits`,
   optional `listing_limit` (default 100) and `max_pages` (default 5).

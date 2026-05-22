@@ -159,10 +159,13 @@ log "Installing systemd units"
 install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-web.service"     /etc/systemd/system/
 install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"  /etc/systemd/system/
 install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.timer"    /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"  /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.timer"    /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now fetchlinks-web.service
 systemctl enable --now fetchlinks-ingest.timer
+systemctl enable --now fetchlinks-retain.timer
 systemctl restart   fetchlinks-web.service
 
 # ---- nginx + tls (optional) -------------------------------------------------
@@ -196,6 +199,7 @@ fi
 log "Done. Status:"
 systemctl --no-pager --lines=0 status fetchlinks-web.service     || true
 systemctl --no-pager --lines=0 status fetchlinks-ingest.timer    || true
+systemctl --no-pager --lines=0 status fetchlinks-retain.timer    || true
 
 cat <<EOF
 

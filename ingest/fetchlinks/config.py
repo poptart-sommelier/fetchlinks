@@ -41,6 +41,13 @@ class IngestPolicy:
 
 
 @dataclass(frozen=True)
+class RetentionPolicy:
+    enabled: bool = True
+    # When None, retention.run() falls back to IngestPolicy.max_post_age_months.
+    max_post_age_months: int | None = None
+    vacuum_threshold_pages: int = 1000
+
+@dataclass(frozen=True)
 class RssSource:
     enabled: bool
     feeds_file: Path
@@ -92,6 +99,7 @@ class AppConfig:
     paths: PathsConfig
     ingest: IngestPolicy
     sources: Sources
+    retention: RetentionPolicy = field(default_factory=RetentionPolicy)
     source_path: Path = field(default_factory=Path)
 
 
@@ -109,12 +117,14 @@ def load_config(config_path: Path) -> AppConfig:
     base = config_path.resolve().parent
     paths = _build_paths(raw.get('paths', {}), base)
     ingest = _build_ingest(raw.get('ingest', {}))
+    retention = _build_retention(raw.get('retention', {}))
     sources = _build_sources(raw.get('sources', {}), base)
 
     # Ensure log directory exists; mirrors old behaviour.
     paths.log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    return AppConfig(paths=paths, ingest=ingest, sources=sources, source_path=config_path)
+    return AppConfig(paths=paths, ingest=ingest, sources=sources,
+                     retention=retention, source_path=config_path)
 
 
 # --- Builders --------------------------------------------------------------
@@ -172,6 +182,28 @@ def _validate_keyword_list(name: str, value: Any) -> None:
     for kw in value:
         if not isinstance(kw, str) or not kw.strip():
             raise ValueError(f'[ingest] {name} must contain non-empty strings')
+
+
+def _build_retention(section: dict) -> RetentionPolicy:
+    if not isinstance(section, dict):
+        raise ValueError('[retention] must be a table')
+
+    enabled = bool(section.get('enabled', True))
+
+    max_age = section.get('max_post_age_months')
+    if max_age is not None:
+        if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age < 1:
+            raise ValueError('[retention] max_post_age_months must be a positive integer')
+
+    threshold = section.get('vacuum_threshold_pages', 1000)
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 0:
+        raise ValueError('[retention] vacuum_threshold_pages must be a non-negative integer')
+
+    return RetentionPolicy(
+        enabled=enabled,
+        max_post_age_months=max_age,
+        vacuum_threshold_pages=threshold,
+    )
 
 
 def _build_sources(section: dict, base: Path) -> Sources:
