@@ -5,20 +5,6 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 
-def excluded_url_host_keywords_from_sources(sources: dict) -> list[str]:
-    ingest_config = sources.get('ingest', {})
-    if not isinstance(ingest_config, dict):
-        return []
-    return normalize_host_keywords(ingest_config.get('excluded_url_host_keywords', []))
-
-
-def excluded_url_or_description_keywords_from_sources(sources: dict) -> list[str]:
-    ingest_config = sources.get('ingest', {})
-    if not isinstance(ingest_config, dict):
-        return []
-    return normalize_keywords(ingest_config.get('excluded_url_or_description_keywords', []))
-
-
 def normalize_keywords(keywords) -> list[str]:
     if not keywords or not isinstance(keywords, list):
         return []

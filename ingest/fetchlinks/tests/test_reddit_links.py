@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import reddit_links
+from config import RedditSource
 from utils import Post
 from utils import RedditPost
 
@@ -129,7 +130,11 @@ class RedditLinksTests(unittest.TestCase):
         self.assertIsNone(newest_fullname)
 
     def test_get_subreddits_uses_stored_state_and_session_headers(self):
-        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['Netsec']}
+        reddit_config = RedditSource(
+            enabled=True,
+            credential_location=Path('/tmp/reddit.json'),
+            subreddits=('Netsec',),
+        )
         db_path = Path('/tmp/db/fetchlinks.db')
 
         with patch.object(reddit_links.db_utils, 'db_get_reddit_states', return_value={'netsec': 't3_seen'}), \
@@ -174,9 +179,15 @@ class RedditPostExtractUrlsTests(unittest.TestCase):
 
 
 class RedditRunTests(unittest.TestCase):
+    def setUp(self):
+        self.reddit_config = RedditSource(
+            enabled=True,
+            credential_location=Path('/tmp/reddit.json'),
+            subreddits=('netsec',),
+        )
+        self.db_path = Path('/tmp/db/fetchlinks.db')
+
     def test_run_does_not_insert_when_no_posts_parse_but_persists_state(self):
-        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['netsec']}
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         state_updates = [('netsec', 't3_new')]
 
         with patch.object(
@@ -187,17 +198,14 @@ class RedditRunTests(unittest.TestCase):
              patch.object(reddit_links, 'parse_posts', return_value=[]) as parse_posts, \
              patch.object(reddit_links.db_utils, 'db_insert') as db_insert, \
              patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
-            reddit_links.run(reddit_config, db_info)
+            reddit_links.run(self.reddit_config, self.db_path)
 
-        db_path = reddit_links.Path('/tmp/db') / 'fetchlinks.db'
-        get_subreddits.assert_called_once_with(reddit_config, db_path)
+        get_subreddits.assert_called_once_with(self.reddit_config, self.db_path)
         parse_posts.assert_called_once()
         db_insert.assert_not_called()
-        set_states.assert_called_once_with(state_updates, db_path)
+        set_states.assert_called_once_with(state_updates, self.db_path)
 
     def test_run_inserts_parsed_posts_and_persists_state(self):
-        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['netsec']}
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         parsed_posts = [RedditPost(_make_reddit_post('https://example.com/article'))]
         state_updates = [('netsec', 't3_new')]
 
@@ -209,15 +217,12 @@ class RedditRunTests(unittest.TestCase):
              patch.object(reddit_links, 'parse_posts', return_value=parsed_posts), \
              patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
              patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
-            reddit_links.run(reddit_config, db_info)
+            reddit_links.run(self.reddit_config, self.db_path)
 
-        db_path = reddit_links.Path('/tmp/db') / 'fetchlinks.db'
-        db_insert.assert_called_once_with(parsed_posts, db_path)
-        set_states.assert_called_once_with(state_updates, db_path)
+        db_insert.assert_called_once_with(parsed_posts, self.db_path)
+        set_states.assert_called_once_with(state_updates, self.db_path)
 
     def test_run_filters_old_posts_before_insert_but_persists_state(self):
-        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['netsec']}
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         old_post = RedditPost(_make_reddit_post('https://example.com/old', created_utc=946684800))
         recent_post = RedditPost(_make_reddit_post('https://example.com/recent', created_utc=4102444800))
         state_updates = [('netsec', 't3_new')]
@@ -230,15 +235,12 @@ class RedditRunTests(unittest.TestCase):
              patch.object(reddit_links, 'parse_posts', return_value=[old_post, recent_post]), \
              patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
              patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
-            reddit_links.run(reddit_config, db_info, max_post_age_months=3)
+            reddit_links.run(self.reddit_config, self.db_path, max_post_age_months=3)
 
-        db_path = reddit_links.Path('/tmp/db') / 'fetchlinks.db'
-        db_insert.assert_called_once_with([recent_post], db_path)
-        set_states.assert_called_once_with(state_updates, db_path)
+        db_insert.assert_called_once_with([recent_post], self.db_path)
+        set_states.assert_called_once_with(state_updates, self.db_path)
 
     def test_run_filters_denied_host_keywords_before_insert(self):
-        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['netsec']}
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         state_updates = [('netsec', 't3_new')]
         post = Post()
         post.date_created = '2999-01-01 00:00:00'
@@ -250,14 +252,12 @@ class RedditRunTests(unittest.TestCase):
              patch.object(reddit_links, 'parse_posts', return_value=[post]), \
              patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
              patch.object(reddit_links.db_utils, 'db_set_reddit_states'):
-            reddit_links.run(reddit_config, db_info, excluded_url_host_keywords=['insider'])
+            reddit_links.run(self.reddit_config, self.db_path, excluded_url_host_keywords=['insider'])
 
         inserted_posts = db_insert.call_args.args[0]
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/allowed'])
 
     def test_run_filters_denied_url_or_description_keywords_before_insert(self):
-        reddit_config = {'credential_location': '/tmp/reddit.json', 'subreddits': ['netsec']}
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         state_updates = [('netsec', 't3_new')]
         blocked = Post()
         blocked.date_created = '2999-01-01 00:00:00'
@@ -275,12 +275,12 @@ class RedditRunTests(unittest.TestCase):
              patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
              patch.object(reddit_links.db_utils, 'db_set_reddit_states'):
             reddit_links.run(
-                reddit_config,
-                db_info,
+                self.reddit_config,
+                self.db_path,
                 excluded_url_or_description_keywords=['politics'],
             )
 
-        db_insert.assert_called_once_with([allowed], reddit_links.Path('/tmp/db') / 'fetchlinks.db')
+        db_insert.assert_called_once_with([allowed], self.db_path)
 
 
 if __name__ == '__main__':

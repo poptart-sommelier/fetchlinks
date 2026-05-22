@@ -88,32 +88,66 @@ Restrict permissions:
 chmod 600 ~/.fetchlinks/mastodon-infosec.json
 ```
 
-## 4) Configure sources
+## 4) Configure runtime
 
-Edit `ingest/fetchlinks/data/config/sources.json`:
+All non-secret runtime configuration lives in a single TOML file:
+`ingest/fetchlinks/data/config/fetchlinks.toml`. Path values may be absolute
+or relative to the TOML file's directory. The schema is:
 
-- Keep rss.enabled and reddit.enabled as needed.
-- To exclude extracted URLs by hostname keyword, add `ingest.excluded_url_host_keywords`. For example, `"insider"` blocks `www.businessinsider.com`, while `"businessinsider.com"` blocks that domain and its subdomains. Matching is case-insensitive and only checks URL hostnames, not paths or titles.
-- To skip entire posts by full URL or description keyword, add `ingest.excluded_url_or_description_keywords`. For example, `"politics"` blocks URLs containing `/politics/` and descriptions containing the word `politics`; description matching is case-insensitive and whole-word, while URL matching is case-insensitive substring matching.
-- Bluesky defaults to disabled. Set bluesky.enabled to true only if you created a Bluesky credential file.
-- Mastodon defaults to disabled. Set mastodon.enabled to true only if every enabled mastodon.instances entry has a credential file.
-- Ensure each credential_location path matches your local files.
+- `[paths]` — `db`, `log_file`, `log_level` (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`).
+- `[ingest]` — `max_post_age_months`, `excluded_url_host_keywords`,
+  `excluded_url_or_description_keywords`.
+- `[sources.rss]` — `enabled`, `feeds_file` (path to a plain-text feed list).
+- `[sources.reddit]` — `enabled`, `credential_location`, `subreddits`,
+  optional `listing_limit` (default 100) and `max_pages` (default 5).
+- `[sources.bluesky]` — `enabled`, `credential_location`, `timeline_limit`.
+- `[sources.mastodon]` — `enabled`, then one `[[sources.mastodon.instances]]`
+  block per account with `name`, `instance_url` (must be `https://`),
+  `credential_location`, `timeline` (must be `home`), `timeline_limit`.
 
-To import RSS feeds from a text file of URLs, run the RSS feed importer. By default it validates candidates, rejects feeds with no posts in the last 365 days, and appends active feeds to `sources.json`:
+Notes:
+
+- Each `credential_location` must point at an existing readable JSON file
+  (paths starting with `~` are expanded).
+- `excluded_url_host_keywords` are case-insensitive substring matches against
+  the URL hostname only. `"insider"` blocks `www.businessinsider.com`;
+  `"businessinsider.com"` blocks that domain and its subdomains.
+- `excluded_url_or_description_keywords` are case-insensitive: URL matches are
+  substrings, description matches are whole-word. `"politics"` blocks URLs
+  containing `/politics/` and descriptions containing the word `politics`.
+
+### RSS feeds file
+
+RSS feed URLs live in a separate plain-text file referenced by
+`[sources.rss].feeds_file` (default `rss_feeds.txt` next to the TOML). One
+URL per line; blank lines and lines beginning with `#` are ignored:
+
+```text
+# infosec
+https://example.com/feed.xml
+https://blog.example/rss
+```
+
+To bulk-import a list of candidate feeds, the importer validates each one,
+drops feeds with no posts in the last 365 days, and appends survivors to the
+configured feeds file (writing a `.bak` of the previous contents):
 
 ```bash
 cd fetchlinks
 python3 rss_feed_import.py --input /tmp/rss-list.txt
 ```
 
-To review first, use dry-run mode. It writes accepted feeds to `/tmp/rss-list.txt.pruned` without editing `sources.json`:
+To review first, use dry-run mode. It writes accepted feeds to
+`/tmp/rss-list.txt.pruned` without editing the feeds file:
 
 ```bash
 python3 rss_feed_import.py --input /tmp/rss-list.txt --dry-run
 python3 rss_feed_import.py --pruned /tmp/rss-list.txt.pruned
 ```
 
-Use `--abandoned-days N` to change the cutoff for rejecting feeds with no recent posts.
+Use `--abandoned-days N` to change the cutoff for rejecting feeds with no
+recent posts. Use `--feeds-file /path/to/rss_feeds.txt` to target a feeds
+file other than the default.
 
 ## 5) Run the backend
 
@@ -122,12 +156,13 @@ cd fetchlinks
 python3 fetch_links.py
 ```
 
-The default config files are `data/config/config.json` and `data/config/sources.json`.
-To use different files, pass `--config /path/to/config.json --sources /path/to/sources.json`.
+The default config file is `data/config/fetchlinks.toml`. To use a different
+file, pass `--config /path/to/fetchlinks.toml`.
 
-On first run, the backend initializes the SQLite database automatically if it does not exist.
+On first run, the backend initializes the SQLite database automatically if it
+does not exist.
 
 ## 6) Validate output
 
-- Database location is controlled by data/config/config.json.
-- Logs are written to the log_location path in data/config/config.json.
+- Database location is controlled by `[paths].db` in `fetchlinks.toml`.
+- Logs are written to `[paths].log_file` at `[paths].log_level`.

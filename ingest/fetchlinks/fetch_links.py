@@ -2,7 +2,6 @@
 import logging
 from logging import StreamHandler
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 # Custom libraries
 import rss_links
@@ -10,96 +9,57 @@ import reddit_links
 import bluesky_links
 import mastodon_links
 import db_setup
-import ingest_limits
-import startup_and_validate
-import url_filters
+import config as app_config
 
 
-def configure_logging(config):
-    logging_levels = {"CRITICAL": 50, "ERROR": 40, "WARNING": 30, "INFO": 20, "DEBUG": 10}
-
-    log_path = Path(config['log_info']['log_location'])
-    log_level_name = str(config['log_info'].get('log_level', 'INFO')).upper()
-    log_level = logging_levels.get(log_level_name, logging.INFO)
-    logging.basicConfig(handlers=[RotatingFileHandler(log_path, maxBytes=1000000, backupCount=5, encoding="utf8"),
-                                  StreamHandler()],
-                        level=log_level,
-                        format="%(asctime)s (%(module)s) %(levelname)s - %(message)s",
-                        datefmt="%d/%m/%Y %I:%M:%S %p")
+_LOG_LEVEL_VALUES = {"CRITICAL": 50, "ERROR": 40, "WARNING": 30, "INFO": 20, "DEBUG": 10}
 
 
-def fetch_links(config: dict, sources: dict):
-    """
-    Call all our fetch_links modules
-    :param config: app config info, mainly database stuff
-    :param sources: rss links, subreddits, etc...
-    :return: Nothing
-    """
-    max_post_age_months = ingest_limits.max_post_age_months_from_sources(sources)
-    excluded_url_host_keywords = url_filters.excluded_url_host_keywords_from_sources(sources)
-    excluded_url_or_description_keywords = url_filters.excluded_url_or_description_keywords_from_sources(sources)
-
-    rss_config = sources.get('rss')
-    if rss_config and rss_config.get('enabled', True):
-        rss_links.run(
-            rss_config['feeds'],
-            config['db_info'],
-            max_post_age_months,
-            excluded_url_host_keywords,
-            excluded_url_or_description_keywords,
-        )
-
-    reddit_config = sources.get('reddit')
-    if reddit_config and reddit_config.get('enabled', True):
-        reddit_links.run(
-            reddit_config,
-            config['db_info'],
-            max_post_age_months,
-            excluded_url_host_keywords,
-            excluded_url_or_description_keywords,
-        )
-
-    bluesky_config = sources.get('bluesky')
-    if bluesky_config and bluesky_config.get('enabled', False):
-        bluesky_links.run(
-            bluesky_config,
-            config['db_info'],
-            max_post_age_months,
-            excluded_url_host_keywords,
-            excluded_url_or_description_keywords,
-        )
-
-    mastodon_config = sources.get('mastodon')
-    if mastodon_config and mastodon_config.get('enabled', False):
-        mastodon_links.run(
-            mastodon_config,
-            config['db_info'],
-            max_post_age_months,
-            excluded_url_host_keywords,
-            excluded_url_or_description_keywords,
-        )
+def configure_logging(cfg: app_config.AppConfig) -> None:
+    log_level = _LOG_LEVEL_VALUES.get(cfg.paths.log_level, logging.INFO)
+    logging.basicConfig(
+        handlers=[
+            RotatingFileHandler(cfg.paths.log_file, maxBytes=1_000_000, backupCount=5, encoding="utf8"),
+            StreamHandler(),
+        ],
+        level=log_level,
+        format="%(asctime)s (%(module)s) %(levelname)s - %(message)s",
+        datefmt="%d/%m/%Y %I:%M:%S %p",
+    )
 
 
-def main():
+def fetch_links(cfg: app_config.AppConfig) -> None:
+    """Run every enabled ingest source."""
+    db_path = cfg.paths.db
+    max_age = cfg.ingest.max_post_age_months
+    host_kw = list(cfg.ingest.excluded_url_host_keywords)
+    desc_kw = list(cfg.ingest.excluded_url_or_description_keywords)
+
+    if cfg.sources.rss and cfg.sources.rss.enabled:
+        rss_links.run(list(cfg.sources.rss.feeds), db_path, max_age, host_kw, desc_kw)
+
+    if cfg.sources.reddit and cfg.sources.reddit.enabled:
+        reddit_links.run(cfg.sources.reddit, db_path, max_age, host_kw, desc_kw)
+
+    if cfg.sources.bluesky and cfg.sources.bluesky.enabled:
+        bluesky_links.run(cfg.sources.bluesky, db_path, max_age, host_kw, desc_kw)
+
+    if cfg.sources.mastodon and cfg.sources.mastodon.enabled:
+        mastodon_links.run(cfg.sources.mastodon, db_path, max_age, host_kw, desc_kw)
+
+
+def main() -> None:
     try:
-        # Parse args + config first so we know where to log to.
-        args = startup_and_validate.parse_arguments()
-        config = startup_and_validate.parse_config(args.config)
+        args = app_config.parse_arguments()
+        cfg = app_config.load_config(args.config)
 
-        # Setup logging BEFORE further validation so any errors below
-        # (e.g. bad sources file, missing credentials) hit the log file.
-        configure_logging(config)
+        # Set up logging before doing anything else so failures get logged.
+        configure_logging(cfg)
 
-        # Ensure DB schema exists. db_initial_setup is idempotent
-        # (CREATE TABLE IF NOT EXISTS), so it's safe to run every time
-        # and means new tables added later get created automatically.
-        db_setup.db_initial_setup(config['db_info']['db_location'], config['db_info']['db_name'])
+        # Idempotent schema setup.
+        db_setup.db_initial_setup(cfg.paths.db)
 
-        # Validate sources now that logging is up.
-        sources = startup_and_validate.parse_sources(args.sources)
-
-        # Actually do stuff
-        fetch_links(config, sources)
+        fetch_links(cfg)
     except Exception as exc:
         logging.exception('Fetch links failed: %s', exc)
         raise SystemExit(1) from exc

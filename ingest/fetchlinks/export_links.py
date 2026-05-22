@@ -1,32 +1,26 @@
 """Export URLs from the fetchlinks database to a plain-text file.
 
 Usage:
-    python export_links.py [--db PATH] [--out PATH] [--limit N]
+    python export_links.py [--config PATH] [--db PATH] [--out PATH] [--limit N]
 
 Defaults:
-    --db   data/config/... resolved from config.json (same as fetch_links.py)
-    --out  /tmp/links.txt
-    --limit  no limit
+    --config  data/config/fetchlinks.toml
+    --db      derived from --config (paths.db)
+    --out     data/links.txt
 """
 import argparse
-import json
 import sqlite3
 import sys
 from pathlib import Path
 
-DEFAULT_CONFIG = Path(__file__).parent / 'data' / 'config' / 'config.json'
-DEFAULT_OUT = Path(__file__).parent / 'data' / 'links.txt'
+import config as app_config
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+DEFAULT_OUT = SCRIPT_DIR / 'data' / 'links.txt'
 
 
 def resolve_db_path(config_path: Path) -> Path:
-    with config_path.open() as f:
-        cfg = json.load(f)
-    db_info = cfg['db_info']
-    db_path = Path(db_info['db_location']) / db_info['db_name']
-    if not db_path.is_absolute():
-        # Resolve relative to the script directory (same convention as fetch_links.py)
-        db_path = Path(__file__).parent / db_path
-    return db_path
+    return app_config.load_config(config_path).paths.db
 
 
 def export_links(db_path: Path, out_path: Path, limit: int | None) -> int:
@@ -55,8 +49,9 @@ def export_links(db_path: Path, out_path: Path, limit: int | None) -> int:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description='Export URLs from fetchlinks DB to a text file.')
-    parser.add_argument('--db', type=Path, help='Path to SQLite DB. Default: read from config.json')
-    parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG, help='Path to config.json')
+    parser.add_argument('--db', type=Path, help='Path to SQLite DB. Default: read from --config')
+    parser.add_argument('--config', type=Path, default=app_config.DEFAULT_CONFIG,
+                        help='Path to fetchlinks.toml')
     parser.add_argument('--out', type=Path, default=DEFAULT_OUT, help='Output text file path')
     parser.add_argument('--limit', type=int, default=None, help='Maximum number of URLs to export')
     args = parser.parse_args(argv)

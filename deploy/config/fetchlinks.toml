@@ -1,0 +1,52 @@
+# Fetchlinks runtime configuration (production).
+#
+# Installed by deploy/bootstrap.sh to /etc/fetchlinks/fetchlinks.toml.
+# Path values are absolute. Credentials live in separate JSON files
+# referenced by `credential_location`.
+
+[paths]
+db        = "/var/lib/fetchlinks/fetchlinks.db"
+log_file  = "/var/log/fetchlinks/fetch_links.log"
+log_level = "INFO"
+
+[ingest]
+max_post_age_months                  = 3
+excluded_url_host_keywords           = []
+excluded_url_or_description_keywords = []
+
+# --- Sources ---------------------------------------------------------------
+# Enable only the sources you have credentials for. The bootstrap script
+# leaves these disabled by default; flip `enabled = true` after dropping
+# credential files into /etc/fetchlinks/credentials/ (mode 0640 root:fetchlinks).
+
+[sources.rss]
+enabled    = true
+feeds_file = "/etc/fetchlinks/rss_feeds.txt"
+
+[sources.reddit]
+enabled             = false
+credential_location = "/etc/fetchlinks/credentials/reddit.json"
+subreddits          = [
+    "Netsec",
+    "Malware",
+    "Computerforensics",
+    "ReverseEngineering",
+    "BlueTeamSec",
+    "InfoSecNews",
+    "redteamsec",
+]
+
+[sources.bluesky]
+enabled             = false
+credential_location = "/etc/fetchlinks/credentials/bluesky.json"
+timeline_limit      = 50
+
+[sources.mastodon]
+enabled = false
+
+# [[sources.mastodon.instances]]
+# name                = "infosec"
+# instance_url        = "https://infosec.exchange"
+# credential_location = "/etc/fetchlinks/credentials/mastodon-infosec.json"
+# timeline            = "home"
+# timeline_limit      = 40

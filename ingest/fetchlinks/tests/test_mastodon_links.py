@@ -5,6 +5,25 @@ from unittest.mock import MagicMock, Mock, patch
 import requests
 
 import mastodon_links
+from config import MastodonInstance, MastodonSource
+
+
+def _instance(
+    name='infosec',
+    instance_url='https://infosec.exchange',
+    credential_location='/tmp/mastodon.json',
+    timeline='home',
+    timeline_limit=40,
+    enabled=True,
+):
+    return MastodonInstance(
+        name=name,
+        instance_url=instance_url,
+        credential_location=Path(credential_location),
+        timeline=timeline,
+        timeline_limit=timeline_limit,
+        enabled=enabled,
+    )
 
 
 def _status(
@@ -117,11 +136,7 @@ class FetchTimelinePageTests(unittest.TestCase):
             'Link': '<https://infosec.exchange/api/v1/timelines/home?max_id=8>; rel="next"'
         }
         session.get.return_value = response
-        instance_config = {
-            'name': 'infosec',
-            'instance_url': 'https://infosec.exchange/',
-            'timeline_limit': 999,
-        }
+        instance_config = _instance(instance_url='https://infosec.exchange/', timeline_limit=999)
 
         statuses, next_max_id = mastodon_links._fetch_timeline_page(session, instance_config, '10')
 
@@ -140,7 +155,7 @@ class FetchTimelinePageTests(unittest.TestCase):
         response.json.return_value = []
         response.headers = {}
         session.get.return_value = response
-        instance_config = {'name': 'infosec', 'instance_url': 'https://infosec.exchange'}
+        instance_config = _instance()
 
         mastodon_links._fetch_timeline_page(session, instance_config, '10', '8')
 
@@ -153,7 +168,7 @@ class FetchTimelinePageTests(unittest.TestCase):
     def test_returns_empty_on_request_error(self):
         session = MagicMock(spec=requests.Session)
         session.get.side_effect = requests.ConnectionError('boom')
-        instance_config = {'name': 'infosec', 'instance_url': 'https://infosec.exchange'}
+        instance_config = _instance()
 
         self.assertEqual(mastodon_links._fetch_timeline_page(session, instance_config, None), ([], None))
 
@@ -164,7 +179,7 @@ class FetchTimelinePageTests(unittest.TestCase):
         response.json.return_value = {'not': 'a list'}
         response.headers = {}
         session.get.return_value = response
-        instance_config = {'name': 'infosec', 'instance_url': 'https://infosec.exchange'}
+        instance_config = _instance()
 
         self.assertEqual(mastodon_links._fetch_timeline_page(session, instance_config, None), ([], None))
 
@@ -172,7 +187,7 @@ class FetchTimelinePageTests(unittest.TestCase):
 class FetchTimelinePagesTests(unittest.TestCase):
     def test_follows_next_max_id_until_no_more_pages(self):
         session = MagicMock(spec=requests.Session)
-        instance_config = {'name': 'infosec', 'instance_url': 'https://infosec.exchange'}
+        instance_config = _instance()
 
         with patch.object(mastodon_links, '_fetch_timeline_page') as fetch_page:
             fetch_page.side_effect = [
@@ -187,7 +202,7 @@ class FetchTimelinePagesTests(unittest.TestCase):
 
     def test_stops_at_max_pages(self):
         session = MagicMock(spec=requests.Session)
-        instance_config = {'name': 'infosec', 'instance_url': 'https://infosec.exchange'}
+        instance_config = _instance()
 
         with patch.object(mastodon_links, 'MAX_PAGES', 2), \
              patch.object(mastodon_links, '_fetch_timeline_page') as fetch_page:
@@ -204,12 +219,7 @@ class FetchTimelinePagesTests(unittest.TestCase):
 
 class RunInstanceTests(unittest.TestCase):
     def test_run_instance_fetches_inserts_and_persists_state(self):
-        instance_config = {
-            'name': 'infosec',
-            'instance_url': 'https://infosec.exchange/',
-            'credential_location': '/tmp/mastodon.json',
-            'timeline_limit': 40,
-        }
+        instance_config = _instance(instance_url='https://infosec.exchange/', timeline_limit=40)
         auth_client = Mock()
         auth_client.headers = {'Authorization': 'Bearer tok'}
         statuses = [_status('11', 'https://example.com/one'), _status('12', 'https://example.com/two')]
@@ -234,17 +244,13 @@ class RunInstanceTests(unittest.TestCase):
 
     def test_run_instance_skips_disabled_instance(self):
         with patch.object(mastodon_links, 'MastodonAuth') as auth_cls:
-            inserted = mastodon_links._run_instance({'enabled': False, 'name': 'infosec'}, Path('/tmp/db'))
+            inserted = mastodon_links._run_instance(_instance(enabled=False), Path('/tmp/db'))
 
         self.assertEqual(inserted, 0)
         auth_cls.assert_not_called()
 
     def test_run_instance_filters_old_posts_before_insert_but_persists_state(self):
-        instance_config = {
-            'name': 'infosec',
-            'instance_url': 'https://infosec.exchange/',
-            'credential_location': '/tmp/mastodon.json',
-        }
+        instance_config = _instance(instance_url='https://infosec.exchange/')
         auth_client = Mock()
         auth_client.headers = {'Authorization': 'Bearer tok'}
         statuses = [
@@ -267,11 +273,7 @@ class RunInstanceTests(unittest.TestCase):
         set_state.assert_called_once_with('infosec', 'https://infosec.exchange', '12', db_path)
 
     def test_run_instance_filters_denied_host_keywords_before_insert(self):
-        instance_config = {
-            'name': 'infosec',
-            'instance_url': 'https://infosec.exchange/',
-            'credential_location': '/tmp/mastodon.json',
-        }
+        instance_config = _instance(instance_url='https://infosec.exchange/')
         auth_client = Mock()
         auth_client.headers = {'Authorization': 'Bearer tok'}
         statuses = [
@@ -297,11 +299,7 @@ class RunInstanceTests(unittest.TestCase):
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
 
     def test_run_instance_filters_denied_url_or_description_keywords_before_insert(self):
-        instance_config = {
-            'name': 'infosec',
-            'instance_url': 'https://infosec.exchange/',
-            'credential_location': '/tmp/mastodon.json',
-        }
+        instance_config = _instance(instance_url='https://infosec.exchange/')
         auth_client = Mock()
         auth_client.headers = {'Authorization': 'Bearer tok'}
         statuses = [
@@ -336,26 +334,21 @@ class RunInstanceTests(unittest.TestCase):
 class RunTests(unittest.TestCase):
     def test_run_skips_when_disabled(self):
         with patch.object(mastodon_links, '_run_instance') as run_instance:
-            mastodon_links.run({'enabled': False}, {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'})
+            mastodon_links.run(MastodonSource(enabled=False, instances=()), Path('/tmp/db/fetchlinks.db'))
 
         run_instance.assert_not_called()
 
     def test_run_processes_each_instance(self):
-        config = {
-            'enabled': True,
-            'instances': [
-                {'name': 'infosec'},
-                {'name': 'hachyderm'},
-            ],
-        }
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
+        infosec = _instance(name='infosec')
+        hachyderm = _instance(name='hachyderm', instance_url='https://hachyderm.io')
+        config = MastodonSource(enabled=True, instances=(infosec, hachyderm))
+        db_path = Path('/tmp/db/fetchlinks.db')
 
         with patch.object(mastodon_links, '_run_instance', side_effect=[1, 2]) as run_instance:
-            mastodon_links.run(config, db_info)
+            mastodon_links.run(config, db_path)
 
-        db_path = Path('/tmp/db') / 'fetchlinks.db'
-        self.assertEqual(run_instance.call_args_list[0].args, ({'name': 'infosec'}, db_path, 3, [], []))
-        self.assertEqual(run_instance.call_args_list[1].args, ({'name': 'hachyderm'}, db_path, 3, [], []))
+        self.assertEqual(run_instance.call_args_list[0].args, (infosec, db_path, 3, [], []))
+        self.assertEqual(run_instance.call_args_list[1].args, (hachyderm, db_path, 3, [], []))
 
 
 if __name__ == '__main__':

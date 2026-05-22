@@ -87,6 +87,7 @@ install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${DATA_DIR}"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${LOG_DIR}"
 install -d -o root          -g "${APP_GROUP}" -m 0750 "${ETC_DIR}"
+install -d -o root          -g "${APP_GROUP}" -m 0750 "${ETC_DIR}/credentials"
 
 # ---- firewall ---------------------------------------------------------------
 
@@ -128,9 +129,16 @@ sudo -u "${APP_USER}" bash -c "cd '${APP_DIR}/web' && npm ci && npm run build"
 
 # ---- config + env files -----------------------------------------------------
 
-log "Installing /etc/fetchlinks/config.json (non-secret)"
+log "Installing /etc/fetchlinks/fetchlinks.toml (non-secret)"
 install -o root -g "${APP_GROUP}" -m 0640 \
-    "${APP_DIR}/deploy/config/config.json" "${ETC_DIR}/config.json"
+    "${APP_DIR}/deploy/config/fetchlinks.toml" "${ETC_DIR}/fetchlinks.toml"
+
+# Seed rss_feeds.txt only on first install; preserve operator edits on upgrade.
+if [[ ! -f "${ETC_DIR}/rss_feeds.txt" ]]; then
+    log "Seeding ${ETC_DIR}/rss_feeds.txt from example"
+    install -o root -g "${APP_GROUP}" -m 0640 \
+        "${APP_DIR}/deploy/config/rss_feeds.txt" "${ETC_DIR}/rss_feeds.txt"
+fi
 
 # Seed web.env from the example if not already present.
 if [[ ! -f "${ETC_DIR}/web.env" ]]; then
@@ -193,11 +201,16 @@ cat <<EOF
 
 ------------------------------------------------------------
 Manual steps still required:
-  1. Place a real sources.json (with API credentials) at:
-       ${ETC_DIR}/sources.json   (mode 0640 root:${APP_GROUP})
-  2. (Optional) drop an existing DB snapshot at:
+  1. Drop credential files referenced by ${ETC_DIR}/fetchlinks.toml
+     into ${ETC_DIR}/credentials/ (mode 0640 root:${APP_GROUP}),
+     e.g. reddit.json, bluesky.json, mastodon-<instance>.json.
+  2. Edit ${ETC_DIR}/fetchlinks.toml and flip `enabled = true`
+     for each source you have credentials for.
+  3. (Optional) edit ${ETC_DIR}/rss_feeds.txt to seed RSS feeds,
+     or use rss_feed_import.py to bulk-import.
+  4. (Optional) drop an existing DB snapshot at:
        ${DATA_DIR}/fetchlinks.db
-  3. Trigger an ingest run to verify:
+  5. Trigger an ingest run to verify:
        sudo systemctl start fetchlinks-ingest.service
        sudo journalctl -u fetchlinks-ingest.service -n 50 --no-pager
 ------------------------------------------------------------

@@ -7,6 +7,7 @@ import db_utils
 import ingest_limits
 import url_filters
 from auth import BlueskyAuth
+from config import BlueskySource
 from utils import BlueskyPost, extract_urls_from_text
 
 logger = logging.getLogger(__name__)
@@ -153,24 +154,22 @@ def _fetch_timeline_page(client, cursor: Optional[str], limit: int) -> Tuple[Lis
 
 
 def run(
-    bluesky_config: dict,
-    db_info: dict,
+    bluesky_config: BlueskySource,
+    db_path: Path,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: List[str] | None = None,
     excluded_url_or_description_keywords: List[str] | None = None,
 ):
-    if not bluesky_config.get('enabled', False):
+    if not bluesky_config.enabled:
         logger.info('Bluesky source is disabled; skipping')
         return
 
-    db_full_path = Path(db_info['db_location']) / db_info['db_name']
-    timeline_limit = int(bluesky_config.get('timeline_limit', DEFAULT_TIMELINE_LIMIT))
-    timeline_limit = max(1, min(timeline_limit, MAX_TIMELINE_LIMIT))
+    timeline_limit = max(1, min(bluesky_config.timeline_limit, MAX_TIMELINE_LIMIT))
 
-    auth_client = BlueskyAuth(bluesky_config['credential_location'])
+    auth_client = BlueskyAuth(str(bluesky_config.credential_location))
     client = auth_client.get_client()
 
-    previous_cursor = db_utils.db_get_bluesky_cursor(db_full_path)
+    previous_cursor = db_utils.db_get_bluesky_cursor(db_path)
 
     feed_items: List[Dict[str, Any]] = []
     cursor = previous_cursor
@@ -238,8 +237,8 @@ def run(
         excluded_url_or_description_keywords or [],
         'Bluesky',
     )
-    inserted_count = db_utils.db_insert(recent_posts, db_full_path)
-    db_utils.db_set_bluesky_cursor(next_cursor, db_full_path)
+    inserted_count = db_utils.db_insert(recent_posts, db_path)
+    db_utils.db_set_bluesky_cursor(next_cursor, db_path)
 
     logger.info(
         'Parsed %s Bluesky posts (skipped %s no-links, %s missing-fields), %s age-eligible, inserted %s new rows, cursor advanced=%s',

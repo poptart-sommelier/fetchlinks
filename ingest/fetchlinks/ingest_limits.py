@@ -9,13 +9,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_POST_AGE_MONTHS = 3
 
 
-def max_post_age_months_from_sources(sources: dict) -> int:
-    ingest_config = sources.get('ingest', {})
-    if not isinstance(ingest_config, dict):
-        return DEFAULT_MAX_POST_AGE_MONTHS
-    return ingest_config.get('max_post_age_months', DEFAULT_MAX_POST_AGE_MONTHS)
-
-
 def _parse_post_datetime(date_value: str) -> datetime | None:
     if not date_value:
         return None

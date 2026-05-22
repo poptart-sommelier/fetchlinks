@@ -6,17 +6,6 @@ import ingest_limits
 
 
 class IngestLimitsTests(unittest.TestCase):
-    def test_default_max_post_age_months_from_sources(self):
-        self.assertEqual(
-            ingest_limits.max_post_age_months_from_sources({}),
-            ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
-        )
-
-    def test_configured_max_post_age_months_from_sources(self):
-        sources = {'ingest': {'max_post_age_months': 6}}
-
-        self.assertEqual(ingest_limits.max_post_age_months_from_sources(sources), 6)
-
     def test_filter_keeps_posts_on_cutoff_boundary(self):
         posts = [SimpleNamespace(date_created='2026-01-26 12:00:00')]
 

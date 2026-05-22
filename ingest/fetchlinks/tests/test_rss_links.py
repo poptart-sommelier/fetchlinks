@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -233,8 +234,10 @@ class FetchFeedsTests(unittest.TestCase):
 
 
 class RunTests(unittest.TestCase):
+    def setUp(self):
+        self.db_path = Path('/tmp/db/fetchlinks.db')
+
     def test_run_persists_feed_state_even_when_no_posts(self):
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         feed_links = ['https://a.example/feed.xml', 'https://b.example/feed.xml']
         cached_states = {'https://a.example/feed.xml': ('old-etag', 'old-lm')}
         fetch_results = [
@@ -247,20 +250,18 @@ class RunTests(unittest.TestCase):
              patch.object(rss_links.db_utils, 'db_set_rss_feed_states') as set_states, \
              patch.object(rss_links, 'parse_posts', return_value=[]) as parse_posts, \
              patch.object(rss_links.db_utils, 'db_insert') as db_insert:
-            rss_links.run(feed_links, db_info)
+            rss_links.run(feed_links, self.db_path)
 
-        db_path = rss_links.Path('/tmp/db') / 'fetchlinks.db'
-        get_states.assert_called_once_with(db_path)
+        get_states.assert_called_once_with(self.db_path)
         fetch_feeds.assert_called_once_with(feed_links, cached_states)
         set_states.assert_called_once_with([
             ('https://a.example/feed.xml', 'new-etag', 'new-lm', 304),
             ('https://b.example/feed.xml', '', '', 0),
-        ], db_path)
+        ], self.db_path)
         parse_posts.assert_called_once_with(fetch_results)
         db_insert.assert_not_called()
 
     def test_run_inserts_parsed_posts(self):
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         parsed_posts = [object()]
 
         with patch.object(rss_links.db_utils, 'db_get_rss_feed_states', return_value={}), \
@@ -268,12 +269,11 @@ class RunTests(unittest.TestCase):
              patch.object(rss_links.db_utils, 'db_set_rss_feed_states'), \
              patch.object(rss_links, 'parse_posts', return_value=parsed_posts), \
              patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
-            rss_links.run(['https://feed.example/rss.xml'], db_info)
+            rss_links.run(['https://feed.example/rss.xml'], self.db_path)
 
-        db_insert.assert_called_once_with(parsed_posts, rss_links.Path('/tmp/db') / 'fetchlinks.db')
+        db_insert.assert_called_once_with(parsed_posts, self.db_path)
 
     def test_run_filters_old_posts_before_insert(self):
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         old_post = SimpleNamespace(date_created='2000-01-01 00:00:00')
         recent_post = SimpleNamespace(date_created='2999-01-01 00:00:00')
 
@@ -282,12 +282,11 @@ class RunTests(unittest.TestCase):
              patch.object(rss_links.db_utils, 'db_set_rss_feed_states'), \
              patch.object(rss_links, 'parse_posts', return_value=[old_post, recent_post]), \
              patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
-            rss_links.run(['https://feed.example/rss.xml'], db_info, max_post_age_months=3)
+            rss_links.run(['https://feed.example/rss.xml'], self.db_path, max_post_age_months=3)
 
-        db_insert.assert_called_once_with([recent_post], rss_links.Path('/tmp/db') / 'fetchlinks.db')
+        db_insert.assert_called_once_with([recent_post], self.db_path)
 
     def test_run_filters_denied_host_keywords_before_insert(self):
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         post = Post()
         post.date_created = '2999-01-01 00:00:00'
         post.add_url('https://www.businessinsider.com/story')
@@ -299,13 +298,12 @@ class RunTests(unittest.TestCase):
              patch.object(rss_links.db_utils, 'db_set_rss_feed_states'), \
              patch.object(rss_links, 'parse_posts', return_value=[post]), \
              patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
-            rss_links.run(['https://feed.example/rss.xml'], db_info, excluded_url_host_keywords=['insider'])
+            rss_links.run(['https://feed.example/rss.xml'], self.db_path, excluded_url_host_keywords=['insider'])
 
         inserted_posts = db_insert.call_args.args[0]
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/allowed'])
 
     def test_run_filters_denied_url_or_description_keywords_before_insert(self):
-        db_info = {'db_location': '/tmp/db', 'db_name': 'fetchlinks.db'}
         blocked = Post()
         blocked.date_created = '2999-01-01 00:00:00'
         blocked.description = 'Politics story'
@@ -324,11 +322,11 @@ class RunTests(unittest.TestCase):
              patch.object(rss_links.db_utils, 'db_insert', return_value=1) as db_insert:
             rss_links.run(
                 ['https://feed.example/rss.xml'],
-                db_info,
+                self.db_path,
                 excluded_url_or_description_keywords=['politics'],
             )
 
-        db_insert.assert_called_once_with([allowed], rss_links.Path('/tmp/db') / 'fetchlinks.db')
+        db_insert.assert_called_once_with([allowed], self.db_path)
 
 
 if __name__ == '__main__':
