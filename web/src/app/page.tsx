@@ -153,7 +153,9 @@ function PageHeader({
   return (
     <header className="page-header">
       <div className="page-title">
-        <p className="eyebrow">Fetchlinks</p>
+        <p className="eyebrow">
+          Fetchlinks &middot; <Link href="/admin/feeds">admin</Link>
+        </p>
         <h1>Latest posts</h1>
       </div>
       {page ? (

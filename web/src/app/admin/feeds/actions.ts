@@ -1,0 +1,61 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { loadAppConfig } from "../../../server/config";
+import {
+  addRssFeed,
+  restoreRssFeed,
+  setRssFeedEnabled,
+  softDeleteRssFeed,
+  withWritableFetchlinksDatabase,
+} from "../../../server/feeds";
+
+const ADMIN_PATH = "/admin/feeds";
+
+function parseFeedId(value: FormDataEntryValue | null): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error("Invalid feed id.");
+  }
+  return parsed;
+}
+
+export async function addFeedAction(formData: FormData): Promise<void> {
+  const url = String(formData.get("feed_url") ?? "");
+  const config = loadAppConfig(process.env);
+  withWritableFetchlinksDatabase(config, (db) => addRssFeed(db, url));
+  revalidatePath(ADMIN_PATH);
+}
+
+export async function enableFeedAction(formData: FormData): Promise<void> {
+  const feedId = parseFeedId(formData.get("feed_id"));
+  const config = loadAppConfig(process.env);
+  withWritableFetchlinksDatabase(config, (db) =>
+    setRssFeedEnabled(db, feedId, true),
+  );
+  revalidatePath(ADMIN_PATH);
+}
+
+export async function disableFeedAction(formData: FormData): Promise<void> {
+  const feedId = parseFeedId(formData.get("feed_id"));
+  const config = loadAppConfig(process.env);
+  withWritableFetchlinksDatabase(config, (db) =>
+    setRssFeedEnabled(db, feedId, false),
+  );
+  revalidatePath(ADMIN_PATH);
+}
+
+export async function deleteFeedAction(formData: FormData): Promise<void> {
+  const feedId = parseFeedId(formData.get("feed_id"));
+  const config = loadAppConfig(process.env);
+  withWritableFetchlinksDatabase(config, (db) => softDeleteRssFeed(db, feedId));
+  revalidatePath(ADMIN_PATH);
+}
+
+export async function restoreFeedAction(formData: FormData): Promise<void> {
+  const feedId = parseFeedId(formData.get("feed_id"));
+  const config = loadAppConfig(process.env);
+  withWritableFetchlinksDatabase(config, (db) => restoreRssFeed(db, feedId));
+  revalidatePath(ADMIN_PATH);
+}
