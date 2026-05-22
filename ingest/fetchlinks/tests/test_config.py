@@ -142,5 +142,37 @@ class LoadConfigTests(unittest.TestCase):
                 app_config.load_config(cfg)
 
 
+class RetentionConfigTests(unittest.TestCase):
+    def test_defaults_when_section_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = app_config.load_config(_toml(Path(tmp)))
+            self.assertTrue(cfg.retention.enabled)
+            self.assertIsNone(cfg.retention.max_post_age_months)
+            self.assertEqual(cfg.retention.vacuum_threshold_pages, 1000)
+
+    def test_explicit_values_are_loaded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_path = _toml(
+                Path(tmp),
+                extra='\n[retention]\nenabled = false\nmax_post_age_months = 6\nvacuum_threshold_pages = 250\n',
+            )
+            cfg = app_config.load_config(cfg_path)
+            self.assertFalse(cfg.retention.enabled)
+            self.assertEqual(cfg.retention.max_post_age_months, 6)
+            self.assertEqual(cfg.retention.vacuum_threshold_pages, 250)
+
+    def test_invalid_max_age_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = _toml(Path(tmp), extra='\n[retention]\nmax_post_age_months = 0\n')
+            with self.assertRaises(ValueError):
+                app_config.load_config(cfg)
+
+    def test_negative_threshold_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = _toml(Path(tmp), extra='\n[retention]\nvacuum_threshold_pages = -1\n')
+            with self.assertRaises(ValueError):
+                app_config.load_config(cfg)
+
+
 if __name__ == '__main__':
     unittest.main()

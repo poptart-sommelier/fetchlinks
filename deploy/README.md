@@ -17,7 +17,9 @@ deploy/
     ├── fetchlinks-web.service         Next.js web app
     ├── fetchlinks-web.env.example     env file template for the web service
     ├── fetchlinks-ingest.service      Python ingest one-shot
-    └── fetchlinks-ingest.timer        ingest schedule (every 30 min)
+    ├── fetchlinks-ingest.timer        ingest schedule (every 30 min)
+    ├── fetchlinks-retain.service      weekly DB retention one-shot
+    └── fetchlinks-retain.timer        retention schedule (Sun 03:30)
 ```
 
 ## First-time install
@@ -88,9 +90,11 @@ sudo FETCHLINKS_REPO_REF=v1.2.3 /opt/fetchlinks/deploy/bootstrap.sh
 ```bash
 systemctl status fetchlinks-web.service
 systemctl status fetchlinks-ingest.timer
-systemctl list-timers fetchlinks-ingest.timer
+systemctl status fetchlinks-retain.timer
+systemctl list-timers fetchlinks-ingest.timer fetchlinks-retain.timer
 journalctl -u fetchlinks-web.service -f
 journalctl -u fetchlinks-ingest.service --since '1 hour ago'
+journalctl -u fetchlinks-retain.service --since '7 days ago'
 ```
 
 ## Filesystem layout on the VM

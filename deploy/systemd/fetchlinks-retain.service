@@ -1,0 +1,24 @@
+[Unit]
+Description=Fetchlinks retention (prune old posts, optional VACUUM)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=fetchlinks
+Group=fetchlinks
+WorkingDirectory=/opt/fetchlinks/ingest/fetchlinks
+EnvironmentFile=-/etc/fetchlinks/ingest.env
+ExecStart=/opt/fetchlinks/.venv/bin/python /opt/fetchlinks/ingest/fetchlinks/retain.py --config /etc/fetchlinks/fetchlinks.toml
+Nice=10
+TimeoutStartSec=30min
+SyslogIdentifier=fetchlinks-retain
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fetchlinks /var/log/fetchlinks
+
+[Install]
+WantedBy=multi-user.target
