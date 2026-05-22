@@ -8,6 +8,7 @@ Ubuntu 24.04 VM.
 ```
 deploy/
 ├── bootstrap.sh                       one-shot installer / updater (run on VM)
+├── tls.sh                             nginx + Let's Encrypt provisioner (run after bootstrap)
 ├── config/
 │   ├── fetchlinks.toml                production ingest config (paths, ingest, sources)
 │   └── rss_feeds.txt                  seed RSS feed list (one URL per line, used only on first install)
@@ -34,13 +35,11 @@ deploy/
     ```bash
     sudo apt-get update && sudo apt-get install -y git
     sudo git clone https://github.com/poptart-sommelier/fetchlinks.git /opt/fetchlinks
-    sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
-         FETCHLINKS_EMAIL=you@example.com \
-         /opt/fetchlinks/deploy/bootstrap.sh
+    sudo /opt/fetchlinks/deploy/bootstrap.sh
     ```
 
-    Omit `FETCHLINKS_DOMAIN`/`FETCHLINKS_EMAIL` if you don't want nginx + TLS
-    on this run; you can re-run the script later with them set.
+    `bootstrap.sh` installs the app, services, and firewall rules. It does
+    **not** touch nginx or TLS — see step 7 for that.
 
 4. Drop your API credential files into `/etc/fetchlinks/credentials/` and
    enable the matching sources in `/etc/fetchlinks/fetchlinks.toml`:
@@ -85,6 +84,18 @@ deploy/
     sudo systemctl start fetchlinks-ingest.service
     sudo journalctl -u fetchlinks-ingest.service -n 50 --no-pager
     ```
+
+7. (Optional) point a DNS record at the VM, then provision nginx + Let's
+   Encrypt TLS with the dedicated script:
+
+    ```bash
+    sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
+         FETCHLINKS_EMAIL=you@example.com \
+         /opt/fetchlinks/deploy/tls.sh
+    ```
+
+    `tls.sh` is idempotent — re-run it to rotate cert metadata or after
+    changing the domain. Renewals happen automatically via `certbot.timer`.
 
 ## Updating an existing VM
 
