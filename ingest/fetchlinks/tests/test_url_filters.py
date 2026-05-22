@@ -92,18 +92,6 @@ class FilterPostsTests(unittest.TestCase):
         self.assertEqual(filtered, [post])
         self.assertEqual(post.urls, ['https://www.businessinsider.com/story'])
 
-    def test_reads_keywords_from_sources(self):
-        sources = {
-            'ingest': {
-                'excluded_url_host_keywords': [' Insider ', '', 12, 'businessinsider.com'],
-            },
-        }
-
-        self.assertEqual(
-            url_filters.excluded_url_host_keywords_from_sources(sources),
-            ['insider', 'businessinsider.com'],
-        )
-
     def test_full_url_keyword_skips_post(self):
         blocked = _make_post(['https://example.com/news/politics/story'])
         allowed = _make_post(['https://example.com/news/technology/story'])
@@ -141,18 +129,6 @@ class FilterPostsTests(unittest.TestCase):
         filtered = url_filters.filter_posts_by_url_or_description_keywords([post], [], 'test')
 
         self.assertEqual(filtered, [post])
-
-    def test_reads_url_or_description_keywords_from_sources(self):
-        sources = {
-            'ingest': {
-                'excluded_url_or_description_keywords': [' Politics ', '', 12, 'trump'],
-            },
-        }
-
-        self.assertEqual(
-            url_filters.excluded_url_or_description_keywords_from_sources(sources),
-            ['politics', 'trump'],
-        )
 
 
 if __name__ == '__main__':

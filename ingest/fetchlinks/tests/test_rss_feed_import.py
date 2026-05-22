@@ -1,6 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-import json
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -32,11 +31,11 @@ def _rss_feed(
 </rss>'''.encode('utf-8')
 
 
-def _write_sources(path: Path, feeds=None):
-    path.write_text(
-        json.dumps({'rss': {'enabled': True, 'feeds': feeds or []}}, indent=4) + '\n',
-        encoding='utf-8',
-    )
+def _write_feeds_file(path: Path, feeds=None):
+    lines = ['# managed by tests\n']
+    for feed in feeds or []:
+        lines.append(f'{feed}\n')
+    path.write_text(''.join(lines), encoding='utf-8')
 
 
 def _quiet_call(func, *args, **kwargs):
@@ -245,10 +244,10 @@ class ImportWorkflowTests(unittest.TestCase):
     def test_dry_run_writes_pruned_without_modifying_sources(self):
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / 'rss-list.txt'
-            sources_path = Path(tmp) / 'sources.json'
+            feeds_path = Path(tmp) / 'rss_feeds.txt'
             input_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _write_sources(sources_path, ['https://existing.example/rss'])
-            original_sources = sources_path.read_text(encoding='utf-8')
+            _write_feeds_file(feeds_path, ['https://existing.example/rss'])
+            original_feeds = feeds_path.read_text(encoding='utf-8')
             checks = [importer.FeedCheck(
                 input_url='https://new.example/feed.xml',
                 feed_url='https://new.example/feed.xml',
@@ -258,18 +257,18 @@ class ImportWorkflowTests(unittest.TestCase):
             )]
 
             with patch.object(importer, 'check_candidates', return_value=checks):
-                added = _quiet_call(importer.import_from_input, input_path, sources_path, dry_run=True, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path, feeds_path, dry_run=True, abandoned_days=365)
 
             self.assertEqual(added, 0)
-            self.assertEqual(sources_path.read_text(encoding='utf-8'), original_sources)
+            self.assertEqual(feeds_path.read_text(encoding='utf-8'), original_feeds)
             self.assertEqual((Path(tmp) / 'rss-list.txt.pruned').read_text(encoding='utf-8'), 'https://new.example/feed.xml\n')
 
     def test_dry_run_excludes_same_site_duplicate_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / 'rss-list.txt'
-            sources_path = Path(tmp) / 'sources.json'
+            feeds_path = Path(tmp) / 'rss_feeds.txt'
             input_path.write_text('https://trustedsec.com/feed.rss\n', encoding='utf-8')
-            _write_sources(sources_path, ['https://www.trustedsec.com/feed/'])
+            _write_feeds_file(feeds_path, ['https://www.trustedsec.com/feed/'])
             candidate_check = importer.FeedCheck(
                 input_url='https://trustedsec.com/feed.rss',
                 feed_url='https://trustedsec.com/feed.rss',
@@ -291,7 +290,7 @@ class ImportWorkflowTests(unittest.TestCase):
 
             with patch.object(importer, 'check_candidates', return_value=[candidate_check]), \
                  patch.object(importer, 'check_feed', return_value=existing_check):
-                added = _quiet_call(importer.import_from_input, input_path, sources_path, dry_run=True, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path, feeds_path, dry_run=True, abandoned_days=365)
 
             self.assertEqual(added, 0)
             self.assertEqual((Path(tmp) / 'rss-list.txt.pruned').read_text(encoding='utf-8'), '')
@@ -299,9 +298,9 @@ class ImportWorkflowTests(unittest.TestCase):
     def test_default_input_mode_applies_and_writes_backup(self):
         with tempfile.TemporaryDirectory() as tmp:
             input_path = Path(tmp) / 'rss-list.txt'
-            sources_path = Path(tmp) / 'sources.json'
+            feeds_path = Path(tmp) / 'rss_feeds.txt'
             input_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _write_sources(sources_path, ['https://existing.example/rss'])
+            _write_feeds_file(feeds_path, ['https://existing.example/rss'])
             checks = [importer.FeedCheck(
                 input_url='https://new.example/feed.xml',
                 feed_url='https://new.example/feed.xml',
@@ -311,26 +310,29 @@ class ImportWorkflowTests(unittest.TestCase):
             )]
 
             with patch.object(importer, 'check_candidates', return_value=checks):
-                added = _quiet_call(importer.import_from_input, input_path, sources_path, dry_run=False, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path, feeds_path, dry_run=False, abandoned_days=365)
 
-            sources = json.loads(sources_path.read_text(encoding='utf-8'))
             self.assertEqual(added, 1)
-            self.assertIn('https://new.example/feed.xml', sources['rss']['feeds'])
-            self.assertTrue((Path(tmp) / 'sources.json.bak').exists())
+            updated_feeds = importer.load_existing_feeds(feeds_path)
+            self.assertIn('https://new.example/feed.xml', updated_feeds)
+            # Existing feed (and any preceding comments) preserved.
+            self.assertIn('https://existing.example/rss', updated_feeds)
+            self.assertIn('# managed by tests', feeds_path.read_text(encoding='utf-8'))
+            self.assertTrue((Path(tmp) / 'rss_feeds.txt.bak').exists())
 
     def test_pruned_mode_applies_without_network_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
             pruned_path = Path(tmp) / 'rss-list.txt.pruned'
-            sources_path = Path(tmp) / 'sources.json'
+            feeds_path = Path(tmp) / 'rss_feeds.txt'
             pruned_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _write_sources(sources_path, ['https://existing.example/rss'])
+            _write_feeds_file(feeds_path, ['https://existing.example/rss'])
 
             with patch.object(importer, 'check_candidates') as check_candidates:
-                added = _quiet_call(importer.import_from_pruned, pruned_path, sources_path, dry_run=False)
+                added = _quiet_call(importer.import_from_pruned, pruned_path, feeds_path, dry_run=False)
 
-            sources = json.loads(sources_path.read_text(encoding='utf-8'))
+            updated_feeds = importer.load_existing_feeds(feeds_path)
             self.assertEqual(added, 1)
-            self.assertIn('https://new.example/feed.xml', sources['rss']['feeds'])
+            self.assertIn('https://new.example/feed.xml', updated_feeds)
             check_candidates.assert_not_called()
 
     def test_parse_args_rejects_abandoned_days_with_pruned(self):

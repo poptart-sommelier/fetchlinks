@@ -10,6 +10,7 @@ import db_utils
 import ingest_limits
 import url_filters
 from auth import MastodonAuth
+from config import MastodonInstance, MastodonSource
 from utils import MastodonPost, extract_urls_from_text
 
 logger = logging.getLogger(__name__)
@@ -119,14 +120,12 @@ def _next_max_id_from_link_header(link_header: str) -> str | None:
 
 def _fetch_timeline_page(
     session: requests.Session,
-    instance_config: dict,
+    instance_config: MastodonInstance,
     since_id: str | None,
     max_id: str | None = None,
 ) -> tuple[list[dict], str | None]:
-    timeline = instance_config.get('timeline', 'home')
-    timeline_url = _build_timeline_url(instance_config['instance_url'], timeline)
-    limit = int(instance_config.get('timeline_limit', DEFAULT_TIMELINE_LIMIT))
-    limit = max(1, min(limit, MAX_TIMELINE_LIMIT))
+    timeline_url = _build_timeline_url(instance_config.instance_url, instance_config.timeline)
+    limit = max(1, min(instance_config.timeline_limit, MAX_TIMELINE_LIMIT))
     params = {'limit': limit}
     if since_id:
         params['since_id'] = since_id
@@ -138,25 +137,25 @@ def _fetch_timeline_page(
         response.raise_for_status()
         payload = response.json()
     except ValueError as exc:
-        logger.error('Invalid JSON while retrieving Mastodon %s: %s', instance_config['name'], exc)
+        logger.error('Invalid JSON while retrieving Mastodon %s: %s', instance_config.name, exc)
         return [], None
     except requests.RequestException as exc:
-        logger.error('Request error while retrieving Mastodon %s: %s', instance_config['name'], exc)
+        logger.error('Request error while retrieving Mastodon %s: %s', instance_config.name, exc)
         return [], None
     if not isinstance(payload, list):
-        logger.error('Unexpected Mastodon payload shape for %s', instance_config['name'])
+        logger.error('Unexpected Mastodon payload shape for %s', instance_config.name)
         return [], None
     return payload, _next_max_id_from_link_header(response.headers.get('Link', ''))
 
 
-def _fetch_timeline_pages(session: requests.Session, instance_config: dict, since_id: str | None) -> list[dict]:
+def _fetch_timeline_pages(session: requests.Session, instance_config: MastodonInstance, since_id: str | None) -> list[dict]:
     statuses = []
     max_id = None
     for page_num in range(1, MAX_PAGES + 1):
         page_statuses, next_max_id = _fetch_timeline_page(session, instance_config, since_id, max_id)
         logger.debug(
             'Mastodon %s page %s/%s: since_id=%s, max_id=%s, statuses=%s, next_max_id=%s',
-            instance_config['name'],
+            instance_config.name,
             page_num,
             MAX_PAGES,
             since_id,
@@ -199,19 +198,19 @@ def _parse_status(status: dict) -> MastodonPost | None:
 
 
 def _run_instance(
-    instance_config: dict,
+    instance_config: MastodonInstance,
     db_path: Path,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
 ) -> int:
-    if instance_config.get('enabled', True) is False:
-        logger.info('Mastodon source %s is disabled; skipping', instance_config.get('name', '<unnamed>'))
+    if not instance_config.enabled:
+        logger.info('Mastodon source %s is disabled; skipping', instance_config.name)
         return 0
 
-    source_name = instance_config['name']
-    instance_url = _normalize_instance_url(instance_config['instance_url'])
-    auth_client = MastodonAuth(instance_config['credential_location'])
+    source_name = instance_config.name
+    instance_url = _normalize_instance_url(instance_config.instance_url)
+    auth_client = MastodonAuth(str(instance_config.credential_location))
     last_seen_id = db_utils.db_get_mastodon_last_seen_id(source_name, db_path)
 
     with requests.Session() as session:
@@ -262,19 +261,18 @@ def _run_instance(
 
 
 def run(
-    mastodon_config: dict,
-    db_info: dict,
+    mastodon_config: MastodonSource,
+    db_path: Path,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
 ):
-    if not mastodon_config.get('enabled', False):
+    if not mastodon_config.enabled:
         logger.info('Mastodon source is disabled; skipping')
         return
 
-    db_path = Path(db_info['db_location']) / db_info['db_name']
     total_inserted = 0
-    for instance_config in mastodon_config['instances']:
+    for instance_config in mastodon_config.instances:
         total_inserted += _run_instance(
             instance_config,
             db_path,

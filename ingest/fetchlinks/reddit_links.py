@@ -8,6 +8,7 @@ import db_utils
 import ingest_limits
 import url_filters
 from auth import RedditAuth
+from config import RedditSource
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT_SECONDS = 20
@@ -36,13 +37,12 @@ def _post_fullname(post: dict) -> str:
     return ''
 
 
-def _listing_limit(reddit_config: dict) -> int:
-    limit = int(reddit_config.get('listing_limit', DEFAULT_LISTING_LIMIT))
-    return max(1, min(limit, MAX_LISTING_LIMIT))
+def _listing_limit(reddit_config: RedditSource) -> int:
+    return max(1, min(reddit_config.listing_limit, MAX_LISTING_LIMIT))
 
 
-def _max_pages(reddit_config: dict) -> int:
-    return max(1, int(reddit_config.get('max_pages', MAX_PAGES)))
+def _max_pages(reddit_config: RedditSource) -> int:
+    return max(1, reddit_config.max_pages)
 
 
 def _log_rate_limit(response):
@@ -52,12 +52,12 @@ def _log_rate_limit(response):
         logger.debug('Reddit rate limit remaining=%s reset=%s', remaining, reset)
 
 
-def get_subreddits(reddit_config: dict, db_path: Path) -> tuple[list[dict], list[tuple[str, str]]]:
+def get_subreddits(reddit_config: RedditSource, db_path: Path) -> tuple[list[dict], list[tuple[str, str]]]:
     subreddit_posts = []
     state_updates = []
     reddit_states = db_utils.db_get_reddit_states(db_path)
 
-    reddit_auth = RedditAuth(reddit_config['credential_location'])
+    reddit_auth = RedditAuth(str(reddit_config.credential_location))
     token = reddit_auth.get_auth()
     headers = {'Authorization': f'Bearer {token}', 'User-Agent': reddit_auth.user_agent}
     limit = _listing_limit(reddit_config)
@@ -65,7 +65,7 @@ def get_subreddits(reddit_config: dict, db_path: Path) -> tuple[list[dict], list
 
     with requests.Session() as session:
         session.headers.update(headers)
-        for subreddit in reddit_config['subreddits']:
+        for subreddit in reddit_config.subreddits:
             subreddit_name = _normalize_subreddit_name(subreddit)
             posts, newest_fullname = get_subreddit(
                 session,
@@ -167,14 +167,13 @@ def parse_posts(posts: list[dict]) -> list[RedditPost]:
 
 
 def run(
-    reddit_config: dict,
-    db_info: dict,
+    reddit_config: RedditSource,
+    db_path: Path,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
 ):
-    db_full_path = Path(db_info['db_location']) / db_info['db_name']
-    subreddit_posts, state_updates = get_subreddits(reddit_config, db_full_path)
+    subreddit_posts, state_updates = get_subreddits(reddit_config, db_path)
     parsed_posts = parse_posts(subreddit_posts)
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Reddit')
     recent_posts = url_filters.filter_posts_by_url_host_keywords(
@@ -189,9 +188,9 @@ def run(
     )
 
     if recent_posts:
-        inserted_count = db_utils.db_insert(recent_posts, db_full_path)
+        inserted_count = db_utils.db_insert(recent_posts, db_path)
         logger.info('Inserted %s Reddit posts into DB', inserted_count)
     else:
         logger.info('No new Reddit posts found')
 
-    db_utils.db_set_reddit_states(state_updates, db_full_path)
+    db_utils.db_set_reddit_states(state_updates, db_path)

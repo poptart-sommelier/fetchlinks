@@ -11,8 +11,8 @@ class TablesAndSchemaTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.db_dir = Path(self._tmp.name) / 'db'
         self.db_name = 'fetchlinks.db'
-        db_setup.db_initial_setup(str(self.db_dir), self.db_name)
         self.db_path = self.db_dir / self.db_name
+        db_setup.db_initial_setup(self.db_path)
 
     def tearDown(self):
         self._tmp.cleanup()

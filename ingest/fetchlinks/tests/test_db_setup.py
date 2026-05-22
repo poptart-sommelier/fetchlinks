@@ -13,8 +13,8 @@ class DbSetupTests(unittest.TestCase):
             db_name = "fetchlinks.db"
             db_path = db_dir / db_name
 
-            db_setup.db_initial_setup(str(db_dir), db_name)
-            db_setup.db_initial_setup(str(db_dir), db_name)
+            db_setup.db_initial_setup(db_path)
+            db_setup.db_initial_setup(db_path)
 
             self.assertTrue(db_path.exists())
 

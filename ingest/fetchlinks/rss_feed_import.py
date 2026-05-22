@@ -1,7 +1,7 @@
-"""Import RSS feeds from a text file of URLs into sources.json.
+"""Import RSS feeds from a text file of URLs into rss_feeds.txt.
 
-Default mode validates candidates and appends active feeds to sources.json.
-Use --dry-run to write a reusable .pruned file without editing sources.json.
+Default mode validates candidates and appends active feeds to rss_feeds.txt.
+Use --dry-run to write a reusable .pruned file without editing the feeds file.
 Use --pruned to apply a previously reviewed one-URL-per-line file without
 network checks.
 """
@@ -11,7 +11,6 @@ import concurrent.futures
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from html.parser import HTMLParser
-import json
 from pathlib import Path
 import re
 import shutil
@@ -22,7 +21,7 @@ import feedparser
 import requests
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_SOURCES = SCRIPT_DIR / 'data' / 'config' / 'sources.json'
+DEFAULT_FEEDS_FILE = SCRIPT_DIR / 'data' / 'config' / 'rss_feeds.txt'
 DEFAULT_ABANDONED_DAYS = 365
 REQUEST_TIMEOUT_SECONDS = 12
 MAX_WORKERS = 20
@@ -124,18 +123,17 @@ def normalize_text(text: str) -> str:
     return re.sub(r'\s+', ' ', str(text).strip().lower())
 
 
-def load_sources(sources_path: Path) -> dict:
-    with sources_path.open('r', encoding='utf-8') as sources_file:
-        return json.load(sources_file)
-
-
-def load_existing_feeds(sources_path: Path) -> list[str]:
-    sources = load_sources(sources_path)
-    rss_config = sources.get('rss', {})
-    feeds = rss_config.get('feeds', []) if isinstance(rss_config, dict) else []
-    if not isinstance(feeds, list):
-        raise ValueError('sources.json rss.feeds must be a list')
-    return [feed for feed in feeds if isinstance(feed, str)]
+def load_existing_feeds(feeds_path: Path) -> list[str]:
+    """Read URLs from rss_feeds.txt; skip blank lines and ``#`` comments."""
+    if not feeds_path.exists():
+        return []
+    feeds: list[str] = []
+    for line in feeds_path.read_text(encoding='utf-8').splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        feeds.append(stripped)
+    return feeds
 
 
 def dedupe_against_existing(candidates: list[str], existing_feeds: list[str]) -> tuple[list[str], list[str], list[str]]:
@@ -409,20 +407,19 @@ def write_pruned(input_path: Path, feeds: list[str]) -> Path:
     return pruned_path
 
 
-def append_feeds_to_sources(sources_path: Path, feeds_to_add: list[str]) -> int:
+def append_feeds_to_file(feeds_path: Path, feeds_to_add: list[str]) -> int:
+    """Append new feed URLs to rss_feeds.txt; preserves comments and order.
+
+    Backs up the file to ``<name>.bak`` before writing. Returns the number of
+    feeds actually appended (after deduping against existing entries).
+    """
     if not feeds_to_add:
         return 0
 
-    sources = load_sources(sources_path)
-    rss_config = sources.setdefault('rss', {})
-    if not isinstance(rss_config, dict):
-        raise ValueError('sources.json rss section must be an object')
-    feeds = rss_config.setdefault('feeds', [])
-    if not isinstance(feeds, list):
-        raise ValueError('sources.json rss.feeds must be a list')
+    existing = load_existing_feeds(feeds_path)
+    existing_keys = {normalize_feed_url(feed) for feed in existing}
 
-    existing_keys = {normalize_feed_url(feed) for feed in feeds if isinstance(feed, str)}
-    unique_new_feeds = []
+    unique_new_feeds: list[str] = []
     for feed in feeds_to_add:
         key = normalize_feed_url(feed)
         if key in existing_keys:
@@ -433,10 +430,17 @@ def append_feeds_to_sources(sources_path: Path, feeds_to_add: list[str]) -> int:
     if not unique_new_feeds:
         return 0
 
-    backup_path = sources_path.with_name(f'{sources_path.name}.bak')
-    shutil.copy2(sources_path, backup_path)
-    feeds.extend(unique_new_feeds)
-    sources_path.write_text(json.dumps(sources, indent=4) + '\n', encoding='utf-8')
+    if feeds_path.exists():
+        backup_path = feeds_path.with_name(f'{feeds_path.name}.bak')
+        shutil.copy2(feeds_path, backup_path)
+        existing_text = feeds_path.read_text(encoding='utf-8')
+        if existing_text and not existing_text.endswith('\n'):
+            existing_text += '\n'
+    else:
+        existing_text = ''
+
+    appended = ''.join(f'{feed}\n' for feed in unique_new_feeds)
+    feeds_path.write_text(existing_text + appended, encoding='utf-8')
     return len(unique_new_feeds)
 
 
@@ -498,20 +502,20 @@ def print_report(
 
     if dry_run and pruned_path:
         print(f'\nWrote accepted feeds to {pruned_path}')
-        print('No changes made to sources.json')
+        print('No changes made to rss_feeds.txt')
 
 
-def import_from_input(input_path: Path, sources_path: Path, dry_run: bool, abandoned_days: int) -> int:
+def import_from_input(input_path: Path, feeds_path: Path, dry_run: bool, abandoned_days: int) -> int:
     text = input_path.read_text(encoding='utf-8')
     extracted = extract_urls(text)
-    existing_feeds = load_existing_feeds(sources_path)
+    existing_feeds = load_existing_feeds(feeds_path)
     candidates, already_present, duplicate_in_input = dedupe_against_existing(extracted, existing_feeds)
     checks = check_candidates(candidates, abandoned_days)
     checks = mark_same_site_content_duplicates(checks, existing_feeds, abandoned_days)
     accepted_feeds = unique_feed_urls([check.feed_url for check in checks if check.status == 'active'])
 
     pruned_path = write_pruned(input_path, accepted_feeds) if dry_run else None
-    added_count = 0 if dry_run else append_feeds_to_sources(sources_path, accepted_feeds)
+    added_count = 0 if dry_run else append_feeds_to_file(feeds_path, accepted_feeds)
     print_report(
         len(extracted),
         already_present,
@@ -525,11 +529,11 @@ def import_from_input(input_path: Path, sources_path: Path, dry_run: bool, aband
     return added_count
 
 
-def import_from_pruned(pruned_path: Path, sources_path: Path, dry_run: bool) -> int:
+def import_from_pruned(pruned_path: Path, feeds_path: Path, dry_run: bool) -> int:
     feeds = read_pruned(pruned_path)
-    existing_feeds = load_existing_feeds(sources_path)
+    existing_feeds = load_existing_feeds(feeds_path)
     candidates, already_present, duplicate_in_input = dedupe_against_existing(feeds, existing_feeds)
-    added_count = 0 if dry_run else append_feeds_to_sources(sources_path, candidates)
+    added_count = 0 if dry_run else append_feeds_to_file(feeds_path, candidates)
     print_report(
         len(feeds),
         already_present,
@@ -543,12 +547,14 @@ def import_from_pruned(pruned_path: Path, sources_path: Path, dry_run: bool) -> 
 
 
 def parse_args(argv: list[str]):
-    parser = argparse.ArgumentParser(description='Import RSS feeds into sources.json from a URL list file.')
+    parser = argparse.ArgumentParser(description='Import RSS feeds into rss_feeds.txt from a URL list file.')
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('--input', type=Path, help='Text file containing RSS/feed/homepage URLs')
     input_group.add_argument('--pruned', type=Path, help='Previously validated one-feed-URL-per-line file')
-    parser.add_argument('--sources', type=Path, default=DEFAULT_SOURCES, help='Path to sources.json')
-    parser.add_argument('--dry-run', action='store_true', help='Do not modify sources.json; with --input, write INPUT.pruned')
+    parser.add_argument('--feeds-file', type=Path, default=DEFAULT_FEEDS_FILE,
+                        help='Path to rss_feeds.txt')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Do not modify rss_feeds.txt; with --input, write INPUT.pruned')
     parser.add_argument(
         '--abandoned-days',
         type=int,
@@ -568,9 +574,9 @@ def parse_args(argv: list[str]):
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.input:
-        import_from_input(args.input, args.sources, args.dry_run, args.abandoned_days)
+        import_from_input(args.input, args.feeds_file, args.dry_run, args.abandoned_days)
     else:
-        import_from_pruned(args.pruned, args.sources, args.dry_run)
+        import_from_pruned(args.pruned, args.feeds_file, args.dry_run)
     return 0
 
 

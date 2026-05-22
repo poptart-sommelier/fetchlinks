@@ -1,5 +1,4 @@
 import io
-import json
 import sqlite3
 import tempfile
 import unittest
@@ -10,12 +9,21 @@ import db_setup
 import export_links
 
 
+def _write_toml(cfg_path: Path, db_value: str, log_dir: Path) -> None:
+    cfg_path.write_text(
+        '[paths]\n'
+        f'db = "{db_value}"\n'
+        f'log_file = "{(log_dir / "fetchlinks.log").as_posix()}"\n',
+        encoding='utf-8',
+    )
+
+
 class _ExportCase(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.db_path = self.tmp / 'db' / 'fetchlinks.db'
-        db_setup.db_initial_setup(str(self.db_path.parent), self.db_path.name)
+        db_setup.db_initial_setup(self.db_path)
         self.out_path = self.tmp / 'out' / 'links.txt'
 
     def tearDown(self):
@@ -41,24 +49,21 @@ class _ExportCase(unittest.TestCase):
 
 
 class ResolveDbPathTests(unittest.TestCase):
-    def test_absolute_db_location_preserved(self):
+    def test_absolute_db_path_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
-            cfg = Path(tmp) / 'config.json'
-            cfg.write_text(json.dumps({
-                'db_info': {'db_name': 'x.db', 'db_location': '/abs/dir'}
-            }), encoding='utf-8')
-            self.assertEqual(export_links.resolve_db_path(cfg), Path('/abs/dir/x.db'))
+            tmp_path = Path(tmp)
+            db_abs = tmp_path / 'data' / 'x.db'
+            cfg = tmp_path / 'fetchlinks.toml'
+            _write_toml(cfg, db_abs.as_posix(), tmp_path)
+            self.assertEqual(export_links.resolve_db_path(cfg), db_abs)
 
-    def test_relative_db_location_anchored_to_script_dir(self):
+    def test_relative_db_anchored_to_toml_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
-            cfg = Path(tmp) / 'config.json'
-            cfg.write_text(json.dumps({
-                'db_info': {'db_name': 'x.db', 'db_location': 'db/'}
-            }), encoding='utf-8')
+            cfg_dir = Path(tmp)
+            cfg = cfg_dir / 'fetchlinks.toml'
+            _write_toml(cfg, 'db/x.db', cfg_dir)
             resolved = export_links.resolve_db_path(cfg)
-            self.assertTrue(resolved.is_absolute())
-            # Ends with db/x.db under the export_links script dir.
-            self.assertEqual(resolved.name, 'x.db')
+            self.assertEqual(resolved, (cfg_dir / 'db' / 'x.db').resolve())
 
 
 class ExportLinksTests(_ExportCase):

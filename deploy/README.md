@@ -9,7 +9,8 @@ Ubuntu 24.04 VM.
 deploy/
 ├── bootstrap.sh                       one-shot installer / updater (run on VM)
 ├── config/
-│   └── config.json                    production ingest config (paths only)
+│   ├── fetchlinks.toml                production ingest config (paths, ingest, sources)
+│   └── rss_feeds.txt                  seed RSS feed list (one URL per line)
 ├── nginx/
 │   └── fetchlinks-web.conf.example    nginx reverse-proxy site
 └── systemd/
@@ -37,11 +38,26 @@ deploy/
     Omit `FETCHLINKS_DOMAIN`/`FETCHLINKS_EMAIL` if you don't want nginx + TLS
     on this run; you can re-run the script later with them set.
 
-4. Copy your real `sources.json` (with API credentials) to the VM:
+4. Drop your API credential files into `/etc/fetchlinks/credentials/` and
+   enable the matching sources in `/etc/fetchlinks/fetchlinks.toml`:
 
     ```bash
-    scp sources.json deploy@<vm>:/tmp/
-    ssh deploy@<vm> 'sudo install -o root -g fetchlinks -m 640 /tmp/sources.json /etc/fetchlinks/sources.json'
+    # One file per credentialed source, names match `credential_location` in fetchlinks.toml.
+    scp reddit.json bluesky.json mastodon-infosec.json deploy@<vm>:/tmp/
+    ssh deploy@<vm> 'sudo install -d -o root -g fetchlinks -m 0750 /etc/fetchlinks/credentials \
+        && sudo install -o root -g fetchlinks -m 0640 /tmp/reddit.json   /etc/fetchlinks/credentials/ \
+        && sudo install -o root -g fetchlinks -m 0640 /tmp/bluesky.json  /etc/fetchlinks/credentials/ \
+        && sudo install -o root -g fetchlinks -m 0640 /tmp/mastodon-infosec.json /etc/fetchlinks/credentials/'
+    sudo -e /etc/fetchlinks/fetchlinks.toml      # flip `enabled = true` for each source
+    ```
+
+    Then (optionally) seed the RSS feed list:
+
+    ```bash
+    sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
+        /opt/fetchlinks/ingest/fetchlinks/rss_feed_import.py \
+        --input /tmp/new-feeds.txt \
+        --feeds-file /etc/fetchlinks/rss_feeds.txt
     ```
 
 5. (Optional) copy an existing `fetchlinks.db` to `/var/lib/fetchlinks/`.
@@ -84,8 +100,9 @@ journalctl -u fetchlinks-ingest.service --since '1 hour ago'
 /opt/fetchlinks/.venv/                 Python venv for ingest
 /var/lib/fetchlinks/fetchlinks.db      SQLite DB (mode 0640 fetchlinks:fetchlinks)
 /var/log/fetchlinks/                   ingest logs
-/etc/fetchlinks/config.json            non-secret config (mode 0640 root:fetchlinks)
-/etc/fetchlinks/sources.json           secrets — bring your own (same perms)
+/etc/fetchlinks/fetchlinks.toml        non-secret config (mode 0640 root:fetchlinks)
+/etc/fetchlinks/rss_feeds.txt          RSS feed URLs (mode 0640 root:fetchlinks)
+/etc/fetchlinks/credentials/           per-source API credential JSON files
 /etc/fetchlinks/web.env                env vars for the web service
 /etc/fetchlinks/ingest.env             env vars for the ingest service (optional)
 ```

@@ -115,18 +115,17 @@ def parse_posts(fetch_results: list[FetchResult]) -> list[RssPost]:
 
 def run(
     rss_feed_links: list,
-    db_info: dict,
+    db_path: Path,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
 ):
-    db_full_path = Path(db_info['db_location']) / db_info['db_name']
-    cached_states = db_utils.db_get_rss_feed_states(db_full_path)
+    cached_states = db_utils.db_get_rss_feed_states(db_path)
 
     fetch_results = fetch_feeds(rss_feed_links, cached_states)
 
     state_rows = [(url, etag, lm, status) for (url, _f, etag, lm, status) in fetch_results]
-    db_utils.db_set_rss_feed_states(state_rows, db_full_path)
+    db_utils.db_set_rss_feed_states(state_rows, db_path)
 
     parsed_posts = parse_posts(fetch_results)
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'RSS')
@@ -151,7 +150,7 @@ def run(
             counts['error'] += 1
 
     if recent_posts:
-        inserted_count = db_utils.db_insert(recent_posts, db_full_path)
+        inserted_count = db_utils.db_insert(recent_posts, db_path)
         logger.info(
             'RSS: %s feeds (200=%s, 304=%s, errors=%s); %s posts parsed, %s age-eligible, %s inserted',
             len(fetch_results), counts[200], counts[304], counts['error'],

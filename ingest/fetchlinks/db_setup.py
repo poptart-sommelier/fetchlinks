@@ -5,12 +5,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def db_create(db_location, db_name):
-    db_dir = Path(db_location)
-    db_path = db_dir / db_name
+def db_create(db_path):
+    db_path = Path(db_path)
 
     try:
-        db_dir.mkdir(parents=True, exist_ok=True)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
         return sqlite3.connect(db_path)
     except sqlite3.OperationalError as exc:
         raise RuntimeError(f'Failed to create or open database at {db_path}') from exc
@@ -105,10 +104,10 @@ def table_mastodon_state_configure(conn):
         raise RuntimeError('Failed to configure mastodon_state table') from exc
 
 
-def db_initial_setup(db_location, db_name):
-    db_path = Path(db_location) / db_name
+def db_initial_setup(db_path):
+    db_path = Path(db_path)
     logger.info('Creating or validating %s', db_path)
-    conn = db_create(db_location, db_name)
+    conn = db_create(db_path)
     conn.execute('PRAGMA journal_mode=WAL')
     conn.execute('PRAGMA foreign_keys=ON')
     table_posts_configure(conn)
@@ -123,4 +122,4 @@ def db_initial_setup(db_location, db_name):
 
 
 if __name__ == '__main__':
-    db_initial_setup('db/', 'fetchlinks.db')
+    db_initial_setup('db/fetchlinks.db')
