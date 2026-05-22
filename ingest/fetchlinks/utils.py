@@ -19,6 +19,11 @@ def build_hash(link: str) -> str:
 def convert_date_string_for_mysql(rss_date: str) -> str:
     try:
         date_object = dateutil.parser.parse(rss_date)
+        # If the source includes a tz offset, convert to UTC before dropping
+        # tzinfo. Otherwise a feed dated "2026-05-22T20:00:00+09:00" would be
+        # stored as "2026-05-22 20:00:00" and sort 9 hours into our future.
+        if date_object.tzinfo is not None:
+            date_object = date_object.astimezone(UTC).replace(tzinfo=None)
         date_created = datetime.datetime.strftime(date_object, '%Y-%m-%d %H:%M:%S')
     except dateutil.parser.ParserError as e:
         # We couldn't parse the date for some reason. Make it "now" (UTC)
@@ -30,6 +35,35 @@ def convert_date_string_for_mysql(rss_date: str) -> str:
 def convert_epoch_to_mysql(epoch: float) -> str:
     date_object = datetime.datetime.fromtimestamp(int(epoch), tz=UTC)
     return date_object.strftime('%Y-%m-%d %H:%M:%S')
+
+
+# Allow a small clock-skew tolerance so legitimately-just-published items
+# don't trigger a warning every time the publisher's clock is a couple of
+# seconds ahead of ours.
+_FUTURE_DATE_TOLERANCE_SECONDS = 60
+
+
+def clamp_date_not_in_future(date_str: str) -> str:
+    """Return ``date_str`` clamped to ``now()`` if it is in the future.
+
+    Some sources legitimately stamp posts with future dates (scheduled
+    webinars, conference announcements, publisher clock skew). Those rows
+    sort wrong in any "most recent" view, so we cap the stored timestamp
+    at the ingest time. The original date is preserved in the post body /
+    description; only the sortable column changes.
+    """
+    if not date_str:
+        return date_str
+    try:
+        parsed = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return date_str
+    now = datetime.datetime.now(UTC).replace(tzinfo=None)
+    if parsed <= now + datetime.timedelta(seconds=_FUTURE_DATE_TOLERANCE_SECONDS):
+        return date_str
+    logger.warning('Clamped future post date %s -> %s',
+                   date_str, now.strftime('%Y-%m-%d %H:%M:%S'))
+    return now.strftime('%Y-%m-%d %H:%M:%S')
 
 
 def extract_urls_from_text(text: str) -> List[str]:
@@ -92,7 +126,7 @@ class Post:
             self.author,
             self.description,
             self.direct_link,
-            self.date_created,
+            clamp_date_not_in_future(self.date_created),
             self.unique_id_string,
         )
 
