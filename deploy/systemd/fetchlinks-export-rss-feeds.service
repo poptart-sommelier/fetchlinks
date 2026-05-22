@@ -1,0 +1,24 @@
+[Unit]
+Description=Fetchlinks export rss_feeds snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=fetchlinks
+Group=fetchlinks
+WorkingDirectory=/opt/fetchlinks/ingest/fetchlinks
+EnvironmentFile=-/etc/fetchlinks/ingest.env
+ExecStart=/opt/fetchlinks/.venv/bin/python /opt/fetchlinks/ingest/fetchlinks/export_rss_feeds.py --config /etc/fetchlinks/fetchlinks.toml
+Nice=10
+TimeoutStartSec=5min
+SyslogIdentifier=fetchlinks-export-rss-feeds
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fetchlinks /var/log/fetchlinks
+
+[Install]
+WantedBy=multi-user.target

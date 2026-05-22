@@ -50,8 +50,15 @@ class RetentionPolicy:
 @dataclass(frozen=True)
 class RssSource:
     enabled: bool
-    feeds_file: Path
-    feeds: tuple[str, ...]
+    # Optional one-time seed file (used only when rss_feeds table is empty).
+    seed_file: Path | None = None
+    # Where export_rss_feeds.py writes the deterministic snapshot.
+    export_path: Path | None = None
+    # Auto-disable a feed after this many consecutive fetch failures.
+    # Set to 0 to disable auto-disable.
+    auto_disable_after_failures: int = 10
+    # Per-feed HTTP request timeout, in seconds.
+    request_timeout_seconds: int = 10
 
 
 @dataclass(frozen=True)
@@ -225,20 +232,28 @@ def _build_rss(section: dict | None, base: Path) -> RssSource | None:
         raise ValueError('[sources.rss] must be a table')
 
     enabled = bool(section.get('enabled', True))
-    feeds_file_value = section.get('feeds_file')
-    if not feeds_file_value:
-        raise ValueError('[sources.rss] feeds_file is required')
-    feeds_file = _resolve_path(feeds_file_value, base)
 
-    feeds: tuple[str, ...] = ()
-    if enabled:
-        if not feeds_file.exists():
-            raise FileNotFoundError(f'RSS feeds file not found: {feeds_file}')
-        feeds = tuple(_read_feeds_file(feeds_file))
-        if not feeds:
-            raise ValueError(f'RSS feeds file contains no feeds: {feeds_file}')
+    seed_file_value = section.get('seed_file')
+    seed_file = _resolve_path(seed_file_value, base) if seed_file_value else None
 
-    return RssSource(enabled=enabled, feeds_file=feeds_file, feeds=feeds)
+    export_value = section.get('export_path')
+    export_path = _resolve_path(export_value, base) if export_value else None
+
+    auto_disable = section.get('auto_disable_after_failures', 10)
+    if not isinstance(auto_disable, int) or isinstance(auto_disable, bool) or auto_disable < 0:
+        raise ValueError('[sources.rss] auto_disable_after_failures must be a non-negative integer')
+
+    timeout = section.get('request_timeout_seconds', 10)
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 1:
+        raise ValueError('[sources.rss] request_timeout_seconds must be a positive integer')
+
+    return RssSource(
+        enabled=enabled,
+        seed_file=seed_file,
+        export_path=export_path,
+        auto_disable_after_failures=auto_disable,
+        request_timeout_seconds=timeout,
+    )
 
 
 def _read_feeds_file(path: Path) -> list[str]:

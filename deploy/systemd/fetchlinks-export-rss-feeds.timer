@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Fetchlinks export rss_feeds snapshot daily
+Requires=fetchlinks-export-rss-feeds.service
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15min
+Persistent=true
+Unit=fetchlinks-export-rss-feeds.service
+
+[Install]
+WantedBy=timers.target

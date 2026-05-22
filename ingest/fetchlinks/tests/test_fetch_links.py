@@ -42,8 +42,7 @@ def _cfg(
 class FetchLinksRoutingTests(unittest.TestCase):
     def test_runs_default_rss_reddit_and_enabled_bluesky_and_mastodon(self):
         tmp = Path('/tmp/fl-test')
-        rss = RssSource(enabled=True, feeds_file=tmp / 'rss_feeds.txt',
-                        feeds=('https://feed.example/rss.xml',))
+        rss = RssSource(enabled=True)
         reddit = RedditSource(enabled=True, credential_location=tmp / 'reddit.json',
                               subreddits=('netsec',))
         bluesky = BlueskySource(enabled=True, credential_location=tmp / 'bsky.json')
@@ -61,7 +60,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
              patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
             fetch_links.fetch_links(cfg)
 
-        rss_run.assert_called_once_with(['https://feed.example/rss.xml'], db_path, default_age, [], [])
+        rss_run.assert_called_once_with(rss, db_path, default_age, [], [])
         reddit_run.assert_called_once_with(reddit, db_path, default_age, [], [])
         bluesky_run.assert_called_once_with(bluesky, db_path, default_age, [], [])
         mastodon_run.assert_called_once_with(mastodon, db_path, default_age, [], [])
@@ -79,8 +78,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
 
     def test_passes_keyword_filters_to_sources(self):
         tmp = Path('/tmp/fl-test')
-        rss = RssSource(enabled=True, feeds_file=tmp / 'feeds.txt',
-                        feeds=('https://feed.example/rss.xml',))
+        rss = RssSource(enabled=True)
         cfg = _cfg(tmp, ingest=IngestPolicy(
             excluded_url_host_keywords=('insider',),
             excluded_url_or_description_keywords=('politics',),
@@ -90,7 +88,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
             fetch_links.fetch_links(cfg)
 
         rss_run.assert_called_once_with(
-            ['https://feed.example/rss.xml'],
+            rss,
             cfg.paths.db,
             ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
             ['insider'],
@@ -99,8 +97,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
 
     def test_skips_disabled_sources(self):
         tmp = Path('/tmp/fl-test')
-        rss = RssSource(enabled=False, feeds_file=tmp / 'feeds.txt',
-                        feeds=('https://feed.example/rss.xml',))
+        rss = RssSource(enabled=False)
         reddit = RedditSource(enabled=False, credential_location=tmp / 'reddit.json',
                               subreddits=('netsec',))
         bluesky = BlueskySource(enabled=False, credential_location=tmp / 'bsky.json')

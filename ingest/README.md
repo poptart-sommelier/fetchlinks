@@ -30,8 +30,11 @@ To use a non-default config file, pass `--config /path/to/fetchlinks.toml`.
 
 - Runtime config: `ingest/fetchlinks/data/config/fetchlinks.toml`
   (paths, ingest policy, and per-source `enabled` flags + credential paths).
-- RSS feed URLs: `ingest/fetchlinks/data/config/rss_feeds.txt`
-  (one URL per line; `#` comments and blank lines ignored).
+- RSS feeds: stored in the SQLite `rss_feeds` table (the source of truth).
+  Manage with `rss_feed_import.py` (`--input` / `--pruned` / `--seed-if-empty`).
+  A snapshot of the table is written daily by `export_rss_feeds.py` to
+  `[sources.rss].export_path`. The `seed_file` referenced in `[sources.rss]`
+  is read **only** when the `rss_feeds` table is empty (first install).
 
 Use the per-source `enabled` flag in `fetchlinks.toml` to toggle providers
 without changing code.

@@ -64,39 +64,57 @@ class LoadConfigTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 app_config.load_config(cfg)
 
-    def test_rss_feeds_file_missing_raises(self):
+    def test_rss_section_minimal(self):
         with tempfile.TemporaryDirectory() as tmp:
-            cfg = _toml(
-                Path(tmp),
-                extra='\n[sources.rss]\nenabled = true\nfeeds_file = "rss_feeds.txt"\n',
-            )
-            with self.assertRaises(FileNotFoundError):
-                app_config.load_config(cfg)
+            cfg = _toml(Path(tmp), extra='\n[sources.rss]\nenabled = true\n')
+            loaded = app_config.load_config(cfg)
+            self.assertIsNotNone(loaded.sources.rss)
+            self.assertTrue(loaded.sources.rss.enabled)
+            self.assertIsNone(loaded.sources.rss.seed_file)
+            self.assertIsNone(loaded.sources.rss.export_path)
+            self.assertEqual(loaded.sources.rss.auto_disable_after_failures, 10)
+            self.assertEqual(loaded.sources.rss.request_timeout_seconds, 10)
 
-    def test_rss_feeds_file_empty_raises(self):
+    def test_rss_section_with_paths_and_knobs(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            (tmp_path / 'rss_feeds.txt').write_text('# only comments\n', encoding='utf-8')
-            cfg = _toml(
-                tmp_path,
-                extra='\n[sources.rss]\nenabled = true\nfeeds_file = "rss_feeds.txt"\n',
-            )
-            with self.assertRaises(ValueError):
-                app_config.load_config(cfg)
-
-    def test_rss_feeds_loaded_skipping_comments(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            (tmp_path / 'rss_feeds.txt').write_text(
-                '# header\nhttps://a.example/feed\n\n# section\nhttps://b.example/feed\n',
+            (tmp_path / 'seed.txt').write_text(
+                'https://a.example/feed\nhttps://b.example/feed\n',
                 encoding='utf-8',
             )
             cfg_path = _toml(
                 tmp_path,
-                extra='\n[sources.rss]\nenabled = true\nfeeds_file = "rss_feeds.txt"\n',
+                extra=(
+                    '\n[sources.rss]\nenabled = true\n'
+                    'seed_file = "seed.txt"\n'
+                    'export_path = "rss.export.txt"\n'
+                    'auto_disable_after_failures = 5\n'
+                    'request_timeout_seconds = 30\n'
+                ),
             )
             cfg = app_config.load_config(cfg_path)
-            self.assertEqual(cfg.sources.rss.feeds, ('https://a.example/feed', 'https://b.example/feed'))
+            self.assertEqual(cfg.sources.rss.seed_file.name, 'seed.txt')
+            self.assertEqual(cfg.sources.rss.export_path.name, 'rss.export.txt')
+            self.assertEqual(cfg.sources.rss.auto_disable_after_failures, 5)
+            self.assertEqual(cfg.sources.rss.request_timeout_seconds, 30)
+
+    def test_rss_invalid_auto_disable_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = _toml(
+                Path(tmp),
+                extra='\n[sources.rss]\nenabled = true\nauto_disable_after_failures = -1\n',
+            )
+            with self.assertRaises(ValueError):
+                app_config.load_config(cfg)
+
+    def test_rss_invalid_timeout_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = _toml(
+                Path(tmp),
+                extra='\n[sources.rss]\nenabled = true\nrequest_timeout_seconds = 0\n',
+            )
+            with self.assertRaises(ValueError):
+                app_config.load_config(cfg)
 
     def test_mastodon_duplicate_instance_name_raises(self):
         with tempfile.TemporaryDirectory() as tmp:

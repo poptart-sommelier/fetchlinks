@@ -10,7 +10,7 @@ deploy/
 ├── bootstrap.sh                       one-shot installer / updater (run on VM)
 ├── config/
 │   ├── fetchlinks.toml                production ingest config (paths, ingest, sources)
-│   └── rss_feeds.txt                  seed RSS feed list (one URL per line)
+│   └── rss_feeds.txt                  seed RSS feed list (one URL per line, used only on first install)
 ├── nginx/
 │   └── fetchlinks-web.conf.example    nginx reverse-proxy site
 └── systemd/
@@ -19,7 +19,9 @@ deploy/
     ├── fetchlinks-ingest.service      Python ingest one-shot
     ├── fetchlinks-ingest.timer        ingest schedule (every 30 min)
     ├── fetchlinks-retain.service      weekly DB retention one-shot
-    └── fetchlinks-retain.timer        retention schedule (Sun 03:30)
+    ├── fetchlinks-retain.timer        retention schedule (Sun 03:30)
+    ├── fetchlinks-export-rss-feeds.service  daily rss_feeds DB → text snapshot
+    └── fetchlinks-export-rss-feeds.timer    snapshot schedule (daily)
 ```
 
 ## First-time install
@@ -53,14 +55,28 @@ deploy/
     sudo -e /etc/fetchlinks/fetchlinks.toml      # flip `enabled = true` for each source
     ```
 
-    Then (optionally) seed the RSS feed list:
+    Then (optionally) seed or extend the RSS feed list. The DB table
+    `rss_feeds` is the source of truth; `/etc/fetchlinks/rss_feeds.txt` is
+    only consulted on first install (when the table is empty) or as input
+    to the importer:
 
     ```bash
+    # First-time seed (no-op once the rss_feeds table has any rows):
     sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
         /opt/fetchlinks/ingest/fetchlinks/rss_feed_import.py \
-        --input /tmp/new-feeds.txt \
-        --feeds-file /etc/fetchlinks/rss_feeds.txt
+        --config /etc/fetchlinks/fetchlinks.toml \
+        --seed-if-empty /etc/fetchlinks/rss_feeds.txt
+
+    # Vet and add new feeds from an arbitrary text blob:
+    sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
+        /opt/fetchlinks/ingest/fetchlinks/rss_feed_import.py \
+        --config /etc/fetchlinks/fetchlinks.toml \
+        --input /tmp/new-feeds.txt
     ```
+
+    A daily timer (`fetchlinks-export-rss-feeds.timer`) writes a
+    deterministic text snapshot of the live table to
+    `/var/lib/fetchlinks/rss_feeds.txt` for backup / diffing.
 
 5. (Optional) copy an existing `fetchlinks.db` to `/var/lib/fetchlinks/`.
 6. Kick off an ingest run to verify:
@@ -91,10 +107,12 @@ sudo FETCHLINKS_REPO_REF=v1.2.3 /opt/fetchlinks/deploy/bootstrap.sh
 systemctl status fetchlinks-web.service
 systemctl status fetchlinks-ingest.timer
 systemctl status fetchlinks-retain.timer
-systemctl list-timers fetchlinks-ingest.timer fetchlinks-retain.timer
+systemctl status fetchlinks-export-rss-feeds.timer
+systemctl list-timers fetchlinks-ingest.timer fetchlinks-retain.timer fetchlinks-export-rss-feeds.timer
 journalctl -u fetchlinks-web.service -f
 journalctl -u fetchlinks-ingest.service --since '1 hour ago'
 journalctl -u fetchlinks-retain.service --since '7 days ago'
+journalctl -u fetchlinks-export-rss-feeds.service --since '7 days ago'
 ```
 
 ## Filesystem layout on the VM
@@ -103,9 +121,10 @@ journalctl -u fetchlinks-retain.service --since '7 days ago'
 /opt/fetchlinks/                       git checkout, owned by fetchlinks
 /opt/fetchlinks/.venv/                 Python venv for ingest
 /var/lib/fetchlinks/fetchlinks.db      SQLite DB (mode 0640 fetchlinks:fetchlinks)
+/var/lib/fetchlinks/rss_feeds.txt      Daily exported snapshot of the rss_feeds table
 /var/log/fetchlinks/                   ingest logs
 /etc/fetchlinks/fetchlinks.toml        non-secret config (mode 0640 root:fetchlinks)
-/etc/fetchlinks/rss_feeds.txt          RSS feed URLs (mode 0640 root:fetchlinks)
+/etc/fetchlinks/rss_feeds.txt          Seed feed list (read only when rss_feeds is empty)
 /etc/fetchlinks/credentials/           per-source API credential JSON files
 /etc/fetchlinks/web.env                env vars for the web service
 /etc/fetchlinks/ingest.env             env vars for the ingest service (optional)
