@@ -8,6 +8,7 @@ from utils import (
     RedditPost,
     RssPost,
     build_hash,
+    clamp_date_not_in_future,
     convert_date_string_for_mysql,
     convert_epoch_to_mysql,
     extract_urls_from_text,
@@ -51,6 +52,20 @@ class ConvertDateStringTests(unittest.TestCase):
     def test_iso_string_round_trips_to_mysql_format(self):
         self.assertEqual(
             convert_date_string_for_mysql('2026-04-19T12:34:56Z'),
+            '2026-04-19 12:34:56',
+        )
+
+    def test_tz_aware_string_is_converted_to_utc(self):
+        # +09:00 offset should subtract 9 hours when normalised to UTC.
+        self.assertEqual(
+            convert_date_string_for_mysql('2026-05-22T20:00:00+09:00'),
+            '2026-05-22 11:00:00',
+        )
+
+    def test_naive_string_is_assumed_utc(self):
+        # No tz offset: leave the wall-clock values as-is.
+        self.assertEqual(
+            convert_date_string_for_mysql('2026-04-19 12:34:56'),
             '2026-04-19 12:34:56',
         )
 
@@ -210,6 +225,51 @@ class BlueskyPostTests(unittest.TestCase):
         )
         self.assertEqual(post.urls, ['https://example.com/a', 'https://example.com/b'])
         self.assertEqual(post.date_created, '2026-04-19 12:34:56')
+
+
+class ClampDateNotInFutureTests(unittest.TestCase):
+    def _now_str(self, offset_seconds: int = 0) -> str:
+        when = dt.datetime.now(dt.UTC).replace(tzinfo=None) + dt.timedelta(seconds=offset_seconds)
+        return when.strftime('%Y-%m-%d %H:%M:%S')
+
+    def test_past_date_passes_through_unchanged(self):
+        self.assertEqual(
+            clamp_date_not_in_future('2000-01-01 00:00:00'),
+            '2000-01-01 00:00:00',
+        )
+
+    def test_empty_string_passes_through_unchanged(self):
+        self.assertEqual(clamp_date_not_in_future(''), '')
+
+    def test_unparseable_string_passes_through_unchanged(self):
+        self.assertEqual(clamp_date_not_in_future('not-a-date'), 'not-a-date')
+
+    def test_small_skew_within_tolerance_passes_through(self):
+        candidate = self._now_str(offset_seconds=10)
+        self.assertEqual(clamp_date_not_in_future(candidate), candidate)
+
+    def test_far_future_date_is_clamped(self):
+        clamped = clamp_date_not_in_future('2999-12-31 23:59:59')
+        # Result is a valid timestamp that is no longer in the future.
+        parsed = dt.datetime.strptime(clamped, '%Y-%m-%d %H:%M:%S')
+        self.assertLessEqual(parsed, dt.datetime.now(dt.UTC).replace(tzinfo=None) + dt.timedelta(seconds=1))
+
+    def test_get_post_row_clamps_future_date(self):
+        post = Post()
+        post.source = 'https://x/'
+        post.author = 'a'
+        post.description = 'd'
+        post.direct_link = 'https://x/1'
+        post.date_created = '2999-12-31 23:59:59'
+        post.add_url('https://example.com/x')
+        post._generate_unique_url_string()
+
+        row = post.get_post_row()
+        clamped_date = row[4]
+        parsed = dt.datetime.strptime(clamped_date, '%Y-%m-%d %H:%M:%S')
+        self.assertLess(parsed.year, 2999)
+        # In-memory value is untouched; only the persisted column changes.
+        self.assertEqual(post.date_created, '2999-12-31 23:59:59')
 
 
 if __name__ == '__main__':
