@@ -156,17 +156,29 @@ fi
 # ---- systemd units ----------------------------------------------------------
 
 log "Installing systemd units"
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-web.service"     /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"  /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.timer"    /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"  /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.timer"    /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-web.service"                 /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"              /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.timer"                /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"              /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.timer"                /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.service"    /etc/systemd/system/
+install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.timer"      /etc/systemd/system/
 systemctl daemon-reload
 
 systemctl enable --now fetchlinks-web.service
 systemctl enable --now fetchlinks-ingest.timer
 systemctl enable --now fetchlinks-retain.timer
+systemctl enable --now fetchlinks-export-rss-feeds.timer
 systemctl restart   fetchlinks-web.service
+
+# ---- one-time seed: import /etc/fetchlinks/rss_feeds.txt into the DB if the
+# rss_feeds table is empty. No-op on upgrade once the operator has feeds.
+log "Seeding rss_feeds table from ${ETC_DIR}/rss_feeds.txt if empty"
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
+    "${APP_DIR}/ingest/fetchlinks/rss_feed_import.py" \
+    --config "${ETC_DIR}/fetchlinks.toml" \
+    --seed-if-empty "${ETC_DIR}/rss_feeds.txt" || \
+    warn "rss_feeds seed step reported a failure; check the output above."
 
 # ---- nginx + tls (optional) -------------------------------------------------
 
@@ -197,9 +209,10 @@ fi
 # ---- final summary ----------------------------------------------------------
 
 log "Done. Status:"
-systemctl --no-pager --lines=0 status fetchlinks-web.service     || true
-systemctl --no-pager --lines=0 status fetchlinks-ingest.timer    || true
-systemctl --no-pager --lines=0 status fetchlinks-retain.timer    || true
+systemctl --no-pager --lines=0 status fetchlinks-web.service                  || true
+systemctl --no-pager --lines=0 status fetchlinks-ingest.timer                 || true
+systemctl --no-pager --lines=0 status fetchlinks-retain.timer                 || true
+systemctl --no-pager --lines=0 status fetchlinks-export-rss-feeds.timer       || true
 
 cat <<EOF
 
@@ -210,8 +223,10 @@ Manual steps still required:
      e.g. reddit.json, bluesky.json, mastodon-<instance>.json.
   2. Edit ${ETC_DIR}/fetchlinks.toml and flip `enabled = true`
      for each source you have credentials for.
-  3. (Optional) edit ${ETC_DIR}/rss_feeds.txt to seed RSS feeds,
-     or use rss_feed_import.py to bulk-import.
+  3. (Optional) edit ${ETC_DIR}/rss_feeds.txt before re-running this
+     script if you want a different first-bootstrap seed. The DB is the
+     source of truth after seeding; later use rss_feed_import.py to add
+     more feeds (writes to the DB, not the file).
   4. (Optional) drop an existing DB snapshot at:
        ${DATA_DIR}/fetchlinks.db
   5. Trigger an ingest run to verify:

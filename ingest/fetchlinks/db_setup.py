@@ -79,6 +79,107 @@ def table_rss_feed_state_configure(conn):
         raise RuntimeError('Failed to configure rss_feed_state table') from exc
 
 
+def table_rss_feeds_configure(conn):
+    """Create the per-feed catalog + health table.
+
+    Holds both subscription state (enabled/deleted) and per-feed health/cache
+    state (etag, last_modified, last_status, consecutive_failures). Supersedes
+    ``rss_feed_state``; ``migrate_rss_feed_state_into_rss_feeds`` copies any
+    legacy rows over the first time this runs against an existing DB.
+    """
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS rss_feeds (
+    feed_id              INTEGER PRIMARY KEY,
+    feed_url             TEXT NOT NULL,
+    normalized_url       TEXT NOT NULL UNIQUE,
+    enabled              INTEGER NOT NULL DEFAULT 1,
+    added_at             TEXT NOT NULL,
+    deleted_at           TEXT,
+    last_fetched_at      TEXT,
+    last_success_at      TEXT,
+    last_status          INTEGER,
+    last_error           TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    etag                 TEXT,
+    last_modified        TEXT,
+    latest_entry_at      TEXT)
+    """)
+        conn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_rss_feeds_live '
+            'ON rss_feeds(enabled, deleted_at)'
+        )
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure rss_feeds table') from exc
+
+
+def _normalize_feed_url_for_migration(url):
+    """Local copy of the normalizer to avoid a circular import on db_setup.
+
+    Must match ``rss_feed_import.normalize_feed_url`` semantics: lowercase
+    scheme + host, drop fragment, keep path/query, drop default-empty path.
+    """
+    from urllib.parse import urldefrag, urlsplit, urlunsplit
+    cleaned, _fragment = urldefrag((url or '').strip())
+    parts = urlsplit(cleaned)
+    scheme = parts.scheme.lower()
+    netloc = parts.netloc.lower()
+    path = parts.path or '/'
+    return urlunsplit((scheme, netloc, path, parts.query, ''))
+
+
+def migrate_rss_feed_state_into_rss_feeds(conn):
+    """One-time copy of rss_feed_state rows into rss_feeds.
+
+    Runs only if rss_feed_state exists AND rss_feeds is empty. Preserves
+    etag/last_modified/last_status/last_fetched. The legacy table is left in
+    place (not dropped) so a downgrade is still possible; later cleanup is
+    safe once we're confident no one needs it.
+    """
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='rss_feed_state'"
+    )
+    if cur.fetchone() is None:
+        return 0
+
+    existing = conn.execute('SELECT COUNT(*) FROM rss_feeds').fetchone()[0]
+    if existing:
+        return 0
+
+    rows = conn.execute(
+        'SELECT feed_url, etag, last_modified, last_status, last_fetched '
+        'FROM rss_feed_state'
+    ).fetchall()
+    if not rows:
+        return 0
+
+    from datetime import UTC, datetime
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+
+    migrated = 0
+    seen_normalized = set()
+    cur = conn.cursor()
+    for feed_url, etag, last_modified, last_status, last_fetched in rows:
+        if not feed_url:
+            continue
+        normalized = _normalize_feed_url_for_migration(feed_url)
+        if normalized in seen_normalized:
+            continue
+        seen_normalized.add(normalized)
+        cur.execute(
+            'INSERT OR IGNORE INTO rss_feeds '
+            '(feed_url, normalized_url, enabled, added_at, '
+            ' last_fetched_at, last_status, etag, last_modified) '
+            'VALUES (?, ?, 1, ?, ?, ?, ?, ?)',
+            (feed_url, normalized, now,
+             last_fetched or None, last_status,
+             etag or None, last_modified or None),
+        )
+        migrated += cur.rowcount
+
+    return migrated
+
+
 def table_reddit_state_configure(conn):
     try:
         conn.execute("""
@@ -114,6 +215,8 @@ def db_initial_setup(db_path):
     table_post_urls_configure(conn)
     table_bluesky_state_configure(conn)
     table_rss_feed_state_configure(conn)
+    table_rss_feeds_configure(conn)
+    migrate_rss_feed_state_into_rss_feeds(conn)
     table_reddit_state_configure(conn)
     table_mastodon_state_configure(conn)
     conn.commit()

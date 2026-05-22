@@ -107,6 +107,30 @@ def _ensure_rss_feed_state_table(db):
     """)
 
 
+def _ensure_rss_feeds_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS rss_feeds (
+    feed_id              INTEGER PRIMARY KEY,
+    feed_url             TEXT NOT NULL,
+    normalized_url       TEXT NOT NULL UNIQUE,
+    enabled              INTEGER NOT NULL DEFAULT 1,
+    added_at             TEXT NOT NULL,
+    deleted_at           TEXT,
+    last_fetched_at      TEXT,
+    last_success_at      TEXT,
+    last_status          INTEGER,
+    last_error           TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    etag                 TEXT,
+    last_modified        TEXT,
+    latest_entry_at      TEXT)
+    """)
+    db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_rss_feeds_live '
+        'ON rss_feeds(enabled, deleted_at)'
+    )
+
+
 def _ensure_reddit_state_table(db):
     db.execute("""
     CREATE TABLE IF NOT EXISTS reddit_state (
@@ -159,6 +183,168 @@ def db_set_rss_feed_states(states, db_location):
             db.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not persist RSS feed state: {exc}') from exc
+
+
+# --- rss_feeds (subscription + health, supersedes rss_feed_state) ---------
+
+
+def db_count_rss_feeds(db_location):
+    """Return total row count of rss_feeds (including tombstoned)."""
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_rss_feeds_table(db)
+            return db.execute('SELECT COUNT(*) FROM rss_feeds').fetchone()[0]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not count rss_feeds: {exc}') from exc
+
+
+def db_insert_rss_feeds(feeds, db_location):
+    """Bulk INSERT OR IGNORE feeds.
+
+    ``feeds`` is an iterable of ``(feed_url, normalized_url)`` tuples.
+    Rows whose ``normalized_url`` collides with an existing row (including
+    tombstoned rows where ``deleted_at`` is set) are skipped. Returns the
+    number of rows actually inserted.
+    """
+    feeds = list(feeds)
+    if not feeds:
+        return 0
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    rows = [(feed_url, normalized, now) for (feed_url, normalized) in feeds]
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_rss_feeds_table(db)
+            inserted = 0
+            cur = db.cursor()
+            for row in rows:
+                cur.execute(
+                    'INSERT OR IGNORE INTO rss_feeds '
+                    '(feed_url, normalized_url, added_at) VALUES (?, ?, ?)',
+                    row,
+                )
+                inserted += cur.rowcount
+            db.commit()
+            return inserted
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not insert rss_feeds: {exc}') from exc
+
+
+def db_get_active_rss_feeds(db_location):
+    """Return live (enabled, not tombstoned) feeds for ingestion.
+
+    Each row is ``(feed_id, feed_url, etag, last_modified)``. Cache headers
+    are returned as empty strings when NULL so callers can use them directly
+    in HTTP header construction.
+    """
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_rss_feeds_table(db)
+            cur = db.execute(
+                'SELECT feed_id, feed_url, etag, last_modified '
+                'FROM rss_feeds '
+                'WHERE enabled = 1 AND deleted_at IS NULL '
+                'ORDER BY feed_id'
+            )
+            return [
+                (row[0], row[1], row[2] or '', row[3] or '')
+                for row in cur.fetchall()
+            ]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load active rss_feeds: {exc}') from exc
+
+
+def db_update_rss_feed_after_fetch(results, db_location, auto_disable_after):
+    """Persist per-feed fetch outcomes.
+
+    ``results`` is an iterable of dicts with keys:
+        feed_id (int), status (int), etag (str), last_modified (str),
+        error (str|None), latest_entry_at (str|None, optional).
+
+    Status 200 or 304 counts as success: ``consecutive_failures`` resets to
+    0, ``last_success_at`` is updated, cache headers are persisted. Any
+    other status counts as failure: ``consecutive_failures`` is incremented
+    and ``last_error`` recorded. When ``auto_disable_after`` is positive
+    and the counter reaches that threshold, ``enabled`` flips to 0.
+
+    Returns the number of feeds auto-disabled on this call.
+    """
+    results = list(results)
+    if not results:
+        return 0
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    auto_disabled = 0
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_rss_feeds_table(db)
+            for r in results:
+                status = r.get('status') or 0
+                success = status in (200, 304)
+                etag = r.get('etag') or None
+                last_mod = r.get('last_modified') or None
+                latest_entry = r.get('latest_entry_at')
+                error = r.get('error')
+
+                if success:
+                    db.execute(
+                        'UPDATE rss_feeds SET '
+                        '  last_fetched_at = ?, '
+                        '  last_success_at = ?, '
+                        '  last_status     = ?, '
+                        '  last_error      = NULL, '
+                        '  consecutive_failures = 0, '
+                        '  etag            = ?, '
+                        '  last_modified   = ?, '
+                        '  latest_entry_at = COALESCE(?, latest_entry_at) '
+                        'WHERE feed_id = ?',
+                        (now, now, status, etag, last_mod,
+                         latest_entry, r['feed_id']),
+                    )
+                else:
+                    db.execute(
+                        'UPDATE rss_feeds SET '
+                        '  last_fetched_at = ?, '
+                        '  last_status     = ?, '
+                        '  last_error      = ?, '
+                        '  consecutive_failures = consecutive_failures + 1 '
+                        'WHERE feed_id = ?',
+                        (now, status, error, r['feed_id']),
+                    )
+                    if auto_disable_after and auto_disable_after > 0:
+                        cur = db.execute(
+                            'UPDATE rss_feeds SET enabled = 0 '
+                            'WHERE feed_id = ? '
+                            '  AND enabled = 1 '
+                            '  AND consecutive_failures >= ?',
+                            (r['feed_id'], auto_disable_after),
+                        )
+                        if cur.rowcount:
+                            auto_disabled += cur.rowcount
+            db.commit()
+            return auto_disabled
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not update rss_feeds health: {exc}') from exc
+
+
+def db_get_all_rss_feeds(db_location):
+    """Return every feed row, including disabled and tombstoned.
+
+    Used by the exporter and any future admin tooling. Each row is a dict
+    with all canonical columns from ``rss_feeds``.
+    """
+    cols = ['feed_id', 'feed_url', 'normalized_url', 'enabled', 'added_at',
+            'deleted_at', 'last_fetched_at', 'last_success_at', 'last_status',
+            'last_error', 'consecutive_failures', 'etag', 'last_modified',
+            'latest_entry_at']
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_rss_feeds_table(db)
+            cur = db.execute(
+                f'SELECT {", ".join(cols)} FROM rss_feeds '
+                'ORDER BY normalized_url'
+            )
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load rss_feeds: {exc}') from exc
 
 
 def db_get_reddit_states(db_location):

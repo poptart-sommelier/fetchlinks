@@ -25,8 +25,13 @@ vacuum_threshold_pages  = 1000
 # (paths starting with ~ are expanded).
 
 [sources.rss]
-enabled    = true
-feeds_file = "rss_feeds.txt"
+enabled                     = true
+# One-time seed; loaded into the rss_feeds table only when the table is empty.
+seed_file                   = "rss_feeds.txt"
+# Where fetchlinks-export-rss-feeds writes the deterministic snapshot.
+export_path                 = "../data/rss_feeds.export.txt"
+auto_disable_after_failures = 10
+request_timeout_seconds     = 10
 
 [sources.reddit]
 enabled             = true

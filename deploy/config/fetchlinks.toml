@@ -26,8 +26,13 @@ vacuum_threshold_pages  = 1000
 # credential files into /etc/fetchlinks/credentials/ (mode 0640 root:fetchlinks).
 
 [sources.rss]
-enabled    = true
-feeds_file = "/etc/fetchlinks/rss_feeds.txt"
+enabled                     = true
+# One-time seed; loaded into the rss_feeds table only when the table is empty.
+seed_file                   = "/etc/fetchlinks/rss_feeds.txt"
+# Where fetchlinks-export-rss-feeds writes the deterministic snapshot.
+export_path                 = "/var/lib/fetchlinks/rss_feeds.txt"
+auto_disable_after_failures = 10
+request_timeout_seconds     = 10
 
 [sources.reddit]
 enabled             = false

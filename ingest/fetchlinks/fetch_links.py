@@ -36,7 +36,7 @@ def fetch_links(cfg: app_config.AppConfig) -> None:
     desc_kw = list(cfg.ingest.excluded_url_or_description_keywords)
 
     if cfg.sources.rss and cfg.sources.rss.enabled:
-        rss_links.run(list(cfg.sources.rss.feeds), db_path, max_age, host_kw, desc_kw)
+        rss_links.run(cfg.sources.rss, db_path, max_age, host_kw, desc_kw)
 
     if cfg.sources.reddit and cfg.sources.reddit.enabled:
         reddit_links.run(cfg.sources.reddit, db_path, max_age, host_kw, desc_kw)

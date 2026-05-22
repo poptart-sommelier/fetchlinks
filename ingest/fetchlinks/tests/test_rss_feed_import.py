@@ -6,7 +6,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import db_setup
+import db_utils
 import rss_feed_import as importer
+
+
+def _fresh_db(tmp: Path) -> Path:
+    db_path = tmp / 'fetchlinks.db'
+    db_setup.db_initial_setup(db_path)
+    return db_path
+
+
+def _seed_db_with(db_path: Path, urls: list[str]) -> None:
+    feeds = [(u, importer.normalize_feed_url(u)) for u in urls]
+    db_utils.db_insert_rss_feeds(feeds, db_path)
 
 
 def _rss_feed(
@@ -241,13 +254,14 @@ class FeedCheckTests(unittest.TestCase):
 
 
 class ImportWorkflowTests(unittest.TestCase):
-    def test_dry_run_writes_pruned_without_modifying_sources(self):
+    def test_dry_run_writes_pruned_without_modifying_db(self):
         with tempfile.TemporaryDirectory() as tmp:
-            input_path = Path(tmp) / 'rss-list.txt'
-            feeds_path = Path(tmp) / 'rss_feeds.txt'
+            tmp_path = Path(tmp)
+            input_path = tmp_path / 'rss-list.txt'
+            db_path = _fresh_db(tmp_path)
             input_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _write_feeds_file(feeds_path, ['https://existing.example/rss'])
-            original_feeds = feeds_path.read_text(encoding='utf-8')
+            _seed_db_with(db_path, ['https://existing.example/rss'])
+            before = db_utils.db_count_rss_feeds(db_path)
             checks = [importer.FeedCheck(
                 input_url='https://new.example/feed.xml',
                 feed_url='https://new.example/feed.xml',
@@ -257,18 +271,19 @@ class ImportWorkflowTests(unittest.TestCase):
             )]
 
             with patch.object(importer, 'check_candidates', return_value=checks):
-                added = _quiet_call(importer.import_from_input, input_path, feeds_path, dry_run=True, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path, db_path, dry_run=True, abandoned_days=365)
 
             self.assertEqual(added, 0)
-            self.assertEqual(feeds_path.read_text(encoding='utf-8'), original_feeds)
-            self.assertEqual((Path(tmp) / 'rss-list.txt.pruned').read_text(encoding='utf-8'), 'https://new.example/feed.xml\n')
+            self.assertEqual(db_utils.db_count_rss_feeds(db_path), before)
+            self.assertEqual((tmp_path / 'rss-list.txt.pruned').read_text(encoding='utf-8'), 'https://new.example/feed.xml\n')
 
     def test_dry_run_excludes_same_site_duplicate_content(self):
         with tempfile.TemporaryDirectory() as tmp:
-            input_path = Path(tmp) / 'rss-list.txt'
-            feeds_path = Path(tmp) / 'rss_feeds.txt'
+            tmp_path = Path(tmp)
+            input_path = tmp_path / 'rss-list.txt'
+            db_path = _fresh_db(tmp_path)
             input_path.write_text('https://trustedsec.com/feed.rss\n', encoding='utf-8')
-            _write_feeds_file(feeds_path, ['https://www.trustedsec.com/feed/'])
+            _seed_db_with(db_path, ['https://www.trustedsec.com/feed/'])
             candidate_check = importer.FeedCheck(
                 input_url='https://trustedsec.com/feed.rss',
                 feed_url='https://trustedsec.com/feed.rss',
@@ -290,17 +305,18 @@ class ImportWorkflowTests(unittest.TestCase):
 
             with patch.object(importer, 'check_candidates', return_value=[candidate_check]), \
                  patch.object(importer, 'check_feed', return_value=existing_check):
-                added = _quiet_call(importer.import_from_input, input_path, feeds_path, dry_run=True, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path, db_path, dry_run=True, abandoned_days=365)
 
             self.assertEqual(added, 0)
-            self.assertEqual((Path(tmp) / 'rss-list.txt.pruned').read_text(encoding='utf-8'), '')
+            self.assertEqual((tmp_path / 'rss-list.txt.pruned').read_text(encoding='utf-8'), '')
 
-    def test_default_input_mode_applies_and_writes_backup(self):
+    def test_default_input_mode_inserts_into_db(self):
         with tempfile.TemporaryDirectory() as tmp:
-            input_path = Path(tmp) / 'rss-list.txt'
-            feeds_path = Path(tmp) / 'rss_feeds.txt'
+            tmp_path = Path(tmp)
+            input_path = tmp_path / 'rss-list.txt'
+            db_path = _fresh_db(tmp_path)
             input_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _write_feeds_file(feeds_path, ['https://existing.example/rss'])
+            _seed_db_with(db_path, ['https://existing.example/rss'])
             checks = [importer.FeedCheck(
                 input_url='https://new.example/feed.xml',
                 feed_url='https://new.example/feed.xml',
@@ -310,34 +326,75 @@ class ImportWorkflowTests(unittest.TestCase):
             )]
 
             with patch.object(importer, 'check_candidates', return_value=checks):
-                added = _quiet_call(importer.import_from_input, input_path, feeds_path, dry_run=False, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path, db_path, dry_run=False, abandoned_days=365)
 
             self.assertEqual(added, 1)
-            updated_feeds = importer.load_existing_feeds(feeds_path)
-            self.assertIn('https://new.example/feed.xml', updated_feeds)
-            # Existing feed (and any preceding comments) preserved.
-            self.assertIn('https://existing.example/rss', updated_feeds)
-            self.assertIn('# managed by tests', feeds_path.read_text(encoding='utf-8'))
-            self.assertTrue((Path(tmp) / 'rss_feeds.txt.bak').exists())
+            feeds = importer.load_existing_feeds_from_db(db_path)
+            self.assertIn('https://new.example/feed.xml', feeds)
+            self.assertIn('https://existing.example/rss', feeds)
 
     def test_pruned_mode_applies_without_network_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
-            pruned_path = Path(tmp) / 'rss-list.txt.pruned'
-            feeds_path = Path(tmp) / 'rss_feeds.txt'
+            tmp_path = Path(tmp)
+            pruned_path = tmp_path / 'rss-list.txt.pruned'
+            db_path = _fresh_db(tmp_path)
             pruned_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _write_feeds_file(feeds_path, ['https://existing.example/rss'])
+            _seed_db_with(db_path, ['https://existing.example/rss'])
 
             with patch.object(importer, 'check_candidates') as check_candidates:
-                added = _quiet_call(importer.import_from_pruned, pruned_path, feeds_path, dry_run=False)
+                added = _quiet_call(importer.import_from_pruned, pruned_path, db_path, dry_run=False)
 
-            updated_feeds = importer.load_existing_feeds(feeds_path)
+            feeds = importer.load_existing_feeds_from_db(db_path)
             self.assertEqual(added, 1)
-            self.assertIn('https://new.example/feed.xml', updated_feeds)
+            self.assertIn('https://new.example/feed.xml', feeds)
             check_candidates.assert_not_called()
+
+    def test_seed_if_empty_inserts_when_table_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_path = _fresh_db(tmp_path)
+            seed_path = tmp_path / 'rss_feeds.txt'
+            seed_path.write_text(
+                '# header\nhttps://a.example/feed\n\nhttps://b.example/feed\n',
+                encoding='utf-8',
+            )
+
+            added = _quiet_call(importer.seed_if_empty, seed_path, db_path)
+
+            self.assertEqual(added, 2)
+            self.assertEqual(db_utils.db_count_rss_feeds(db_path), 2)
+
+    def test_seed_if_empty_noop_when_table_has_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_path = _fresh_db(tmp_path)
+            _seed_db_with(db_path, ['https://existing.example/rss'])
+            seed_path = tmp_path / 'rss_feeds.txt'
+            seed_path.write_text('https://a.example/feed\n', encoding='utf-8')
+
+            added = _quiet_call(importer.seed_if_empty, seed_path, db_path)
+
+            self.assertEqual(added, 0)
+            self.assertEqual(db_utils.db_count_rss_feeds(db_path), 1)
+
+    def test_seed_if_empty_noop_when_seed_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_path = _fresh_db(tmp_path)
+            added = _quiet_call(importer.seed_if_empty, tmp_path / 'missing.txt', db_path)
+            self.assertEqual(added, 0)
 
     def test_parse_args_rejects_abandoned_days_with_pruned(self):
         with self.assertRaises(SystemExit):
             _quiet_call(importer.parse_args, ['--pruned', '/tmp/rss-list.txt.pruned', '--abandoned-days', '30'])
+
+    def test_parse_args_rejects_abandoned_days_with_seed(self):
+        with self.assertRaises(SystemExit):
+            _quiet_call(importer.parse_args, ['--seed-if-empty', '/tmp/seed.txt', '--abandoned-days', '30'])
+
+    def test_parse_args_rejects_dry_run_with_seed(self):
+        with self.assertRaises(SystemExit):
+            _quiet_call(importer.parse_args, ['--seed-if-empty', '/tmp/seed.txt', '--dry-run'])
 
 
 if __name__ == '__main__':

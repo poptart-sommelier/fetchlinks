@@ -100,7 +100,11 @@ or relative to the TOML file's directory. The schema is:
 - `[retention]` — `enabled` (default `true`), optional `max_post_age_months`
   (falls back to `[ingest].max_post_age_months`), `vacuum_threshold_pages`
   (default `1000`). Drives the weekly retention job (`retain.py`).
-- `[sources.rss]` — `enabled`, `feeds_file` (path to a plain-text feed list).
+- `[sources.rss]` — `enabled`, optional `seed_file` (read only when the
+  `rss_feeds` table is empty), optional `export_path` (where
+  `export_rss_feeds.py` writes its snapshot), `auto_disable_after_failures`
+  (default `10`; set `0` to disable), `request_timeout_seconds`
+  (default `10`).
 - `[sources.reddit]` — `enabled`, `credential_location`, `subreddits`,
   optional `listing_limit` (default 100) and `max_pages` (default 5).
 - `[sources.bluesky]` — `enabled`, `credential_location`, `timeline_limit`.
@@ -119,38 +123,36 @@ Notes:
   substrings, description matches are whole-word. `"politics"` blocks URLs
   containing `/politics/` and descriptions containing the word `politics`.
 
-### RSS feeds file
+### RSS feeds
 
-RSS feed URLs live in a separate plain-text file referenced by
-`[sources.rss].feeds_file` (default `rss_feeds.txt` next to the TOML). One
-URL per line; blank lines and lines beginning with `#` are ignored:
+The `rss_feeds` SQLite table is the source of truth for which feeds get
+polled. Each row tracks the URL, an `enabled` flag, a `deleted_at`
+tombstone, and per-feed health (etag / last-modified cache headers,
+consecutive failure count, last error). The ingest job auto-disables a
+feed after `auto_disable_after_failures` consecutive failures.
 
-```text
-# infosec
-https://example.com/feed.xml
-https://blog.example/rss
-```
-
-To bulk-import a list of candidate feeds, the importer validates each one,
-drops feeds with no posts in the last 365 days, and appends survivors to the
-configured feeds file (writing a `.bak` of the previous contents):
+Three workflows feed rows into the table via `rss_feed_import.py`:
 
 ```bash
 cd fetchlinks
+# First-time bulk seed from a plain-text file (no-op once the table has rows):
+python3 rss_feed_import.py --seed-if-empty data/config/rss_feeds.txt
+
+# Validate candidate URLs over the network, then INSERT OR IGNORE survivors:
 python3 rss_feed_import.py --input /tmp/rss-list.txt
-```
 
-To review first, use dry-run mode. It writes accepted feeds to
-`/tmp/rss-list.txt.pruned` without editing the feeds file:
-
-```bash
+# Same but dry-run first; produces /tmp/rss-list.txt.pruned for review.
 python3 rss_feed_import.py --input /tmp/rss-list.txt --dry-run
 python3 rss_feed_import.py --pruned /tmp/rss-list.txt.pruned
 ```
 
 Use `--abandoned-days N` to change the cutoff for rejecting feeds with no
-recent posts. Use `--feeds-file /path/to/rss_feeds.txt` to target a feeds
-file other than the default.
+recent posts.
+
+A daily snapshot of the table is written by `export_rss_feeds.py` to
+`[sources.rss].export_path` (three sections: active feeds, commented
+disabled feeds with their failure reason, commented tombstoned feeds).
+The snapshot is for backup/diffing only — do not hand-edit it.
 
 ## 5) Run the backend
 
