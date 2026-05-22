@@ -8,7 +8,9 @@ The scaffold targets Node 24.15 or newer with npm 11.12 or newer.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` for local development and set `FETCHLINKS_DB` to the absolute path of the SQLite database written by the fetchlinks ingestion app. The web app treats this database as read-only.
+Copy `.env.example` to `.env.local` for local development and set `FETCHLINKS_DB` to the absolute path of the SQLite database written by the fetchlinks ingestion app. The public pages treat this database as read-only; the `/admin/feeds` route opens it read-write to manage the `rss_feeds` table.
+
+To enable the admin UI, also set `FETCHLINKS_ADMIN_USER` and `FETCHLINKS_ADMIN_PASS`. Requests to `/admin/*` are gated by HTTP Basic auth against those values. If either is unset, the admin route returns HTTP 503.
 
 SQLite access uses Node's built-in `node:sqlite` module, so no external SQLite npm package or native build step is required.
 
