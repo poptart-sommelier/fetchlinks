@@ -10,9 +10,10 @@
 # Re-running this script later is safe; it acts as the upgrade path
 # (pulls latest from git, rebuilds web, restarts services).
 #
+# Public TLS / nginx is provisioned by a separate script, deploy/tls.sh.
+# Run it once you have a DNS record pointing at this VM.
+#
 # Optional environment variables:
-#   FETCHLINKS_DOMAIN   FQDN for the public site (enables nginx + TLS)
-#   FETCHLINKS_EMAIL    contact email for certbot
 #   FETCHLINKS_REPO_URL git URL to clone/pull (default: poptart-sommelier/fetchlinks)
 #   FETCHLINKS_REPO_REF branch/tag to deploy   (default: master)
 
@@ -32,8 +33,6 @@ PYTHON_BIN="/usr/bin/python3.12"
 
 REPO_URL="${FETCHLINKS_REPO_URL:-https://github.com/poptart-sommelier/fetchlinks.git}"
 REPO_REF="${FETCHLINKS_REPO_REF:-master}"
-DOMAIN="${FETCHLINKS_DOMAIN:-}"
-EMAIL="${FETCHLINKS_EMAIL:-}"
 
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m!!\033[0m %s\n' "$*" >&2; }
@@ -57,8 +56,7 @@ apt-get update -y
 apt-get install -y \
     git curl ca-certificates sqlite3 ufw unattended-upgrades \
     python3.12 python3.12-venv python3.12-dev \
-    build-essential libffi-dev libssl-dev \
-    nginx
+    build-essential libffi-dev libssl-dev
 
 # NodeSource for current Node major
 if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null)" != v${NODE_MAJOR}.* ]]; then
@@ -180,31 +178,7 @@ sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
     --seed-if-empty "${ETC_DIR}/rss_feeds.txt" || \
     warn "rss_feeds seed step reported a failure; check the output above."
 
-# ---- nginx + tls (optional) -------------------------------------------------
-
-if [[ -n "${DOMAIN}" ]]; then
-    log "Installing nginx site for ${DOMAIN}"
-    apt-get install -y python3-certbot-nginx
-    sed "s/fetchlinks.example.com/${DOMAIN}/g" \
-        "${APP_DIR}/deploy/nginx/fetchlinks-web.conf.example" \
-        > "/etc/nginx/sites-available/fetchlinks-web.conf"
-    ln -sf /etc/nginx/sites-available/fetchlinks-web.conf \
-           /etc/nginx/sites-enabled/fetchlinks-web.conf
-    rm -f /etc/nginx/sites-enabled/default
-    nginx -t
-    systemctl reload nginx
-
-    if [[ -n "${EMAIL}" ]]; then
-        log "Requesting certificate via certbot"
-        certbot --nginx --non-interactive --agree-tos \
-            -m "${EMAIL}" -d "${DOMAIN}" --redirect || \
-            warn "certbot failed; you can re-run it manually."
-    else
-        warn "FETCHLINKS_EMAIL not set; skipping certbot. Run it manually when ready."
-    fi
-else
-    warn "FETCHLINKS_DOMAIN not set; nginx site not installed."
-fi
+# nginx + TLS are provisioned separately by deploy/tls.sh.
 
 # ---- final summary ----------------------------------------------------------
 
@@ -232,5 +206,9 @@ Manual steps still required:
   5. Trigger an ingest run to verify:
        sudo systemctl start fetchlinks-ingest.service
        sudo journalctl -u fetchlinks-ingest.service -n 50 --no-pager
+  6. (Optional) provision nginx + TLS once DNS points at this VM:
+       sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
+            FETCHLINKS_EMAIL=you@example.com \
+            ${APP_DIR}/deploy/tls.sh
 ------------------------------------------------------------
 EOF
