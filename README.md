@@ -13,14 +13,16 @@ creating and updating the database; the web app opens it read-only via the
 
 ## Quick Start
 
-Install and run the ingest app:
+Install and run the ingest app. Create the virtualenv at `.venv` in the
+repo root — that's the path the VS Code workspace (`.vscode/settings.json`,
+`.vscode/tasks.json`) and the production layout (`/opt/fetchlinks/.venv`)
+both expect:
 
 ```bash
-python3 -m venv ../venv
-source ../venv/bin/activate
-cd ingest
-pip install -r requirements.txt
-cd fetchlinks
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r ingest/requirements.txt
+cd ingest/fetchlinks
 python3 fetch_links.py
 ```
 

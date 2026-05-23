@@ -4,18 +4,20 @@ These instructions configure and run the Fetchlinks ingest app on Linux.
 
 ## 1) Create and activate virtual environment
 
-From the monorepo root:
+From the monorepo root. The venv MUST live at `.venv` in the repo root
+(not a sibling `../venv`): VS Code (`.vscode/settings.json`,
+`.vscode/tasks.json`) and the production install at `/opt/fetchlinks/.venv`
+both assume this path. `.venv/` is already in `.gitignore`.
 
 ```bash
-python3 -m venv ../venv
-source ../venv/bin/activate
-cd ingest
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 ## 2) Install dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r ingest/requirements.txt
 ```
 
 ## 3) Configure credentials
@@ -154,7 +156,25 @@ A daily snapshot of the table is written by `export_rss_feeds.py` to
 disabled feeds with their failure reason, commented tombstoned feeds).
 The snapshot is for backup/diffing only — do not hand-edit it.
 
-## 5) Run the backend
+## 5) Seed the rss_feeds table (first run only)
+
+`fetch_links.py` does **not** read `rss_feeds.txt` directly — RSS feeds live
+in the `rss_feeds` SQLite table, and `[sources.rss].seed_file` in the TOML
+is only consumed by `rss_feed_import.py --seed-if-empty`. If you skip this
+step, ingest will still run, but RSS will contribute zero posts because the
+table is empty. On production this is run once by `deploy/bootstrap.sh`; in
+dev you do it by hand:
+
+```bash
+cd fetchlinks
+python3 rss_feed_import.py --seed-if-empty data/config/rss_feeds.txt
+```
+
+The command is a no-op once the table has any rows, so it's safe to re-run.
+See section 4's "RSS feeds" subsection for the other `rss_feed_import.py`
+workflows (validated add / dry-run / pruned import).
+
+## 6) Run the backend
 
 ```bash
 cd fetchlinks
@@ -167,7 +187,7 @@ file, pass `--config /path/to/fetchlinks.toml`.
 On first run, the backend initializes the SQLite database automatically if it
 does not exist.
 
-## 6) Validate output
+## 7) Validate output
 
 - Database location is controlled by `[paths].db` in `fetchlinks.toml`.
 - Logs are written to `[paths].log_file` at `[paths].log_level`.
