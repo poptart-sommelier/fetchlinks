@@ -1,4 +1,5 @@
 .venv/
+.venv
 data/logs/
 **/data/logs/
 fetch_links.log
