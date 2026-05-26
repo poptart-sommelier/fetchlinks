@@ -393,5 +393,66 @@ class RunTests(unittest.TestCase):
         db_insert.assert_called_once_with([allowed], self.db_path)
 
 
+class PickSiteLinkTests(unittest.TestCase):
+    def test_returns_none_when_feed_missing(self):
+        self.assertIsNone(rss_links.pick_site_link(None))
+
+    def test_prefers_top_level_link(self):
+        feed = SimpleNamespace(
+            get=lambda key, default=None: {
+                'link': 'https://example.com/',
+                'links': [],
+            }.get(key, default),
+        )
+        self.assertEqual(rss_links.pick_site_link(feed), 'https://example.com/')
+
+    def test_strips_whitespace_on_link(self):
+        feed = SimpleNamespace(
+            get=lambda key, default=None: {
+                'link': '  https://example.com/news  ',
+            }.get(key, default),
+        )
+        self.assertEqual(
+            rss_links.pick_site_link(feed), 'https://example.com/news',
+        )
+
+    def test_falls_back_to_alternate_html_link(self):
+        link_entries = [
+            SimpleNamespace(get=lambda k, d=None: {
+                'rel': 'self', 'type': 'application/rss+xml',
+                'href': 'https://example.com/feed.xml',
+            }.get(k, d)),
+            SimpleNamespace(get=lambda k, d=None: {
+                'rel': 'alternate', 'type': 'text/html',
+                'href': 'https://example.com/',
+            }.get(k, d)),
+        ]
+        feed = SimpleNamespace(
+            get=lambda key, default=None: {
+                'link': '',
+                'links': link_entries,
+            }.get(key, default),
+        )
+        self.assertEqual(rss_links.pick_site_link(feed), 'https://example.com/')
+
+    def test_returns_none_when_only_non_http_scheme(self):
+        feed = SimpleNamespace(
+            get=lambda key, default=None: {
+                'link': 'javascript:alert(1)',
+                'links': [],
+            }.get(key, default),
+        )
+        self.assertIsNone(rss_links.pick_site_link(feed))
+
+    def test_returns_none_when_nothing_usable(self):
+        feed = SimpleNamespace(
+            get=lambda key, default=None: {
+                'link': None,
+                'links': [],
+            }.get(key, default),
+        )
+        self.assertIsNone(rss_links.pick_site_link(feed))
+
+
 if __name__ == '__main__':
     unittest.main()

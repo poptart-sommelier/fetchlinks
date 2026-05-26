@@ -103,12 +103,20 @@ def table_rss_feeds_configure(conn):
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     etag                 TEXT,
     last_modified        TEXT,
-    latest_entry_at      TEXT)
+    latest_entry_at      TEXT,
+    site_link            TEXT)
     """)
         conn.execute(
             'CREATE INDEX IF NOT EXISTS idx_rss_feeds_live '
             'ON rss_feeds(enabled, deleted_at)'
         )
+        # In-place upgrade for DBs created before site_link existed.
+        existing_columns = {
+            row[1]
+            for row in conn.execute('PRAGMA table_info(rss_feeds)').fetchall()
+        }
+        if 'site_link' not in existing_columns:
+            conn.execute('ALTER TABLE rss_feeds ADD COLUMN site_link TEXT')
     except sqlite3.OperationalError as exc:
         raise RuntimeError('Failed to configure rss_feeds table') from exc
 

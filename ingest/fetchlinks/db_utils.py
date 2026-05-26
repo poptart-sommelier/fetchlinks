@@ -282,6 +282,7 @@ def db_update_rss_feed_after_fetch(results, db_location, auto_disable_after):
                 etag = r.get('etag') or None
                 last_mod = r.get('last_modified') or None
                 latest_entry = r.get('latest_entry_at')
+                site_link = r.get('site_link')
                 error = r.get('error')
 
                 if success:
@@ -294,10 +295,11 @@ def db_update_rss_feed_after_fetch(results, db_location, auto_disable_after):
                         '  consecutive_failures = 0, '
                         '  etag            = ?, '
                         '  last_modified   = ?, '
-                        '  latest_entry_at = COALESCE(?, latest_entry_at) '
+                        '  latest_entry_at = COALESCE(?, latest_entry_at), '
+                        '  site_link       = COALESCE(?, site_link) '
                         'WHERE feed_id = ?',
                         (now, now, status, etag, last_mod,
-                         latest_entry, r['feed_id']),
+                         latest_entry, site_link, r['feed_id']),
                     )
                 else:
                     db.execute(
@@ -334,7 +336,7 @@ def db_get_all_rss_feeds(db_location):
     cols = ['feed_id', 'feed_url', 'normalized_url', 'enabled', 'added_at',
             'deleted_at', 'last_fetched_at', 'last_success_at', 'last_status',
             'last_error', 'consecutive_failures', 'etag', 'last_modified',
-            'latest_entry_at']
+            'latest_entry_at', 'site_link']
     try:
         with sqlite3.connect(db_location) as db:
             _ensure_rss_feeds_table(db)
