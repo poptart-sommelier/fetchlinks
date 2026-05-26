@@ -341,7 +341,6 @@ p {
 }
 
 .status-pill {
-  position: relative;
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
@@ -354,48 +353,10 @@ p {
   letter-spacing: 0.02em;
 }
 
-.status-pill-has-tip {
-  cursor: help;
-}
-
-.status-pill-tip {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 10;
-  display: none;
-  max-width: min(420px, 90vw);
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-  color: var(--foreground);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.45;
-  letter-spacing: normal;
-  text-transform: none;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.status-pill-has-tip:hover .status-pill-tip,
-.status-pill-has-tip:focus-visible .status-pill-tip,
-.status-pill-has-tip:focus-within .status-pill-tip {
-  display: block;
-}
-
 .status-pill-healthy {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: var(--accent-soft);
   color: var(--accent-strong);
-}
-
-.status-pill-unhealthy {
-  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
-  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
-  color: var(--danger);
 }
 
 .status-pill-removed {
@@ -428,6 +389,15 @@ p {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-strong);
+}
+
+.feed-row {
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.feed-row-unhealthy {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
 }
 
 .feed-row-header {
@@ -521,6 +491,7 @@ p {
 }
 
 .feed-stat {
+  position: relative;
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
@@ -531,6 +502,38 @@ p {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.feed-stat-has-tip {
+  cursor: help;
+}
+
+.feed-stat-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  display: none;
+  max-width: min(420px, 90vw);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.feed-stat-has-tip:hover .feed-stat-tip,
+.feed-stat-has-tip:focus-visible .feed-stat-tip,
+.feed-stat-has-tip:focus-within .feed-stat-tip {
+  display: block;
 }
 
 .feed-stat strong {

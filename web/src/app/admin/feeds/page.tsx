@@ -159,8 +159,10 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
 }
 
 function FeedRow({ feed }: { feed: RssFeed }) {
+  const health = getFeedHealth(feed);
+  const rowClass = `post-item feed-row feed-row-${health}`;
   return (
-    <article className="post-item feed-row">
+    <article className={rowClass}>
       <header className="feed-row-header">
         <a
           className="post-source feed-row-url"
@@ -242,11 +244,27 @@ function FeedStats({ feed }: { feed: RssFeed }) {
     );
   }
 
-  if (feed.consecutiveFailures > 0) {
+  if (feed.consecutiveFailures > 0 || (feed.lastStatus !== null && feed.lastStatus >= 400)) {
+    const failureLabel =
+      feed.consecutiveFailures > 0
+        ? `${feed.consecutiveFailures} consecutive ${
+            feed.consecutiveFailures === 1 ? "failure" : "failures"
+          }`
+        : `HTTP ${feed.lastStatus}`;
+    const tip = buildUnhealthyTip(feed);
     items.push(
-      <span key="fail" className="feed-stat feed-stat-danger">
-        <strong>{feed.consecutiveFailures}</strong>{" "}
-        consecutive {feed.consecutiveFailures === 1 ? "failure" : "failures"}
+      <span
+        key="fail"
+        className="feed-stat feed-stat-danger feed-stat-has-tip"
+        tabIndex={tip ? 0 : undefined}
+        title={tip}
+      >
+        {failureLabel}
+        {tip ? (
+          <span className="feed-stat-tip" role="tooltip">
+            {tip}
+          </span>
+        ) : null}
       </span>,
     );
   }
@@ -259,7 +277,7 @@ type FeedHealth = "healthy" | "unhealthy" | "removed";
 
 const HEALTH_PILL_LABEL: Record<FeedHealth, string | null> = {
   healthy: null,
-  unhealthy: "Unhealthy",
+  unhealthy: null,
   removed: "Removed",
 };
 
@@ -270,7 +288,7 @@ function getFeedHealth(feed: RssFeed): FeedHealth {
   return "healthy";
 }
 
-function buildUnhealthyTitle(feed: RssFeed): string | undefined {
+function buildUnhealthyTip(feed: RssFeed): string | undefined {
   const parts: string[] = [];
   if (feed.lastStatus !== null) parts.push(`HTTP ${feed.lastStatus}`);
   if (feed.consecutiveFailures > 0) {
@@ -288,15 +306,9 @@ export function FeedStatusPill({ feed }: { feed: RssFeed }) {
   const health = getFeedHealth(feed);
   const label = HEALTH_PILL_LABEL[health];
   if (!label) return null;
-  const tip = health === "unhealthy" ? buildUnhealthyTitle(feed) : undefined;
   return (
-    <span
-      className={`status-pill status-pill-${health}${tip ? " status-pill-has-tip" : ""}`}
-      tabIndex={tip ? 0 : undefined}
-      title={tip}
-    >
+    <span className={`status-pill status-pill-${health}`}>
       {label}
-      {tip ? <span className="status-pill-tip" role="tooltip">{tip}</span> : null}
     </span>
   );
 }
