@@ -181,7 +181,12 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         <FeedStatusPill status={feed.status} />
       </header>
       <FeedStats feed={feed} />
-      {feed.lastError ? <p>{feed.lastError}</p> : null}
+      {feed.lastError ? (
+        <p className="feed-error" role="status">
+          <span className="feed-error-label">Last error</span>
+          <span className="feed-error-body">{feed.lastError}</span>
+        </p>
+      ) : null}
       <nav aria-label="Feed actions" className="post-links">
         {feed.status === "active" ? (
           <FeedAction action={disableFeedAction} feedId={feed.id} label="disable" />

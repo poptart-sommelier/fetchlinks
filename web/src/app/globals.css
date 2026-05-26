@@ -444,6 +444,37 @@ p {
   color: var(--danger);
 }
 
+.feed-error {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger) 6%, var(--panel));
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.feed-error-label {
+  flex-shrink: 0;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.feed-error-body {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-word;
+}
+
 .post-source {
   max-width: min(560px, 100%);
   overflow: hidden;
