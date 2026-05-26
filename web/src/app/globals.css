@@ -167,13 +167,8 @@ p {
   color: var(--success, var(--accent-strong));
 }
 
-.count-tile-error {
-  border-color: var(--danger-border, #b04848);
-  background: var(--danger-bg, #2a1717);
-}
-
 .count-tile-error strong {
-  color: var(--danger, #e07878);
+  color: var(--danger, #b04848);
 }
 
 .count-tile-muted strong {
@@ -400,17 +395,6 @@ p {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-strong);
-}
-
-.feed-action-btn-danger {
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
-  color: var(--danger);
-}
-
-.feed-action-btn-danger:hover {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
-  color: var(--danger);
 }
 
 .feed-row-header {

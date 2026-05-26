@@ -185,12 +185,11 @@ function FeedRow({ feed }: { feed: RssFeed }) {
           <FeedAction
             action={deleteFeedAction}
             feedId={feed.id}
-            label="remove"
-            tone="danger"
+            label="Remove feed"
           />
         ) : null}
         {feed.status === "removed" ? (
-          <FeedAction action={restoreFeedAction} feedId={feed.id} label="restore" />
+          <FeedAction action={restoreFeedAction} feedId={feed.id} label="Restore" />
         ) : null}
       </nav>
     </article>
@@ -325,18 +324,15 @@ function FeedAction({
   action,
   feedId,
   label,
-  tone = "default",
 }: {
   action: (formData: FormData) => Promise<void>;
   feedId: number;
   label: string;
-  tone?: "default" | "danger";
 }) {
-  const toneClass = tone === "danger" ? " feed-action-btn-danger" : "";
   return (
     <form action={action} className="feed-action">
       <input name="feed_id" type="hidden" value={feedId} />
-      <button className={`feed-action-btn${toneClass}`} type="submit">
+      <button className="feed-action-btn" type="submit">
         {label}
       </button>
     </form>
