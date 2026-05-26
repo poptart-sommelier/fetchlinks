@@ -119,12 +119,19 @@ def parse_posts(fetch_results):
         if feed is None:
             continue
         feed_meta = feed.feed if hasattr(feed, 'feed') else {}
-        source = feed_meta.get('link') or url
-        author = feed_meta.get('title') or source
+        # `feed_source` is the URL used as the base for resolving relative
+        # <link> values inside each entry. `site_link` is the feed's
+        # advertised website -- preferred for posts.source so the UI can
+        # group "all posts from this feed" without exposing the feed XML
+        # URL. Falls back to `url` (the feed XML URL) when site_link is
+        # not advertised.
+        feed_source = feed_meta.get('link') or url
+        site_link = pick_site_link(feed)
+        author = feed_meta.get('title') or feed_source
 
         for post in feed.entries:
             try:
-                parsed = RssPost(source, author, post)
+                parsed = RssPost(feed_source, author, post, site_link=site_link)
             except Exception as exc:
                 logger.warning('Skipping malformed entry from %s: %s', url, exc)
                 continue

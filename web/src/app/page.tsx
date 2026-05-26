@@ -2,16 +2,13 @@ import Link from "next/link";
 
 import { safeExternalHref } from "../lib/safe-external-href";
 import type {
-  DomainSummary,
   PostPage,
   PostSummary,
   PostUrl,
-  SourceSummary,
+  SourceType,
 } from "../models/read-models";
 import {
-  getDomainSummaries,
   getPosts,
-  getSourceSummaries,
   openConfiguredFetchlinksDatabase,
   type PostFilters,
 } from "../server/db";
@@ -26,7 +23,8 @@ type Env = Partial<Record<string, string | undefined>>;
 
 type ActiveFilters = {
   source?: string;
-  domain?: string;
+  sourceType?: SourceType;
+  author?: string;
   q?: string;
 };
 
@@ -34,8 +32,6 @@ type LatestPostsResult =
   | {
       status: "ready";
       page: PostPage;
-      sources: SourceSummary[];
-      domains: DomainSummary[];
       filters: ActiveFilters;
     }
   | {
@@ -43,6 +39,13 @@ type LatestPostsResult =
     };
 
 const POSTS_PER_PAGE = 50;
+
+const VALID_SOURCE_TYPES: readonly SourceType[] = [
+  "rss",
+  "reddit",
+  "bluesky",
+  "mastodon",
+];
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -82,14 +85,6 @@ export function loadLatestPosts({
           page,
           pageSize: POSTS_PER_PAGE,
         }),
-        sources: getSourceSummaries(database, {
-          domain: activeFilters.domain,
-          q: activeFilters.q,
-        }),
-        domains: getDomainSummaries(database, {
-          source: activeFilters.source,
-          q: activeFilters.q,
-        }),
         filters: activeFilters,
       };
     } finally {
@@ -120,18 +115,18 @@ export function LatestPostsView({ result }: { result: LatestPostsResult }) {
   return (
     <main className="shell">
       <PageHeader filters={result.filters} page={page} />
-      <FilterBar
-        domains={result.domains}
-        filters={result.filters}
-        sources={result.sources}
-      />
+      <FilterBar filters={result.filters} />
       {page.posts.length === 0 ? (
         <EmptyPostsState filters={result.filters} page={page} />
       ) : null}
       {page.posts.length > 0 ? (
         <section className="post-list" aria-label="Latest posts">
           {page.posts.map((post) => (
-            <PostListItem key={post.id} post={post} />
+            <PostListItem
+              key={post.id}
+              filters={result.filters}
+              post={post}
+            />
           ))}
         </section>
       ) : null}
@@ -172,21 +167,10 @@ function PageHeader({
   );
 }
 
-function FilterBar({
-  domains,
-  filters,
-  sources,
-}: {
-  domains: DomainSummary[];
-  filters: ActiveFilters;
-  sources: SourceSummary[];
-}) {
-  const sourceOptions = includeActiveSource(sources, filters.source);
-  const domainOptions = includeActiveDomain(domains, filters.domain);
-
+function FilterBar({ filters }: { filters: ActiveFilters }) {
   return (
     <form action="/" aria-label="Filter posts" className="filter-bar" method="get">
-      <label>
+      <label className="filter-search">
         <span>Search</span>
         <input
           defaultValue={filters.q ?? ""}
@@ -195,30 +179,8 @@ function FilterBar({
           type="search"
         />
       </label>
-      <label>
-        <span>Source</span>
-        <select defaultValue={filters.source ?? ""} name="source">
-          <option value="">Any source</option>
-          {sourceOptions.map((source) => (
-            <option key={source.source} value={source.source}>
-              {source.source} ({source.postCount.toLocaleString("en-US")})
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        <span>Domain</span>
-        <select defaultValue={filters.domain ?? ""} name="domain">
-          <option value="">Any domain</option>
-          {domainOptions.map((domain) => (
-            <option key={domain.domain} value={domain.domain}>
-              {domain.domain} ({domain.postCount.toLocaleString("en-US")})
-            </option>
-          ))}
-        </select>
-      </label>
       <div className="filter-actions">
-        <button type="submit">Apply</button>
+        <button type="submit">Search</button>
         {hasActiveFilters(filters) ? (
           <Link className="clear-filters" href="/">
             Clear
@@ -245,28 +207,20 @@ function EmptyPostsState({ filters, page }: { filters: ActiveFilters; page: Post
   );
 }
 
-function PostListItem({ post }: { post: PostSummary }) {
-  const sourceHref = safeExternalHref(post.source);
+function PostListItem({
+  filters,
+  post,
+}: {
+  filters: ActiveFilters;
+  post: PostSummary;
+}) {
   const directHref = safeExternalHref(post.directLink);
+
   return (
     <article className="post-item">
       <header className="post-heading">
         <div className="post-meta">
-          {sourceHref ? (
-            <a
-              className="post-source"
-              href={sourceHref}
-              rel="noreferrer"
-              target="_blank"
-              title={post.source}
-            >
-              {getSourceLabel(post)}
-            </a>
-          ) : (
-            <span className="post-source" title={post.source}>
-              {getSourceLabel(post)}
-            </span>
-          )}
+          <SourceLabel currentQ={filters.q} post={post} />
           <span aria-hidden="true" className="post-meta-separator">
             /
           </span>
@@ -275,15 +229,13 @@ function PostListItem({ post }: { post: PostSummary }) {
       </header>
       <h2>{post.description ?? "Untitled post"}</h2>
       {post.urls.length > 0 || directHref ? (
-        <nav aria-label="Post links" className="post-links">
+        <div className="post-links">
           {post.urls.length > 0 ? (
-            <span className="post-url-actions">
-              {post.urls.map((url, index) => (
-                <PostLinkAction key={url.id} showSeparator={index > 0}>
-                  <PostUrlItem label={`link ${index + 1}`} url={url} />
-                </PostLinkAction>
+            <ul className="post-link-list" aria-label="Post links">
+              {post.urls.map((url) => (
+                <PostLinkRow key={url.id} url={url} />
               ))}
-            </span>
+            </ul>
           ) : null}
           {directHref ? (
             <a
@@ -295,45 +247,83 @@ function PostListItem({ post }: { post: PostSummary }) {
               source
             </a>
           ) : null}
-        </nav>
+        </div>
       ) : null}
     </article>
   );
 }
 
-function PostLinkAction({
-  children,
-  showSeparator,
+function SourceLabel({
+  currentQ,
+  post,
 }: {
-  children: React.ReactNode;
-  showSeparator: boolean;
+  currentQ: string | undefined;
+  post: PostSummary;
 }) {
-  return (
-    <span className="post-link-action">
-      {showSeparator ? <span className="post-link-separator">,</span> : null}
-      {children}
-    </span>
-  );
-}
+  const descriptor = getSourceDescriptor(post);
+  const filterHref = buildSourceFilterHref(descriptor, currentQ);
+  const title = descriptor.tooltip ?? post.source;
 
-function PostUrlItem({ label, url }: { label: string; url: PostUrl }) {
-  const usesUnshortenedUrl = url.href !== url.originalUrl;
-  const href = safeExternalHref(url.href);
-  if (!href) {
+  const content = (
+    <>
+      <span className="post-source-type">{descriptor.typeLabel}</span>
+      {descriptor.middle ? (
+        <>
+          <span className="post-source-sep">·</span>
+          <span className="post-source-mid">{descriptor.middle}</span>
+        </>
+      ) : null}
+      {descriptor.author ? (
+        <>
+          <span className="post-source-sep">·</span>
+          <span className="post-source-author">{descriptor.author}</span>
+        </>
+      ) : null}
+    </>
+  );
+
+  if (filterHref) {
     return (
-      <span title={url.href}>{label}</span>
+      <Link className="post-source" href={filterHref} title={title}>
+        {content}
+      </Link>
     );
   }
 
   return (
-    <a
-      href={href}
-      rel="noreferrer"
-      target="_blank"
-      title={usesUnshortenedUrl ? `via ${formatUrlLabel(url.originalUrl)}` : url.href}
-    >
-      {label}
-    </a>
+    <span className="post-source" title={title}>
+      {content}
+    </span>
+  );
+}
+
+function PostLinkRow({ url }: { url: PostUrl }) {
+  const href = safeExternalHref(url.href);
+  const { hostname, pathLabel } = splitUrlForDisplay(url.href);
+  const usesUnshortenedUrl = url.href !== url.originalUrl;
+  const title = usesUnshortenedUrl
+    ? `${url.href} (via ${url.originalUrl})`
+    : url.href;
+
+  const content = (
+    <>
+      <span className="post-link-host">{hostname || url.href}</span>
+      {pathLabel ? (
+        <span className="post-link-path">{pathLabel}</span>
+      ) : null}
+    </>
+  );
+
+  return (
+    <li className="post-link-row">
+      {href ? (
+        <a href={href} rel="noreferrer" target="_blank" title={title}>
+          {content}
+        </a>
+      ) : (
+        <span title={title}>{content}</span>
+      )}
+    </li>
   );
 }
 
@@ -364,7 +354,8 @@ function getFiltersFromSearchParams(
 ): ActiveFilters {
   return normalizeFilters({
     source: getSingleSearchParam(searchParams, "source"),
-    domain: getSingleSearchParam(searchParams, "domain"),
+    sourceType: getSingleSearchParam(searchParams, "source_type"),
+    author: getSingleSearchParam(searchParams, "author"),
     q: getSingleSearchParam(searchParams, "q"),
   });
 }
@@ -397,8 +388,12 @@ function buildPageHref(page: number, filters: ActiveFilters) {
     params.set("source", filters.source);
   }
 
-  if (filters.domain) {
-    params.set("domain", filters.domain);
+  if (filters.sourceType) {
+    params.set("source_type", filters.sourceType);
+  }
+
+  if (filters.author) {
+    params.set("author", filters.author);
   }
 
   if (filters.q) {
@@ -412,6 +407,118 @@ function buildPageHref(page: number, filters: ActiveFilters) {
   const query = params.toString();
 
   return query ? `/?${query}` : "/";
+}
+
+type SourceDescriptor = {
+  typeLabel: string;
+  middle?: string;
+  author?: string;
+  filter?: {
+    sourceType?: SourceType;
+    source?: string;
+    author?: string;
+  };
+  tooltip?: string;
+};
+
+function getSourceDescriptor(post: PostSummary): SourceDescriptor {
+  const author = post.author?.trim() || undefined;
+
+  if (post.sourceType === "reddit") {
+    const subreddit = extractRedditSubreddit(post.source);
+
+    return {
+      typeLabel: subreddit ? `reddit/${subreddit}` : "reddit",
+      author,
+      filter: author ? { sourceType: "reddit", author } : undefined,
+      tooltip: post.source,
+    };
+  }
+
+  if (post.sourceType === "bluesky" || post.sourceType === "mastodon") {
+    return {
+      typeLabel: post.sourceType,
+      author,
+      filter: author
+        ? { sourceType: post.sourceType, author }
+        : undefined,
+      tooltip: post.source,
+    };
+  }
+
+  if (post.sourceType === "rss") {
+    return {
+      typeLabel: "rss",
+      middle: formatUrlLabel(post.source),
+      author,
+      filter: { sourceType: "rss", source: post.source },
+      tooltip: post.source,
+    };
+  }
+
+  return {
+    typeLabel: formatUrlLabel(post.source),
+    author,
+    filter: post.source ? { source: post.source } : undefined,
+    tooltip: post.source,
+  };
+}
+
+function buildSourceFilterHref(
+  descriptor: SourceDescriptor,
+  currentQ: string | undefined,
+) {
+  if (!descriptor.filter) {
+    return undefined;
+  }
+
+  const params = new URLSearchParams();
+
+  if (descriptor.filter.sourceType) {
+    params.set("source_type", descriptor.filter.sourceType);
+  }
+
+  if (descriptor.filter.source) {
+    params.set("source", descriptor.filter.source);
+  }
+
+  if (descriptor.filter.author) {
+    params.set("author", descriptor.filter.author);
+  }
+
+  if (currentQ) {
+    params.set("q", currentQ);
+  }
+
+  const query = params.toString();
+
+  return query ? `/?${query}` : "/";
+}
+
+function extractRedditSubreddit(source: string): string | undefined {
+  try {
+    const url = new URL(source);
+    const match = url.pathname.match(/^\/r\/([^/]+)/i);
+
+    return match?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function splitUrlForDisplay(value: string): {
+  hostname: string;
+  pathLabel: string;
+} {
+  try {
+    const url = new URL(value);
+    const pathLabel = `${url.pathname}${url.search}${url.hash}`;
+    const cleanPath = pathLabel === "/" ? "" : pathLabel;
+
+    return { hostname: url.hostname, pathLabel: cleanPath };
+  } catch {
+    return { hostname: value, pathLabel: "" };
+  }
 }
 
 function formatPostDate(value: string) {
@@ -430,16 +537,13 @@ function formatUrlLabel(value: string) {
   }
 }
 
-function getSourceLabel(post: PostSummary) {
-  return post.author?.trim() || formatUrlLabel(post.source);
-}
-
 function normalizeFilters(filters: PostFilters): ActiveFilters {
   const source = normalizeOptionalText(filters.source);
-  const domain = normalizeOptionalText(filters.domain)?.toLowerCase();
+  const sourceType = normalizeSourceType(filters.sourceType);
+  const author = normalizeOptionalText(filters.author);
   const q = normalizeOptionalText(filters.q);
 
-  return { source, domain, q };
+  return { source, sourceType, author, q };
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {
@@ -448,31 +552,14 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
   return text ? text : undefined;
 }
 
+function normalizeSourceType(value: string | undefined): SourceType | undefined {
+  const text = value?.trim().toLowerCase();
+
+  return VALID_SOURCE_TYPES.find((t) => t === text);
+}
+
 function hasActiveFilters(filters: ActiveFilters) {
-  return Boolean(filters.source || filters.domain || filters.q);
-}
-
-function includeActiveSource(
-  sources: SourceSummary[],
-  activeSource: string | undefined,
-): SourceSummary[] {
-  if (!activeSource || sources.some((source) => source.source === activeSource)) {
-    return sources;
-  }
-
-  return [{ source: activeSource, postCount: 0, latestPostDate: null }, ...sources];
-}
-
-function includeActiveDomain(
-  domains: DomainSummary[],
-  activeDomain: string | undefined,
-): DomainSummary[] {
-  if (!activeDomain || domains.some((domain) => domain.domain === activeDomain)) {
-    return domains;
-  }
-
-  return [
-    { domain: activeDomain, postCount: 0, urlCount: 0, latestPostDate: null },
-    ...domains,
-  ];
+  return Boolean(
+    filters.source || filters.sourceType || filters.author || filters.q,
+  );
 }

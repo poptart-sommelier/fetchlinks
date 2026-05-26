@@ -1,11 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 
-import type {
-  DomainSummary,
-  PostPage,
-  PostUrl,
-  SourceSummary,
-} from "../models/read-models";
+import type { PostPage, PostUrl, SourceType } from "../models/read-models";
 import { loadAppConfig, type AppConfig } from "./config";
 
 type DbConfig = Pick<AppConfig, "fetchlinksDbPath">;
@@ -25,13 +20,15 @@ type PostFilterQuery = {
 
 type NormalizedPostFilters = {
   source?: string;
-  domain?: string;
+  sourceType?: SourceType;
+  author?: string;
   q?: string;
 };
 
 type PostRow = {
   id: number;
   source: string;
+  sourceType: SourceType | null;
   author: string | null;
   description: string | null;
   directLink: string | null;
@@ -48,22 +45,10 @@ type PostUrlRow = {
   unshortenedUrl: string | null;
 };
 
-type SourceSummaryRow = {
-  source: string;
-  postCount: number;
-  latestPostDate: string | null;
-};
-
-type DomainSummaryRow = {
-  domain: string;
-  postCount: number;
-  urlCount: number;
-  latestPostDate: string | null;
-};
-
 export type PostFilters = {
   source?: string;
-  domain?: string;
+  sourceType?: string;
+  author?: string;
   q?: string;
 };
 
@@ -133,6 +118,7 @@ export function getPosts(
       SELECT
         idx AS id,
         source,
+        source_type AS sourceType,
         author,
         description,
         direct_link AS directLink,
@@ -161,67 +147,6 @@ export function getPosts(
     hasPreviousPage: page > 1,
     hasNextPage: page < totalPages,
   };
-}
-
-export function getSourceSummaries(
-  database: FetchlinksDatabase,
-  filters: PostFilters = {},
-): SourceSummary[] {
-  const filterQuery = buildPostFilterQuery(normalizePostFilters(filters));
-  const rows = database
-    .prepare(`
-      SELECT
-        source,
-        COUNT(*) AS postCount,
-        MAX(date_created) AS latestPostDate
-      FROM posts
-      ${toWhereSql(filterQuery.clauses)}
-      GROUP BY source
-      ORDER BY postCount DESC, source ASC
-    `)
-    .all(...filterQuery.params) as SourceSummaryRow[];
-
-  return rows;
-}
-
-export function getDomainSummaries(
-  database: FetchlinksDatabase,
-  filters: PostFilters = {},
-): DomainSummary[] {
-  const normalizedFilters = normalizePostFilters(filters);
-  const postFilterQuery = buildPostFilterQuery(normalizedFilters, {
-    includeDomain: false,
-  });
-  const clauses = ["url_domains.domain <> ''", ...postFilterQuery.clauses];
-  const params = [...postFilterQuery.params];
-
-  if (normalizedFilters.domain) {
-    clauses.push("url_domains.domain = ?");
-    params.push(normalizedFilters.domain);
-  }
-
-  const rows = database
-    .prepare(`
-      WITH url_domains AS (
-        SELECT
-          post_id AS postId,
-          ${domainSqlExpression("post_urls")} AS domain
-        FROM post_urls
-      )
-      SELECT
-        url_domains.domain,
-        COUNT(DISTINCT url_domains.postId) AS postCount,
-        COUNT(*) AS urlCount,
-        MAX(posts.date_created) AS latestPostDate
-      FROM url_domains
-      INNER JOIN posts ON posts.idx = url_domains.postId
-      ${toWhereSql(clauses)}
-      GROUP BY url_domains.domain
-      ORDER BY postCount DESC, urlCount DESC, url_domains.domain ASC
-    `)
-    .all(...params) as DomainSummaryRow[];
-
-  return rows;
 }
 
 function getFilteredPostCount(
@@ -279,37 +204,26 @@ function getUrlsByPostId(
 
 function buildPostFilterQuery(
   filters: NormalizedPostFilters,
-  {
-    includeSource = true,
-    includeDomain = true,
-    includeSearch = true,
-  }: {
-    includeSource?: boolean;
-    includeDomain?: boolean;
-    includeSearch?: boolean;
-  } = {},
 ): PostFilterQuery {
   const clauses: string[] = [];
   const params: SqlParameter[] = [];
 
-  if (includeSource && filters.source) {
+  if (filters.source) {
     clauses.push("posts.source = ?");
     params.push(filters.source);
   }
 
-  if (includeDomain && filters.domain) {
-    clauses.push(`
-      EXISTS (
-        SELECT 1
-        FROM post_urls domain_urls
-        WHERE domain_urls.post_id = posts.idx
-          AND ${domainSqlExpression("domain_urls")} = ?
-      )
-    `);
-    params.push(filters.domain);
+  if (filters.sourceType) {
+    clauses.push("posts.source_type = ?");
+    params.push(filters.sourceType);
   }
 
-  if (includeSearch && filters.q) {
+  if (filters.author) {
+    clauses.push("posts.author = ?");
+    params.push(filters.author);
+  }
+
+  if (filters.q) {
     const pattern = `%${escapeLikeValue(filters.q.toLowerCase())}%`;
 
     clauses.push(`
@@ -335,12 +249,25 @@ function buildPostFilterQuery(
   return { clauses, params };
 }
 
+const VALID_SOURCE_TYPES: readonly SourceType[] = [
+  "rss",
+  "reddit",
+  "bluesky",
+  "mastodon",
+];
+
+function normalizeSourceType(value: string | undefined): SourceType | undefined {
+  const text = value?.trim().toLowerCase();
+  return VALID_SOURCE_TYPES.find((t) => t === text);
+}
+
 function normalizePostFilters(filters: PostFilters): NormalizedPostFilters {
   const source = normalizeOptionalText(filters.source);
-  const domain = normalizeOptionalText(filters.domain)?.toLowerCase();
+  const sourceType = normalizeSourceType(filters.sourceType);
+  const author = normalizeOptionalText(filters.author);
   const q = normalizeOptionalText(filters.q);
 
-  return { source, domain, q };
+  return { source, sourceType, author, q };
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {
@@ -358,15 +285,6 @@ function escapeLikeValue(value: string): string {
     .replaceAll("\\", "\\\\")
     .replaceAll("%", "\\%")
     .replaceAll("_", "\\_");
-}
-
-function domainSqlExpression(tableAlias: string): string {
-  const href = `COALESCE(${tableAlias}.unshortened_url, ${tableAlias}.url)`;
-  const withoutScheme = `CASE WHEN INSTR(${href}, '://') > 0 THEN SUBSTR(${href}, INSTR(${href}, '://') + 3) ELSE ${href} END`;
-  const beforePath = `CASE WHEN INSTR(${withoutScheme}, '/') > 0 THEN SUBSTR(${withoutScheme}, 1, INSTR(${withoutScheme}, '/') - 1) ELSE ${withoutScheme} END`;
-  const beforeQuery = `CASE WHEN INSTR(${beforePath}, '?') > 0 THEN SUBSTR(${beforePath}, 1, INSTR(${beforePath}, '?') - 1) ELSE ${beforePath} END`;
-
-  return `LOWER(CASE WHEN INSTR(${beforeQuery}, '#') > 0 THEN SUBSTR(${beforeQuery}, 1, INSTR(${beforeQuery}, '#') - 1) ELSE ${beforeQuery} END)`;
 }
 
 function normalizePositiveInteger(

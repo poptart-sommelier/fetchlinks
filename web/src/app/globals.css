@@ -670,7 +670,11 @@ p {
 }
 
 .post-source {
-  max-width: min(560px, 100%);
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  max-width: min(620px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -678,10 +682,42 @@ p {
   font-weight: 700;
 }
 
-.post-source:hover {
+.post-source-type {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.post-source-sep {
+  color: var(--border-strong);
+  font-weight: 400;
+}
+
+.post-source-mid {
+  color: var(--foreground);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+
+.post-source-author {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+a.post-source:hover .post-source-mid,
+a.post-source:hover .post-source-author {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+a.post-source:hover .post-source-type {
+  color: var(--accent-strong);
 }
 
 .pagination a {
@@ -707,15 +743,66 @@ p {
 
 .post-links {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 4px;
   padding-top: 8px;
   border-top: 1px solid var(--subtle);
   color: var(--muted);
   font-size: 14px;
   line-height: 1.4;
+}
+
+.post-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.post-link-row {
+  display: block;
+  min-width: 0;
+}
+
+.post-link-row a,
+.post-link-row > span {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  border-radius: 4px;
+  color: var(--link);
+  text-decoration: none;
+  font-weight: 400;
+}
+
+.post-link-row a:hover {
+  background: var(--subtle);
+  color: var(--link-hover);
+}
+
+.post-link-host {
+  flex: 0 0 auto;
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.post-link-row a:hover .post-link-host {
+  color: var(--link-hover);
+}
+
+.post-link-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
 }
 
 .post-url-actions {
@@ -734,7 +821,8 @@ p {
   color: var(--muted);
 }
 
-.post-links a {
+.post-source-action {
+  align-self: flex-end;
   color: var(--link);
   font-weight: 700;
   text-decoration: underline;
@@ -742,12 +830,69 @@ p {
   text-underline-offset: 3px;
 }
 
-.post-links a:hover {
+.post-source-action:hover {
   color: var(--link-hover);
 }
 
-.post-source-action {
-  margin-left: auto;
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.filter-search {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+
+.filter-search span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.filter-search input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-actions button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filter-actions button:hover {
+  background: var(--accent-strong);
 }
 
 .state {
@@ -791,7 +936,8 @@ p {
 }
 
 @media (max-width: 900px) {
-  .search-form {
+  .search-form,
+  .filter-bar {
     flex-wrap: wrap;
   }
 }
@@ -820,7 +966,8 @@ p {
     align-items: stretch;
   }
 
-  .search-form {
+  .search-form,
+  .filter-bar {
     flex-direction: column;
     align-items: stretch;
   }
@@ -837,6 +984,10 @@ p {
   .post-source {
     max-width: 100%;
     white-space: normal;
+  }
+
+  .post-source-mid {
+    max-width: 100%;
   }
 
   .pagination {

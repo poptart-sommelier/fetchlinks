@@ -1,35 +1,37 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { DomainSummary, PostPage, SourceSummary } from "../models/read-models";
+import type { PostPage } from "../models/read-models";
 import { LatestPostsView, loadLatestPosts } from "./page";
 
 describe("Home", () => {
-  it("renders posts with metadata, extracted URLs, and pagination links", () => {
+  it("renders posts with the source label, extracted URL rows, and pagination links", () => {
     const markup = renderToStaticMarkup(<LatestPostsView result={createReadyResult()} />);
 
     expect(markup).toContain("Latest posts");
     expect(markup).toContain("Newest post");
     expect(markup).toContain("Grace");
-    expect(markup).toContain('href="https://www.reddit.com/r/test"');
+    expect(markup).toContain("reddit/test");
+    expect(markup).toContain('href="/?source_type=reddit&amp;author=Grace"');
     expect(markup).toContain("Apr 28, 2026, 10:00 AM");
     expect(markup).toContain('aria-label="Post links"');
-    expect(markup).toContain('class="post-url-actions"');
-    expect(markup).toContain("link 1");
-    expect(markup).toContain("link 2");
+    expect(markup).toContain('class="post-link-list"');
+    expect(markup).toContain('class="post-link-row"');
+    expect(markup).toContain('class="post-link-host"');
+    expect(markup).toContain('class="post-link-path"');
     expect(markup).toContain('class="post-source-action"');
     expect(markup).toContain("source");
     expect(markup).toContain('href="https://example.com/unshortened-b"');
-    expect(markup).toContain('title="via short.example/b"');
-    expect(markup).not.toContain("Source post");
+    expect(markup).toContain('href="https://example.com/direct-b"');
+    expect(markup).not.toContain(">link 1<");
     expect(markup).toContain('href="/?page=2"');
   });
 
-  it("renders filters and preserves them in pagination links", () => {
+  it("renders a search-only filter bar and preserves filters in pagination links", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView
         result={createReadyResult({
-          filters: { source: "reddit", domain: "example.com", q: "AI" },
+          filters: { sourceType: "reddit", author: "Grace", q: "AI" },
           page: createPostPage({ totalPosts: 75 }),
         })}
       />,
@@ -39,29 +41,31 @@ describe("Home", () => {
     expect(markup).toContain('name="q"');
     expect(markup).toContain('aria-label="Filter posts"');
     expect(markup).toContain('value="AI"');
-    expect(markup).toContain("reddit (1)");
-    expect(markup).toContain("example.com (1)");
+    expect(markup).not.toContain('name="source"');
+    expect(markup).not.toContain('name="domain"');
+    expect(markup).toContain("Clear");
     expect(markup).toContain('href="/"');
     expect(markup).toContain(
-      'href="/?source=reddit&amp;domain=example.com&amp;q=AI&amp;page=2"',
+      'href="/?source_type=reddit&amp;author=Grace&amp;q=AI&amp;page=2"',
     );
   });
 
-  it("renders a single extracted URL as link 1", () => {
-    const page = createPostPage();
-    const [post] = page.posts;
+  it("renders the RSS source label as a filter linking by source_type and source", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView
         result={createReadyResult({
           page: createPostPage({
-            posts: [{ ...post, urls: [post.urls[0]], directLink: null }],
+            posts: [createRssPost()],
           }),
         })}
       />,
     );
 
-    expect(markup).toContain(">link 1</a>");
-    expect(markup).not.toContain(">link</a>");
+    expect(markup).toContain(">rss<");
+    expect(markup).toContain("example.com/blog");
+    expect(markup).toContain(
+      'href="/?source_type=rss&amp;source=https%3A%2F%2Fexample.com%2Fblog"',
+    );
   });
 
   it("renders an empty state when no posts exist", () => {
@@ -104,21 +108,20 @@ describe("Home", () => {
 });
 
 function createReadyResult({
-  domains = createDomainSummaries(),
   filters = {},
   page = createPostPage(),
-  sources = createSourceSummaries(),
 }: {
-  domains?: DomainSummary[];
-  filters?: { source?: string; domain?: string; q?: string };
+  filters?: {
+    source?: string;
+    sourceType?: "rss" | "reddit" | "bluesky" | "mastodon";
+    author?: string;
+    q?: string;
+  };
   page?: PostPage;
-  sources?: SourceSummary[];
 } = {}) {
   return {
     status: "ready" as const,
     page,
-    sources,
-    domains,
     filters,
   };
 }
@@ -129,6 +132,7 @@ function createPostPage(overrides: Partial<PostPage> = {}): PostPage {
       {
         id: 2,
         source: "https://www.reddit.com/r/test",
+        sourceType: "reddit",
         author: "Grace",
         description: "Newest post",
         directLink: "https://example.com/source-post",
@@ -166,34 +170,26 @@ function createPostPage(overrides: Partial<PostPage> = {}): PostPage {
   };
 }
 
-function createSourceSummaries(): SourceSummary[] {
-  return [
-    {
-      source: "reddit",
-      postCount: 1,
-      latestPostDate: "2026-04-28T10:00:00Z",
-    },
-    {
-      source: "rss",
-      postCount: 50,
-      latestPostDate: "2026-04-27T10:00:00Z",
-    },
-  ];
-}
-
-function createDomainSummaries(): DomainSummary[] {
-  return [
-    {
-      domain: "example.com",
-      postCount: 1,
-      urlCount: 2,
-      latestPostDate: "2026-04-28T10:00:00Z",
-    },
-    {
-      domain: "docs.example.org",
-      postCount: 12,
-      urlCount: 12,
-      latestPostDate: "2026-04-27T10:00:00Z",
-    },
-  ];
+function createRssPost(): PostPage["posts"][number] {
+  return {
+    id: 1,
+    source: "https://example.com/blog",
+    sourceType: "rss",
+    author: "Ada",
+    description: "First RSS post",
+    directLink: "https://example.com/post-1",
+    dateCreated: "2026-04-27T10:00:00Z",
+    uniqueId: "rss-1",
+    urls: [
+      {
+        id: 1,
+        postId: 1,
+        position: 0,
+        originalUrl: "https://example.com/a",
+        urlHash: "hash-a",
+        unshortenedUrl: null,
+        href: "https://example.com/a",
+      },
+    ],
+  };
 }
