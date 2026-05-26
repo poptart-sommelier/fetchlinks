@@ -27,6 +27,7 @@ type RssFeedRow = {
   etag: string | null;
   lastModified: string | null;
   latestEntryAt: string | null;
+  siteLink: string | null;
 };
 
 export type WritableFetchlinksDatabase = DatabaseSync;
@@ -45,7 +46,8 @@ const SELECT_COLUMNS = `
   consecutive_failures AS consecutiveFailures,
   etag                 AS etag,
   last_modified        AS lastModified,
-  latest_entry_at      AS latestEntryAt
+  latest_entry_at      AS latestEntryAt,
+  site_link            AS siteLink
 `;
 
 export function openWritableFetchlinksDatabase(
@@ -57,7 +59,28 @@ export function openWritableFetchlinksDatabase(
   // Make sure we honour foreign keys and don't block forever on a writer.
   database.exec("PRAGMA foreign_keys = ON");
   database.exec("PRAGMA busy_timeout = 5000");
+  ensureRssFeedsSchema(database);
   return database;
+}
+
+// Idempotent in-place upgrade for DBs created before site_link existed.
+// Mirrors the ingest-side ALTER in ingest/fetchlinks/db_setup.py so the
+// web admin doesn't 500 when a fresh column hasn't been added by ingest
+// yet. Safe to call on every writable open; the PRAGMA lookup is cheap
+// and the ALTER only fires once per DB.
+function ensureRssFeedsSchema(database: WritableFetchlinksDatabase): void {
+  const columns = database
+    .prepare("PRAGMA table_info(rss_feeds)")
+    .all() as { name: string }[];
+  if (columns.length === 0) {
+    // Table doesn't exist yet (e.g. fresh DB before ingest bootstrap).
+    // Nothing to upgrade.
+    return;
+  }
+  const hasSiteLink = columns.some((c) => c.name === "site_link");
+  if (!hasSiteLink) {
+    database.exec("ALTER TABLE rss_feeds ADD COLUMN site_link TEXT");
+  }
 }
 
 export function openConfiguredWritableFetchlinksDatabase(
@@ -101,6 +124,7 @@ function rowToFeed(row: RssFeedRow): RssFeed {
     etag: row.etag,
     lastModified: row.lastModified,
     latestEntryAt: row.latestEntryAt,
+    siteLink: row.siteLink,
     status,
   };
 }

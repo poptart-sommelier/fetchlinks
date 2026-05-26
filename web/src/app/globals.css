@@ -470,6 +470,12 @@ p {
   display: block;
 }
 
+.feed-action-btn-view:hover {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
 .feed-action-btn-danger {
   border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
   background: color-mix(in srgb, var(--danger) 12%, var(--panel));

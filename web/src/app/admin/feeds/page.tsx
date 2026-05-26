@@ -208,6 +208,9 @@ function FeedRow({
       <div className="feed-row-footer">
         <FeedStats feed={feed} />
         <nav aria-label="Feed actions" className="post-links feed-row-actions">
+          {feed.status !== "removed" && feed.siteLink && !confirmRemove ? (
+            <ViewPostsLink siteLink={feed.siteLink} />
+          ) : null}
           {feed.status !== "removed" ? (
             confirmRemove ? (
               <ConfirmRemove feedId={feed.id} filters={filters} />
@@ -482,6 +485,42 @@ function TrashIcon() {
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6" />
       <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+function ViewPostsLink({ siteLink }: { siteLink: string }) {
+  return (
+    <Link
+      aria-label="View posts from this feed"
+      className="feed-action-btn feed-action-btn-icon feed-action-btn-view"
+      href={`/?source=${encodeURIComponent(siteLink)}`}
+      title="View posts from this feed"
+    >
+      <ViewPostsIcon />
+    </Link>
+  );
+}
+
+function ViewPostsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      focusable="false"
+      height="16"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="16"
+    >
+      <path d="M4 5h6" />
+      <path d="M4 12h6" />
+      <path d="M4 19h10" />
+      <path d="M15 9l5 5-5 5" />
+      <path d="M20 14h-9" />
     </svg>
   );
 }

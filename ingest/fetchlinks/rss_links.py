@@ -133,6 +133,48 @@ def parse_posts(fetch_results):
     return posts
 
 
+def pick_site_link(parsed_feed) -> str | None:
+    """Best-effort extraction of a feed's public website URL.
+
+    Tries, in order:
+      1. ``parsed_feed.link`` if it looks like an absolute http(s) URL.
+      2. The first entry in ``parsed_feed.links`` whose ``rel`` is
+         ``'alternate'`` and whose ``type`` starts with ``'text/html'``
+         (or has no type), and whose ``href`` is an absolute http(s) URL.
+      3. Otherwise ``None`` -- callers should leave the column untouched
+         rather than fall back to the feed XML URL.
+    """
+    if parsed_feed is None:
+        return None
+
+    def _is_http_url(value):
+        if not isinstance(value, str):
+            return False
+        v = value.strip()
+        return v.startswith('http://') or v.startswith('https://')
+
+    link = parsed_feed.get('link') if hasattr(parsed_feed, 'get') else None
+    if _is_http_url(link):
+        return link.strip()
+
+    links = parsed_feed.get('links') if hasattr(parsed_feed, 'get') else None
+    if isinstance(links, list):
+        for entry in links:
+            if not hasattr(entry, 'get'):
+                continue
+            rel = entry.get('rel')
+            if rel and rel != 'alternate':
+                continue
+            etype = entry.get('type') or ''
+            if etype and not etype.startswith('text/html'):
+                continue
+            href = entry.get('href')
+            if _is_http_url(href):
+                return href.strip()
+
+    return None
+
+
 def run(
     rss_source,
     db_path: Path,
@@ -159,8 +201,9 @@ def run(
             'etag': etag,
             'last_modified': last_mod,
             'error': err,
+            'site_link': pick_site_link(feed),
         }
-        for (fid, _url, _feed, etag, last_mod, status, err) in fetch_results
+        for (fid, _url, feed, etag, last_mod, status, err) in fetch_results
     ]
     auto_disabled = db_utils.db_update_rss_feed_after_fetch(
         health_updates, db_path, rss_source.auto_disable_after_failures,

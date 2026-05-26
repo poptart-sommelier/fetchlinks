@@ -15,6 +15,7 @@ export type RssFeed = {
   etag: string | null;
   lastModified: string | null;
   latestEntryAt: string | null;
+  siteLink: string | null;
   status: RssFeedStatus;
 };
 

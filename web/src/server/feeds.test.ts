@@ -40,16 +40,17 @@ function createFeedsFixture(): Fixture {
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
       etag                 TEXT,
       last_modified        TEXT,
-      latest_entry_at      TEXT
+      latest_entry_at      TEXT,
+      site_link            TEXT
     );
 
     INSERT INTO rss_feeds
       (feed_id, feed_url, normalized_url, enabled, added_at, deleted_at,
-       last_error, consecutive_failures)
+       last_error, consecutive_failures, site_link)
     VALUES
-      (1, 'https://a.example/feed', 'https://a.example/feed', 1, '2026-01-01 00:00:00', NULL, NULL, 0),
-      (2, 'https://b.example/feed', 'https://b.example/feed', 0, '2026-01-02 00:00:00', NULL, 'HTTP 500', 10),
-      (3, 'https://c.example/feed', 'https://c.example/feed', 0, '2026-01-03 00:00:00', '2026-02-01 00:00:00', NULL, 0);
+      (1, 'https://a.example/feed', 'https://a.example/feed', 1, '2026-01-01 00:00:00', NULL, NULL, 0, 'https://a.example/'),
+      (2, 'https://b.example/feed', 'https://b.example/feed', 0, '2026-01-02 00:00:00', NULL, 'HTTP 500', 10, NULL),
+      (3, 'https://c.example/feed', 'https://c.example/feed', 0, '2026-01-03 00:00:00', '2026-02-01 00:00:00', NULL, 0, NULL);
   `);
   database.close();
   return {
@@ -108,6 +109,26 @@ describe("listRssFeeds", () => {
       fixture.cleanup();
     }
   });
+
+  it("surfaces siteLink (or null) from the rss_feeds row", () => {
+    const fixture = createFeedsFixture();
+    try {
+      const feeds = withWritableFetchlinksDatabase(
+        { fetchlinksDbPath: fixture.dbPath },
+        (db) => listRssFeeds(db),
+      );
+      const byUrl = Object.fromEntries(
+        feeds.map((f) => [f.feedUrl, f.siteLink]),
+      );
+      expect(byUrl).toEqual({
+        "https://a.example/feed": "https://a.example/",
+        "https://b.example/feed": null,
+        "https://c.example/feed": null,
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
 });
 
 describe("countRssFeedsByStatus", () => {
@@ -149,7 +170,8 @@ describe("countRssFeedsByStatus", () => {
         consecutive_failures INTEGER NOT NULL DEFAULT 0,
         etag                 TEXT,
         last_modified        TEXT,
-        latest_entry_at      TEXT
+        latest_entry_at      TEXT,
+        site_link            TEXT
       );
       INSERT INTO rss_feeds
         (feed_id, feed_url, normalized_url, enabled, added_at,
