@@ -470,6 +470,39 @@ p {
   display: block;
 }
 
+.feed-action-btn-danger {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: var(--danger);
+}
+
+.feed-action-btn-danger:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 20%, var(--panel));
+  color: var(--danger);
+}
+
+.feed-action-btn-ghost {
+  color: var(--muted);
+}
+
+.feed-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.feed-confirm-prompt {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.feed-row-confirming {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  background: color-mix(in srgb, var(--danger) 6%, var(--panel));
+}
+
 .feed-row {
   transition: background-color 120ms ease, border-color 120ms ease;
 }

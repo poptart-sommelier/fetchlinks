@@ -30,6 +30,7 @@ type LoadResult =
       counts: RssFeedCounts;
       filters: ActiveFilters;
       addFeedback: AddFeedback | null;
+      confirmRemoveId: number | null;
     }
   | { status: "error" };
 
@@ -52,13 +53,15 @@ export default async function AdminFeedsPage({
   const resolved = await searchParams;
   const filters = parseFilters(resolved);
   const addFeedback = parseAddFeedback(resolved);
-  const result = loadFeeds(filters, addFeedback);
+  const confirmRemoveId = parseConfirmRemoveId(resolved);
+  const result = loadFeeds(filters, addFeedback, confirmRemoveId);
   return <AdminFeedsView result={result} />;
 }
 
 function loadFeeds(
   filters: ActiveFilters,
   addFeedback: AddFeedback | null,
+  confirmRemoveId: number | null,
 ): LoadResult {
   try {
     const config = loadAppConfig(process.env);
@@ -68,6 +71,7 @@ function loadFeeds(
       counts: countRssFeedsByStatus(db),
       filters,
       addFeedback,
+      confirmRemoveId,
     }));
   } catch {
     return { status: "error" };
@@ -92,7 +96,7 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
     );
   }
 
-  const { feeds, counts, filters, addFeedback } = result;
+  const { feeds, counts, filters, addFeedback, confirmRemoveId } = result;
 
   return (
     <main className="shell">
@@ -168,7 +172,12 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
       ) : (
         <section className="post-list" aria-label="RSS feeds">
           {feeds.map((feed) => (
-            <FeedRow key={feed.id} feed={feed} />
+            <FeedRow
+              key={feed.id}
+              feed={feed}
+              filters={filters}
+              confirmRemove={confirmRemoveId === feed.id}
+            />
           ))}
         </section>
       )}
@@ -176,9 +185,19 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
   );
 }
 
-function FeedRow({ feed }: { feed: RssFeed }) {
+function FeedRow({
+  feed,
+  filters,
+  confirmRemove,
+}: {
+  feed: RssFeed;
+  filters: ActiveFilters;
+  confirmRemove: boolean;
+}) {
   const health = getFeedHealth(feed);
-  const rowClass = `post-item feed-row feed-row-${health}`;
+  const rowClass = `post-item feed-row feed-row-${health}${
+    confirmRemove ? " feed-row-confirming" : ""
+  }`;
   return (
     <article className={rowClass}>
       <header className="feed-row-header">
@@ -197,13 +216,18 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         <FeedStats feed={feed} />
         <nav aria-label="Feed actions" className="post-links feed-row-actions">
           {feed.status !== "removed" ? (
-            <FeedAction
-              action={deleteFeedAction}
-              feedId={feed.id}
-              label="Remove feed"
-              iconOnly
-              icon={<TrashIcon />}
-            />
+            confirmRemove ? (
+              <ConfirmRemove feedId={feed.id} filters={filters} />
+            ) : (
+              <Link
+                aria-label="Remove feed"
+                className="feed-action-btn feed-action-btn-icon"
+                href={buildFeedsHref(filters, { confirm_remove: String(feed.id) })}
+                title="Remove feed"
+              >
+                <TrashIcon />
+              </Link>
+            )
           ) : null}
           {feed.status === "removed" ? (
             <FeedAction action={restoreFeedAction} feedId={feed.id} label="Restore" />
@@ -211,6 +235,29 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         </nav>
       </div>
     </article>
+  );
+}
+
+function ConfirmRemove({
+  feedId,
+  filters,
+}: {
+  feedId: number;
+  filters: ActiveFilters;
+}) {
+  return (
+    <span className="feed-confirm" role="group" aria-label="Confirm remove">
+      <span className="feed-confirm-prompt">Remove this feed?</span>
+      <form action={deleteFeedAction} className="feed-action">
+        <input name="feed_id" type="hidden" value={feedId} />
+        <button className="feed-action-btn feed-action-btn-danger" type="submit">
+          Remove
+        </button>
+      </form>
+      <Link className="feed-action-btn feed-action-btn-ghost" href={buildFeedsHref(filters)}>
+        Cancel
+      </Link>
+    </span>
   );
 }
 
@@ -444,6 +491,30 @@ function parseAddFeedback(
     return { kind: "invalid", reason, url };
   }
   return null;
+}
+
+function parseConfirmRemoveId(
+  searchParams: PageSearchParams | undefined,
+): number | null {
+  const raw = getSingleSearchParam(searchParams, "confirm_remove");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
+}
+
+function buildFeedsHref(
+  filters: ActiveFilters,
+  extra: Record<string, string> = {},
+): string {
+  const params = new URLSearchParams();
+  if (filters.status !== "all") params.set("status", filters.status);
+  if (filters.q) params.set("q", filters.q);
+  if (filters.errors) params.set("errors", "1");
+  for (const [key, value] of Object.entries(extra)) {
+    params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `/admin/feeds?${query}` : "/admin/feeds";
 }
 
 function AddFeedbackBanner({ feedback }: { feedback: AddFeedback }) {
