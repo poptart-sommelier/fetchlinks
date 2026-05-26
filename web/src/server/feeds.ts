@@ -271,23 +271,6 @@ export function addRssFeed(
   return { status: "added", feed: rowToFeed(inserted) };
 }
 
-export function setRssFeedEnabled(
-  database: WritableFetchlinksDatabase,
-  feedId: number,
-  enabled: boolean,
-): boolean {
-  const result = database
-    .prepare(
-      `UPDATE rss_feeds
-       SET enabled = ?,
-           consecutive_failures = CASE WHEN ? = 1 THEN 0 ELSE consecutive_failures END
-       WHERE feed_id = ?
-         AND deleted_at IS NULL`,
-    )
-    .run(enabled ? 1 : 0, enabled ? 1 : 0, feedId);
-  return Number(result.changes) > 0;
-}
-
 export function softDeleteRssFeed(
   database: WritableFetchlinksDatabase,
   feedId: number,
