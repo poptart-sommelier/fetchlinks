@@ -391,6 +391,23 @@ p {
   color: var(--accent-strong);
 }
 
+.feed-action-btn-icon {
+  min-height: 28px;
+  width: 28px;
+  padding: 0;
+  color: var(--muted);
+}
+
+.feed-action-btn-icon:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+}
+
+.feed-action-btn-icon svg {
+  display: block;
+}
+
 .feed-row {
   transition: background-color 120ms ease, border-color 120ms ease;
 }

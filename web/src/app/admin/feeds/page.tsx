@@ -183,6 +183,8 @@ function FeedRow({ feed }: { feed: RssFeed }) {
               action={deleteFeedAction}
               feedId={feed.id}
               label="Remove feed"
+              iconOnly
+              icon={<TrashIcon />}
             />
           ) : null}
           {feed.status === "removed" ? (
@@ -355,18 +357,52 @@ function FeedAction({
   action,
   feedId,
   label,
+  icon,
+  iconOnly = false,
 }: {
   action: (formData: FormData) => Promise<void>;
   feedId: number;
   label: string;
+  icon?: ReactNode;
+  iconOnly?: boolean;
 }) {
+  const className = `feed-action-btn${iconOnly ? " feed-action-btn-icon" : ""}`;
   return (
     <form action={action} className="feed-action">
       <input name="feed_id" type="hidden" value={feedId} />
-      <button className="feed-action-btn" type="submit">
-        {label}
+      <button
+        aria-label={iconOnly ? label : undefined}
+        className={className}
+        title={iconOnly ? label : undefined}
+        type="submit"
+      >
+        {icon}
+        {iconOnly ? null : label}
       </button>
     </form>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      focusable="false"
+      height="16"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="16"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
   );
 }
 
