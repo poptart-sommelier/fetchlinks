@@ -174,12 +174,6 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         <FeedStatusPill feed={feed} />
       </header>
       <FeedStats feed={feed} />
-      {feed.lastError ? (
-        <p className="feed-error" role="status">
-          <span className="feed-error-label">Last error</span>
-          <span className="feed-error-body">{feed.lastError}</span>
-        </p>
-      ) : null}
       <nav aria-label="Feed actions" className="post-links">
         {feed.status !== "removed" ? (
           <FeedAction
@@ -261,10 +255,10 @@ function FeedStats({ feed }: { feed: RssFeed }) {
 
 type FeedHealth = "healthy" | "unhealthy" | "removed";
 
-const HEALTH_PILL_LABEL: Record<FeedHealth, string> = {
-  healthy: "Feed: healthy",
-  unhealthy: "Feed: unhealthy",
-  removed: "Feed: removed",
+const HEALTH_PILL_LABEL: Record<FeedHealth, string | null> = {
+  healthy: null,
+  unhealthy: "Unhealthy",
+  removed: "Removed",
 };
 
 function getFeedHealth(feed: RssFeed): FeedHealth {
@@ -274,15 +268,28 @@ function getFeedHealth(feed: RssFeed): FeedHealth {
   return "healthy";
 }
 
+function buildUnhealthyTitle(feed: RssFeed): string | undefined {
+  const parts: string[] = [];
+  if (feed.lastStatus !== null) parts.push(`HTTP ${feed.lastStatus}`);
+  if (feed.consecutiveFailures > 0) {
+    parts.push(
+      `${feed.consecutiveFailures} consecutive ${
+        feed.consecutiveFailures === 1 ? "failure" : "failures"
+      }`,
+    );
+  }
+  if (feed.lastError) parts.push(feed.lastError);
+  return parts.length ? parts.join(" \u2022 ") : undefined;
+}
+
 export function FeedStatusPill({ feed }: { feed: RssFeed }) {
   const health = getFeedHealth(feed);
-  const title =
-    health === "unhealthy" && feed.lastStatus !== null
-      ? `HTTP ${feed.lastStatus}`
-      : undefined;
+  const label = HEALTH_PILL_LABEL[health];
+  if (!label) return null;
+  const title = health === "unhealthy" ? buildUnhealthyTitle(feed) : undefined;
   return (
     <span className={`status-pill status-pill-${health}`} title={title}>
-      {HEALTH_PILL_LABEL[health]}
+      {label}
     </span>
   );
 }
