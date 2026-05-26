@@ -411,6 +411,34 @@ p {
   font-size: 15px;
 }
 
+.feed-health-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.feed-health-icon-ok {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  color: var(--accent-strong);
+}
+
+.feed-health-icon-err {
+  background: color-mix(in srgb, var(--danger) 18%, var(--panel));
+  color: var(--danger);
+}
+
+.feed-health-icon-unknown {
+  background: var(--panel-alt);
+  color: var(--muted);
+}
+
 .feed-url-host {
   font-weight: 700;
 }
@@ -491,15 +519,6 @@ p {
 .feed-stat strong {
   color: var(--foreground);
   font-weight: 700;
-}
-
-.feed-stat-ok {
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
-  color: var(--accent-strong);
-}
-
-.feed-stat-ok strong {
-  color: var(--accent-strong);
 }
 
 .feed-stat-danger {

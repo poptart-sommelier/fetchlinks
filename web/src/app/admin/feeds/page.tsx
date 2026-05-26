@@ -162,6 +162,7 @@ function FeedRow({ feed }: { feed: RssFeed }) {
   return (
     <article className="post-item feed-row">
       <header className="feed-row-header">
+        <FeedHealthIcon status={feed.lastStatus} />
         <a
           className="post-source feed-row-url"
           href={feed.feedUrl}
@@ -246,15 +247,6 @@ function FeedStats({ feed }: { feed: RssFeed }) {
     );
   }
 
-  if (feed.lastStatus !== null) {
-    const tone = feed.lastStatus >= 400 ? "danger" : "ok";
-    items.push(
-      <span key="status" className={`feed-stat feed-stat-${tone}`}>
-        HTTP <strong>{feed.lastStatus}</strong>
-      </span>,
-    );
-  }
-
   if (feed.consecutiveFailures > 0) {
     items.push(
       <span key="fail" className="feed-stat feed-stat-danger">
@@ -317,6 +309,30 @@ function FeedUrlLabel({ url }: { url: string }) {
       <span className="feed-url-host">{host}</span>
       {tail ? <span className="feed-url-path">{tail}</span> : null}
     </>
+  );
+}
+
+function FeedHealthIcon({ status }: { status: number | null }) {
+  if (status === null) {
+    return (
+      <span
+        aria-label="Not fetched yet"
+        className="feed-health-icon feed-health-icon-unknown"
+        title="Not fetched yet"
+      >
+        &middot;
+      </span>
+    );
+  }
+  const ok = status < 400;
+  return (
+    <span
+      aria-label={ok ? `HTTP ${status} OK` : `HTTP ${status} error`}
+      className={`feed-health-icon feed-health-icon-${ok ? "ok" : "err"}`}
+      title={`HTTP ${status}`}
+    >
+      {ok ? "\u2713" : "\u2715"}
+    </span>
   );
 }
 
