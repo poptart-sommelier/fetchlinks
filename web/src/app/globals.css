@@ -386,6 +386,64 @@ p {
   color: var(--danger);
 }
 
+.feed-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.feed-row-url {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+}
+
+.feed-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.feed-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel-alt);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.feed-stat strong {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.feed-stat-ok {
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+  color: var(--accent-strong);
+}
+
+.feed-stat-ok strong {
+  color: var(--accent-strong);
+}
+
+.feed-stat-danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 6%, var(--panel));
+  color: var(--danger);
+}
+
+.feed-stat-danger strong {
+  color: var(--danger);
+}
+
 .post-source {
   max-width: min(560px, 100%);
   overflow: hidden;

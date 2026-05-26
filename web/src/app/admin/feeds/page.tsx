@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import Link from "next/link";
 
 import type { RssFeed, RssFeedStatus } from "../../../models/rss-feeds";
@@ -8,6 +10,7 @@ import {
   type RssFeedCounts,
 } from "../../../server/feeds";
 import { loadAppConfig } from "../../../server/config";
+import { formatRelative } from "../../../lib/format-relative";
 import {
   addFeedAction,
   deleteFeedAction,
@@ -164,36 +167,20 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
 
 function FeedRow({ feed }: { feed: RssFeed }) {
   return (
-    <article className="post-item">
-      <header className="post-heading">
-        <div className="post-meta">
-          <a
-            className="post-source"
-            href={feed.feedUrl}
-            rel="noreferrer"
-            target="_blank"
-            title={feed.feedUrl}
-          >
-            {feed.feedUrl}
-          </a>
-          <span aria-hidden="true" className="post-meta-separator">/</span>
-          <FeedStatusPill status={feed.status} />
-          {feed.consecutiveFailures > 0 ? (
-            <>
-              <span aria-hidden="true" className="post-meta-separator">/</span>
-              <span title={feed.lastError ?? ""}>
-                failures={feed.consecutiveFailures}
-              </span>
-            </>
-          ) : null}
-          {feed.lastSuccessAt ? (
-            <>
-              <span aria-hidden="true" className="post-meta-separator">/</span>
-              <span>last success {feed.lastSuccessAt}</span>
-            </>
-          ) : null}
-        </div>
+    <article className="post-item feed-row">
+      <header className="feed-row-header">
+        <a
+          className="post-source feed-row-url"
+          href={feed.feedUrl}
+          rel="noreferrer"
+          target="_blank"
+          title={feed.feedUrl}
+        >
+          {feed.feedUrl}
+        </a>
+        <FeedStatusPill status={feed.status} />
       </header>
+      <FeedStats feed={feed} />
       {feed.lastError ? <p>{feed.lastError}</p> : null}
       <nav aria-label="Feed actions" className="post-links">
         {feed.status === "active" ? (
@@ -216,6 +203,78 @@ function FeedRow({ feed }: { feed: RssFeed }) {
       </nav>
     </article>
   );
+}
+
+function FeedStats({ feed }: { feed: RssFeed }) {
+  const items: ReactNode[] = [];
+
+  const fetchedLabel = formatRelative(feed.lastFetchedAt);
+  if (fetchedLabel) {
+    items.push(
+      <span
+        key="fetched"
+        className="feed-stat"
+        title={feed.lastFetchedAt ?? undefined}
+      >
+        Fetched <strong>{fetchedLabel}</strong>
+      </span>,
+    );
+  }
+
+  // Only surface last-success when it differs from last-fetched
+  // (i.e., the most recent attempt failed).
+  const fetchedAndSuccessDiffer =
+    feed.lastSuccessAt != null &&
+    feed.lastFetchedAt != null &&
+    feed.lastSuccessAt !== feed.lastFetchedAt;
+  const successLabel = fetchedAndSuccessDiffer
+    ? formatRelative(feed.lastSuccessAt)
+    : null;
+  if (successLabel) {
+    items.push(
+      <span
+        key="success"
+        className="feed-stat"
+        title={feed.lastSuccessAt ?? undefined}
+      >
+        Last ok <strong>{successLabel}</strong>
+      </span>,
+    );
+  }
+
+  const entryLabel = formatRelative(feed.latestEntryAt);
+  if (entryLabel) {
+    items.push(
+      <span
+        key="entry"
+        className="feed-stat"
+        title={feed.latestEntryAt ?? undefined}
+      >
+        Newest entry <strong>{entryLabel}</strong>
+      </span>,
+    );
+  }
+
+  if (feed.lastStatus !== null) {
+    const tone = feed.lastStatus >= 400 ? "danger" : "ok";
+    items.push(
+      <span key="status" className={`feed-stat feed-stat-${tone}`}>
+        HTTP <strong>{feed.lastStatus}</strong>
+      </span>,
+    );
+  }
+
+  if (feed.consecutiveFailures > 0) {
+    items.push(
+      <span key="fail" className="feed-stat feed-stat-danger">
+        <strong>{feed.consecutiveFailures}</strong>{" "}
+        consecutive {feed.consecutiveFailures === 1 ? "failure" : "failures"}
+      </span>,
+    );
+  }
+
+  if (items.length === 0) return null;
+  return <div className="feed-stats">{items}</div>;
 }
 
 const STATUS_PILL_LABEL: Record<RssFeedStatus, string> = {
