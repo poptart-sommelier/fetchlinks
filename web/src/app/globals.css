@@ -353,22 +353,22 @@ p {
   letter-spacing: 0.02em;
 }
 
-.status-pill-active {
+.status-pill-healthy {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
 
-.status-pill-disabled {
-  border-color: var(--border-strong);
-  background: var(--subtle);
-  color: var(--muted);
+.status-pill-unhealthy {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: var(--danger);
 }
 
 .status-pill-removed {
-  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
-  color: var(--danger);
+  border-color: var(--border-strong);
+  background: var(--subtle);
+  color: var(--muted);
 }
 
 .feed-action {
@@ -409,34 +409,6 @@ p {
   flex: 1;
   min-width: 0;
   font-size: 15px;
-}
-
-.feed-health-icon {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.feed-health-icon-ok {
-  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
-  color: var(--accent-strong);
-}
-
-.feed-health-icon-err {
-  background: color-mix(in srgb, var(--danger) 18%, var(--panel));
-  color: var(--danger);
-}
-
-.feed-health-icon-unknown {
-  background: var(--panel-alt);
-  color: var(--muted);
 }
 
 .feed-url-host {

@@ -162,7 +162,6 @@ function FeedRow({ feed }: { feed: RssFeed }) {
   return (
     <article className="post-item feed-row">
       <header className="feed-row-header">
-        <FeedHealthIcon status={feed.lastStatus} />
         <a
           className="post-source feed-row-url"
           href={feed.feedUrl}
@@ -172,7 +171,7 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         >
           <FeedUrlLabel url={feed.feedUrl} />
         </a>
-        <FeedStatusPill status={feed.status} />
+        <FeedStatusPill feed={feed} />
       </header>
       <FeedStats feed={feed} />
       {feed.lastError ? (
@@ -260,16 +259,30 @@ function FeedStats({ feed }: { feed: RssFeed }) {
   return <div className="feed-stats">{items}</div>;
 }
 
-const STATUS_PILL_LABEL: Record<RssFeedStatus, string> = {
-  active: "Active",
-  disabled: "Disabled",
-  removed: "Removed",
+type FeedHealth = "healthy" | "unhealthy" | "removed";
+
+const HEALTH_PILL_LABEL: Record<FeedHealth, string> = {
+  healthy: "Feed: healthy",
+  unhealthy: "Feed: unhealthy",
+  removed: "Feed: removed",
 };
 
-export function FeedStatusPill({ status }: { status: RssFeedStatus }) {
+function getFeedHealth(feed: RssFeed): FeedHealth {
+  if (feed.status === "removed") return "removed";
+  if (feed.consecutiveFailures > 0) return "unhealthy";
+  if (feed.lastStatus !== null && feed.lastStatus >= 400) return "unhealthy";
+  return "healthy";
+}
+
+export function FeedStatusPill({ feed }: { feed: RssFeed }) {
+  const health = getFeedHealth(feed);
+  const title =
+    health === "unhealthy" && feed.lastStatus !== null
+      ? `HTTP ${feed.lastStatus}`
+      : undefined;
   return (
-    <span className={`status-pill status-pill-${status}`}>
-      {STATUS_PILL_LABEL[status]}
+    <span className={`status-pill status-pill-${health}`} title={title}>
+      {HEALTH_PILL_LABEL[health]}
     </span>
   );
 }
@@ -309,30 +322,6 @@ function FeedUrlLabel({ url }: { url: string }) {
       <span className="feed-url-host">{host}</span>
       {tail ? <span className="feed-url-path">{tail}</span> : null}
     </>
-  );
-}
-
-function FeedHealthIcon({ status }: { status: number | null }) {
-  if (status === null) {
-    return (
-      <span
-        aria-label="Not fetched yet"
-        className="feed-health-icon feed-health-icon-unknown"
-        title="Not fetched yet"
-      >
-        &middot;
-      </span>
-    );
-  }
-  const ok = status < 400;
-  return (
-    <span
-      aria-label={ok ? `HTTP ${status} OK` : `HTTP ${status} error`}
-      className={`feed-health-icon feed-health-icon-${ok ? "ok" : "err"}`}
-      title={`HTTP ${status}`}
-    >
-      {ok ? "\u2713" : "\u2715"}
-    </span>
   );
 }
 
