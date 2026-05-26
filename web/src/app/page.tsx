@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { safeExternalHref } from "../lib/safe-external-href";
 import type {
   DomainSummary,
   PostPage,
@@ -245,19 +246,27 @@ function EmptyPostsState({ filters, page }: { filters: ActiveFilters; page: Post
 }
 
 function PostListItem({ post }: { post: PostSummary }) {
+  const sourceHref = safeExternalHref(post.source);
+  const directHref = safeExternalHref(post.directLink);
   return (
     <article className="post-item">
       <header className="post-heading">
         <div className="post-meta">
-          <a
-            className="post-source"
-            href={toExternalHref(post.source)}
-            rel="noreferrer"
-            target="_blank"
-            title={post.source}
-          >
-            {getSourceLabel(post)}
-          </a>
+          {sourceHref ? (
+            <a
+              className="post-source"
+              href={sourceHref}
+              rel="noreferrer"
+              target="_blank"
+              title={post.source}
+            >
+              {getSourceLabel(post)}
+            </a>
+          ) : (
+            <span className="post-source" title={post.source}>
+              {getSourceLabel(post)}
+            </span>
+          )}
           <span aria-hidden="true" className="post-meta-separator">
             /
           </span>
@@ -265,7 +274,7 @@ function PostListItem({ post }: { post: PostSummary }) {
         </div>
       </header>
       <h2>{post.description ?? "Untitled post"}</h2>
-      {post.urls.length > 0 || post.directLink ? (
+      {post.urls.length > 0 || directHref ? (
         <nav aria-label="Post links" className="post-links">
           {post.urls.length > 0 ? (
             <span className="post-url-actions">
@@ -276,10 +285,10 @@ function PostListItem({ post }: { post: PostSummary }) {
               ))}
             </span>
           ) : null}
-          {post.directLink ? (
+          {directHref ? (
             <a
               className="post-source-action"
-              href={post.directLink}
+              href={directHref}
               rel="noreferrer"
               target="_blank"
             >
@@ -309,10 +318,16 @@ function PostLinkAction({
 
 function PostUrlItem({ label, url }: { label: string; url: PostUrl }) {
   const usesUnshortenedUrl = url.href !== url.originalUrl;
+  const href = safeExternalHref(url.href);
+  if (!href) {
+    return (
+      <span title={url.href}>{label}</span>
+    );
+  }
 
   return (
     <a
-      href={url.href}
+      href={href}
       rel="noreferrer"
       target="_blank"
       title={usesUnshortenedUrl ? `via ${formatUrlLabel(url.originalUrl)}` : url.href}
@@ -419,14 +434,6 @@ function getSourceLabel(post: PostSummary) {
   return post.author?.trim() || formatUrlLabel(post.source);
 }
 
-function toExternalHref(value: string) {
-  try {
-    return new URL(value).toString();
-  } catch {
-    return `https://${value}`;
-  }
-}
-
 function normalizeFilters(filters: PostFilters): ActiveFilters {
   const source = normalizeOptionalText(filters.source);
   const domain = normalizeOptionalText(filters.domain)?.toLowerCase();
@@ -436,7 +443,7 @@ function normalizeFilters(filters: PostFilters): ActiveFilters {
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {
-  const text = value?.trim();
+  const text = value?.trim().slice(0, 200);
 
   return text ? text : undefined;
 }

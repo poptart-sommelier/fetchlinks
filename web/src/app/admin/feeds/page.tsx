@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 import Link from "next/link";
 
+import { formatRelative } from "../../../lib/format-relative";
+import { safeExternalHref } from "../../../lib/safe-external-href";
 import type { RssFeed, RssFeedStatus } from "../../../models/rss-feeds";
 import {
   countRssFeedsByStatus,
@@ -10,7 +12,6 @@ import {
   type RssFeedCounts,
 } from "../../../server/feeds";
 import { loadAppConfig } from "../../../server/config";
-import { formatRelative } from "../../../lib/format-relative";
 import {
   addFeedAction,
   deleteFeedAction,
@@ -201,15 +202,7 @@ function FeedRow({
   return (
     <article className={rowClass}>
       <header className="feed-row-header">
-        <a
-          className="post-source feed-row-url"
-          href={feed.feedUrl}
-          rel="noreferrer"
-          target="_blank"
-          title={feed.feedUrl}
-        >
-          <FeedUrlLabel url={feed.feedUrl} />
-        </a>
+        <FeedUrlLink feed={feed} />
         <FeedStatusPill feed={feed} />
       </header>
       <div className="feed-row-footer">
@@ -418,6 +411,28 @@ function FeedUrlLabel({ url }: { url: string }) {
   );
 }
 
+function FeedUrlLink({ feed }: { feed: RssFeed }) {
+  const href = safeExternalHref(feed.feedUrl);
+  if (!href) {
+    return (
+      <span className="post-source feed-row-url" title={feed.feedUrl}>
+        <FeedUrlLabel url={feed.feedUrl} />
+      </span>
+    );
+  }
+  return (
+    <a
+      className="post-source feed-row-url"
+      href={href}
+      rel="noreferrer"
+      target="_blank"
+      title={feed.feedUrl}
+    >
+      <FeedUrlLabel url={feed.feedUrl} />
+    </a>
+  );
+}
+
 function FeedAction({
   action,
   feedId,
@@ -473,7 +488,7 @@ function TrashIcon() {
 
 function parseFilters(searchParams: PageSearchParams | undefined): ActiveFilters {
   const status = pickStatus(getSingleSearchParam(searchParams, "status"));
-  const q = getSingleSearchParam(searchParams, "q")?.trim() || undefined;
+  const q = getSingleSearchParam(searchParams, "q")?.trim().slice(0, 200) || undefined;
   const errors = getSingleSearchParam(searchParams, "errors") === "1";
   return { status, q, errors };
 }
