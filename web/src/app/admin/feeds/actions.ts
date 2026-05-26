@@ -6,7 +6,6 @@ import { loadAppConfig } from "../../../server/config";
 import {
   addRssFeed,
   restoreRssFeed,
-  setRssFeedEnabled,
   softDeleteRssFeed,
   withWritableFetchlinksDatabase,
 } from "../../../server/feeds";
@@ -25,24 +24,6 @@ export async function addFeedAction(formData: FormData): Promise<void> {
   const url = String(formData.get("feed_url") ?? "");
   const config = loadAppConfig(process.env);
   withWritableFetchlinksDatabase(config, (db) => addRssFeed(db, url));
-  revalidatePath(ADMIN_PATH);
-}
-
-export async function enableFeedAction(formData: FormData): Promise<void> {
-  const feedId = parseFeedId(formData.get("feed_id"));
-  const config = loadAppConfig(process.env);
-  withWritableFetchlinksDatabase(config, (db) =>
-    setRssFeedEnabled(db, feedId, true),
-  );
-  revalidatePath(ADMIN_PATH);
-}
-
-export async function disableFeedAction(formData: FormData): Promise<void> {
-  const feedId = parseFeedId(formData.get("feed_id"));
-  const config = loadAppConfig(process.env);
-  withWritableFetchlinksDatabase(config, (db) =>
-    setRssFeedEnabled(db, feedId, false),
-  );
   revalidatePath(ADMIN_PATH);
 }
 

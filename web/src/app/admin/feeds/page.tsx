@@ -14,8 +14,6 @@ import { formatRelative } from "../../../lib/format-relative";
 import {
   addFeedAction,
   deleteFeedAction,
-  disableFeedAction,
-  enableFeedAction,
   restoreFeedAction,
 } from "./actions";
 
@@ -188,12 +186,6 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         </p>
       ) : null}
       <nav aria-label="Feed actions" className="post-links">
-        {feed.status === "active" ? (
-          <FeedAction action={disableFeedAction} feedId={feed.id} label="disable" />
-        ) : null}
-        {feed.status === "disabled" ? (
-          <FeedAction action={enableFeedAction} feedId={feed.id} label="enable" />
-        ) : null}
         {feed.status !== "removed" ? (
           <FeedAction
             action={deleteFeedAction}
