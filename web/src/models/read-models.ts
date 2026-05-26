@@ -2,6 +2,8 @@ export type DatabaseId = number;
 
 export type IsoDateString = string;
 
+export type SourceType = "rss" | "reddit" | "bluesky" | "mastodon";
+
 export type PostUrl = {
   id: DatabaseId;
   postId: DatabaseId;
@@ -15,6 +17,7 @@ export type PostUrl = {
 export type PostSummary = {
   id: DatabaseId;
   source: string;
+  sourceType: SourceType | null;
   author: string | null;
   description: string | null;
   directLink: string | null;
@@ -31,17 +34,4 @@ export type PostPage = {
   totalPages: number;
   hasPreviousPage: boolean;
   hasNextPage: boolean;
-};
-
-export type SourceSummary = {
-  source: string;
-  postCount: number;
-  latestPostDate: IsoDateString | null;
-};
-
-export type DomainSummary = {
-  domain: string;
-  postCount: number;
-  urlCount: number;
-  latestPostDate: IsoDateString | null;
 };

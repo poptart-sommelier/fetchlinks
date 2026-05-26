@@ -1,11 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type {
-  DomainSummary,
   PostPage,
   PostSummary,
   PostUrl,
-  SourceSummary,
+  SourceType,
 } from "./read-models";
 
 describe("read models", () => {
@@ -22,7 +21,8 @@ describe("read models", () => {
 
     const post = {
       id: 1,
-      source: "rss",
+      source: "https://example.com/feed",
+      sourceType: "rss",
       author: null,
       description: "A collected link",
       directLink: "https://example.com/post",
@@ -34,6 +34,7 @@ describe("read models", () => {
     expect(post.urls[0]?.href).toBe("https://example.com/a");
     expectTypeOf<PostSummary["urls"][number]>().toEqualTypeOf<PostUrl>();
     expectTypeOf<PostUrl["unshortenedUrl"]>().toEqualTypeOf<string | null>();
+    expectTypeOf<PostSummary["sourceType"]>().toEqualTypeOf<SourceType | null>();
   });
 
   it("models paginated post results", () => {
@@ -51,27 +52,12 @@ describe("read models", () => {
     expectTypeOf<PostPage["posts"][number]>().toEqualTypeOf<PostSummary>();
   });
 
-  it("models source and domain summaries", () => {
-    const sourceSummary = {
-      source: "reddit",
-      postCount: 12,
-      latestPostDate: "2026-04-28T12:00:00Z",
-    } satisfies SourceSummary;
+  it("constrains source type to the supported ingest sources", () => {
+    const types: SourceType[] = ["rss", "reddit", "bluesky", "mastodon"];
 
-    const domainSummary = {
-      domain: "example.com",
-      postCount: 4,
-      urlCount: 9,
-      latestPostDate: null,
-    } satisfies DomainSummary;
-
-    expect(sourceSummary.postCount).toBe(12);
-    expect(domainSummary.latestPostDate).toBeNull();
-    expectTypeOf<SourceSummary["latestPostDate"]>().toEqualTypeOf<
-      string | null
-    >();
-    expectTypeOf<DomainSummary["latestPostDate"]>().toEqualTypeOf<
-      string | null
+    expect(types).toHaveLength(4);
+    expectTypeOf<SourceType>().toEqualTypeOf<
+      "rss" | "reddit" | "bluesky" | "mastodon"
     >();
   });
 });

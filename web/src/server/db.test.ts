@@ -5,10 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import {
-  getDomainSummaries,
   getPosts,
   getPostCount,
-  getSourceSummaries,
   openConfiguredFetchlinksDatabase,
   openFetchlinksDatabase,
   withFetchlinksDatabase,
@@ -192,14 +190,22 @@ describe("getPosts", () => {
     const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
 
     try {
-      const page = getPosts(database, {
-        domain: "EXAMPLE.com",
+      const byType = getPosts(database, {
+        sourceType: "rss",
+        page: 1,
+        pageSize: 10,
+      });
+      const byAuthor = getPosts(database, {
+        author: "Linus",
         page: 1,
         pageSize: 10,
       });
 
-      expect(page).toMatchObject({ totalPosts: 2, totalPages: 1 });
-      expect(page.posts.map((post) => post.uniqueId)).toEqual(["reddit-2", "rss-1"]);
+      expect(byType.posts.map((post) => post.uniqueId)).toEqual([
+        "rss-4",
+        "rss-1",
+      ]);
+      expect(byAuthor.posts.map((post) => post.uniqueId)).toEqual(["rss-4"]);
     } finally {
       database.close();
       fixture.cleanup();
@@ -228,8 +234,8 @@ describe("getPosts", () => {
 
     try {
       const page = getPosts(database, {
-        source: "rss",
-        domain: "docs.example.org",
+        sourceType: "rss",
+        author: "Linus",
         q: "tie-break",
       });
 
@@ -259,116 +265,12 @@ describe("getPosts", () => {
   });
 });
 
-describe("getSourceSummaries", () => {
-  it("returns source counts ordered by popularity and name", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      expect(getSourceSummaries(database)).toEqual([
-        {
-          source: "rss",
-          postCount: 2,
-          latestPostDate: "2026-04-26T10:00:00Z",
-        },
-        {
-          source: "mastodon",
-          postCount: 1,
-          latestPostDate: "2026-04-26T10:00:00Z",
-        },
-        {
-          source: "reddit",
-          postCount: 1,
-          latestPostDate: "2026-04-28T10:00:00Z",
-        },
-      ]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-
-  it("can summarize sources after domain and search filters", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      expect(getSourceSummaries(database, { domain: "example.com", q: "post" })).toEqual([
-        {
-          source: "reddit",
-          postCount: 1,
-          latestPostDate: "2026-04-28T10:00:00Z",
-        },
-        {
-          source: "rss",
-          postCount: 1,
-          latestPostDate: "2026-04-25T10:00:00Z",
-        },
-      ]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("getDomainSummaries", () => {
-  it("returns URL domain counts from normalized hrefs", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      expect(getDomainSummaries(database)).toEqual([
-        {
-          domain: "example.com",
-          postCount: 2,
-          urlCount: 3,
-          latestPostDate: "2026-04-28T10:00:00Z",
-        },
-        {
-          domain: "docs.example.org",
-          postCount: 1,
-          urlCount: 1,
-          latestPostDate: "2026-04-26T10:00:00Z",
-        },
-      ]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-
-  it("can summarize domains after source and search filters", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      expect(getDomainSummaries(database, { source: "rss", q: "post" })).toEqual([
-        {
-          domain: "docs.example.org",
-          postCount: 1,
-          urlCount: 1,
-          latestPostDate: "2026-04-26T10:00:00Z",
-        },
-        {
-          domain: "example.com",
-          postCount: 1,
-          urlCount: 1,
-          latestPostDate: "2026-04-25T10:00:00Z",
-        },
-      ]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-});
-
 function createFixtureDatabase(): Fixture {
   return createDatabaseWithSql(`
     CREATE TABLE posts (
       idx INTEGER PRIMARY KEY,
       source TEXT NOT NULL,
+      source_type TEXT,
       author TEXT,
       description TEXT,
       direct_link TEXT,
@@ -389,14 +291,15 @@ function createFixtureDatabase(): Fixture {
     INSERT INTO posts (
       idx,
       source,
+      source_type,
       author,
       description,
       direct_link,
       date_created,
       unique_id_string
     ) VALUES
-      (1, 'rss', 'Ada', 'First post', 'https://example.com/first', '2026-04-27T10:00:00Z', 'rss-1'),
-      (2, 'reddit', 'Grace', 'Second post', 'https://example.com/second', '2026-04-28T10:00:00Z', 'reddit-2');
+      (1, 'rss', 'rss', 'Ada', 'First post', 'https://example.com/first', '2026-04-27T10:00:00Z', 'rss-1'),
+      (2, 'reddit', 'reddit', 'Grace', 'Second post', 'https://example.com/second', '2026-04-28T10:00:00Z', 'reddit-2');
 
     INSERT INTO post_urls (
       idx,
@@ -416,6 +319,7 @@ function createPostsQueryFixture(): Fixture {
     CREATE TABLE posts (
       idx INTEGER PRIMARY KEY,
       source TEXT NOT NULL,
+      source_type TEXT,
       author TEXT,
       description TEXT,
       direct_link TEXT,
@@ -436,16 +340,17 @@ function createPostsQueryFixture(): Fixture {
     INSERT INTO posts (
       idx,
       source,
+      source_type,
       author,
       description,
       direct_link,
       date_created,
       unique_id_string
     ) VALUES
-      (1, 'rss', 'Ada', 'Oldest post', 'https://example.com/first', '2026-04-25T10:00:00Z', 'rss-1'),
-      (2, 'reddit', 'Grace', 'Newest post', 'https://example.com/second', '2026-04-28T10:00:00Z', 'reddit-2'),
-      (3, 'mastodon', NULL, NULL, NULL, '2026-04-26T10:00:00Z', 'mastodon-3'),
-      (4, 'rss', 'Linus', 'Tie-break post', 'https://example.com/fourth', '2026-04-26T10:00:00Z', 'rss-4');
+      (1, 'rss', 'rss', 'Ada', 'Oldest post', 'https://example.com/first', '2026-04-25T10:00:00Z', 'rss-1'),
+      (2, 'reddit', 'reddit', 'Grace', 'Newest post', 'https://example.com/second', '2026-04-28T10:00:00Z', 'reddit-2'),
+      (3, 'mastodon', 'mastodon', NULL, NULL, NULL, '2026-04-26T10:00:00Z', 'mastodon-3'),
+      (4, 'rss', 'rss', 'Linus', 'Tie-break post', 'https://example.com/fourth', '2026-04-26T10:00:00Z', 'rss-4');
 
     INSERT INTO post_urls (
       idx,
@@ -487,6 +392,7 @@ function insertPost(database: FetchlinksDatabase): void {
     INSERT INTO posts (
       idx,
       source,
+      source_type,
       author,
       description,
       direct_link,
@@ -494,6 +400,7 @@ function insertPost(database: FetchlinksDatabase): void {
       unique_id_string
     ) VALUES (
       3,
+      'rss',
       'rss',
       'Read Only',
       'This should fail',

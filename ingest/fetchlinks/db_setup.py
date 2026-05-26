@@ -21,15 +21,23 @@ def table_posts_configure(conn):
     CREATE TABLE IF NOT EXISTS posts (
     idx INTEGER PRIMARY KEY,
     source TEXT,
+    source_type TEXT,
     author TEXT,
     description TEXT,
     direct_link TEXT,
     date_created TEXT,
     unique_id_string TEXT UNIQUE NOT NULL )
     """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_unique_id ON posts(unique_id_string)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_source    ON posts(source)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_date      ON posts(date_created)")
+        # Idempotent in-place upgrade for DBs created before source_type
+        # existed. Matches the pattern used for rss_feeds.site_link.
+        existing_columns = {row[1] for row in conn.execute('PRAGMA table_info(posts)').fetchall()}
+        if 'source_type' not in existing_columns:
+            conn.execute('ALTER TABLE posts ADD COLUMN source_type TEXT')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_unique_id   ON posts(unique_id_string)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_source      ON posts(source)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_date        ON posts(date_created)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_source_type ON posts(source_type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_posts_author      ON posts(author)")
     except sqlite3.OperationalError as exc:
         raise RuntimeError('Failed to configure posts table') from exc
 

@@ -147,12 +147,16 @@ class PostTests(unittest.TestCase):
     def test_get_post_row_shape(self):
         p = Post()
         p.source = 's'
+        p.source_type = 'rss'
         p.author = 'a'
         p.description = 'd'
         p.direct_link = 'dl'
         p.date_created = '2026-01-01 00:00:00'
         p.unique_id_string = 'u'
-        self.assertEqual(p.get_post_row(), ('s', 'a', 'd', 'dl', '2026-01-01 00:00:00', 'u'))
+        self.assertEqual(
+            p.get_post_row(),
+            ('s', 'rss', 'a', 'd', 'dl', '2026-01-01 00:00:00', 'u'),
+        )
 
     def test_get_url_rows_shape(self):
         p = Post()
@@ -191,6 +195,26 @@ class RssPostTests(unittest.TestCase):
         post = RssPost('https://example.com/feed.xml', 'Example', entry)
         self.assertEqual(post.description, '')
 
+    def test_source_type_is_rss(self):
+        entry = _RssEntry(title='t', link='https://example.com/a', published='2026-04-19T12:00:00Z')
+        post = RssPost('https://example.com/feed.xml', 'Example', entry)
+        self.assertEqual(post.source_type, 'rss')
+
+    def test_prefers_site_link_over_feed_source(self):
+        entry = _RssEntry(title='t', link='https://example.com/a', published='2026-04-19T12:00:00Z')
+        post = RssPost(
+            'https://example.com/feed.xml',
+            'Example',
+            entry,
+            site_link='https://example.com/',
+        )
+        self.assertEqual(post.source, 'https://example.com/')
+
+    def test_falls_back_to_feed_source_when_site_link_missing(self):
+        entry = _RssEntry(title='t', link='https://example.com/a', published='2026-04-19T12:00:00Z')
+        post = RssPost('https://example.com/feed.xml', 'Example', entry, site_link=None)
+        self.assertEqual(post.source, 'https://example.com/feed.xml')
+
 
 class RedditPostTests(unittest.TestCase):
     def test_extract_data_builds_source_and_direct_link(self):
@@ -212,6 +236,10 @@ class RedditPostTests(unittest.TestCase):
         post = RedditPost(_make_reddit_post('https://example.com/article'))
         self.assertNotEqual(post.unique_id_string, '')
 
+    def test_source_type_is_reddit(self):
+        post = RedditPost(_make_reddit_post('https://example.com/article'))
+        self.assertEqual(post.source_type, 'reddit')
+
 
 class BlueskyPostTests(unittest.TestCase):
     def test_filters_invalid_urls(self):
@@ -225,6 +253,17 @@ class BlueskyPostTests(unittest.TestCase):
         )
         self.assertEqual(post.urls, ['https://example.com/a', 'https://example.com/b'])
         self.assertEqual(post.date_created, '2026-04-19 12:34:56')
+
+    def test_source_type_is_bluesky(self):
+        post = BlueskyPost(
+            source='https://bsky.app/profile/alice',
+            author='Alice',
+            description='hi',
+            direct_link='https://bsky.app/profile/alice/post/xyz',
+            created_at='2026-04-19T12:34:56Z',
+            urls=['https://example.com/a'],
+        )
+        self.assertEqual(post.source_type, 'bluesky')
 
 
 class ClampDateNotInFutureTests(unittest.TestCase):
@@ -265,7 +304,7 @@ class ClampDateNotInFutureTests(unittest.TestCase):
         post._generate_unique_url_string()
 
         row = post.get_post_row()
-        clamped_date = row[4]
+        clamped_date = row[5]
         parsed = dt.datetime.strptime(clamped_date, '%Y-%m-%d %H:%M:%S')
         self.assertLess(parsed.year, 2999)
         # In-memory value is untouched; only the persisted column changes.

@@ -25,8 +25,8 @@ def db_insert(fetched_data, db_location):
 
     insert_post_sql = (
         'INSERT OR IGNORE INTO posts '
-        '(source, author, description, direct_link, date_created, unique_id_string) '
-        'VALUES (?, ?, ?, ?, ?, ?)'
+        '(source, source_type, author, description, direct_link, date_created, unique_id_string) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
     insert_url_sql = (
         'INSERT OR IGNORE INTO post_urls (post_id, position, url, url_hash) '

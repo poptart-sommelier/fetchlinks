@@ -99,6 +99,7 @@ def normalize_url(url: str, base: str = '') -> str:
 class Post:
     def __init__(self):
         self.source = ''
+        self.source_type = ''
         self.author = ''
         self.description = ''
         self.direct_link = ''
@@ -123,6 +124,7 @@ class Post:
         # Row for the `posts` table; matches db_utils.db_insert column order.
         return (
             self.source,
+            self.source_type,
             self.author,
             self.description,
             self.direct_link,
@@ -136,12 +138,17 @@ class Post:
 
 
 class RssPost(Post):
-    def __init__(self, feed_source, feed_author, post):
+    def __init__(self, feed_source, feed_author, post, site_link=None):
         super().__init__()
-        self.extract_data_from_post(feed_source, feed_author, post)
+        self.extract_data_from_post(feed_source, feed_author, post, site_link)
 
-    def extract_data_from_post(self, feed_source, feed_author, post):
-        self.source = feed_source
+    def extract_data_from_post(self, feed_source, feed_author, post, site_link=None):
+        # Prefer the feed's advertised website (site_link) as the post's
+        # source so the public UI can link "all posts from this feed"
+        # without exposing the feed XML URL. Fall back to the feed URL
+        # when site_link is unknown.
+        self.source = site_link or feed_source
+        self.source_type = 'rss'
         self.author = feed_author
         self.description = post.get('title', '')
         self.direct_link = ''
@@ -167,6 +174,7 @@ class RedditPost(Post):
 
     def extract_data_from_post(self, post):
         self.source = f'https://www.reddit.com/{post["data"]["subreddit_name_prefixed"]}'
+        self.source_type = 'reddit'
         self.author = post['data']['author']
         self.description = post['data']['title']
         self.direct_link = f'https://www.reddit.com{post["data"]["permalink"]}'
@@ -186,6 +194,7 @@ class BlueskyPost(Post):
     def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str]):
         super().__init__()
         self.source = source
+        self.source_type = 'bluesky'
         self.author = author
         self.description = description
         self.direct_link = direct_link
@@ -199,6 +208,7 @@ class MastodonPost(Post):
     def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str]):
         super().__init__()
         self.source = source
+        self.source_type = 'mastodon'
         self.author = author
         self.description = description
         self.direct_link = direct_link
