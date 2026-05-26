@@ -35,13 +35,6 @@ type ActiveFilters = {
 
 export const dynamic = "force-dynamic";
 
-const STATUS_OPTIONS: { value: ActiveFilters["status"]; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "disabled", label: "Disabled" },
-  { value: "removed", label: "Removed" },
-];
-
 export default async function AdminFeedsPage({
   searchParams,
 }: AdminFeedsPageProps = {}) {
@@ -125,18 +118,8 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
         </button>
       </form>
 
-      <form action="/admin/feeds" aria-label="Filter feeds" className="filter-bar" method="get">
-        <label>
-          <span>Status</span>
-          <select defaultValue={filters.status} name="status">
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
+      <form action="/admin/feeds" aria-label="Search feeds" className="search-form" method="get">
+        <label className="search-form-field">
           <span>Search</span>
           <input
             defaultValue={filters.q ?? ""}
@@ -145,14 +128,18 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
             type="search"
           />
         </label>
-        <div className="filter-actions">
-          <button type="submit">Apply</button>
-          {filters.status !== "all" || filters.q || filters.errors ? (
-            <Link className="clear-filters" href="/admin/feeds">
-              Clear
-            </Link>
-          ) : null}
-        </div>
+        {filters.status !== "all" ? (
+          <input name="status" type="hidden" value={filters.status} />
+        ) : null}
+        {filters.errors ? <input name="errors" type="hidden" value="1" /> : null}
+        <button className="search-form-btn" type="submit">
+          Search
+        </button>
+        {filters.status !== "all" || filters.q || filters.errors ? (
+          <Link className="clear-filters" href="/admin/feeds">
+            Clear
+          </Link>
+        ) : null}
       </form>
 
       {feeds.length === 0 ? (
