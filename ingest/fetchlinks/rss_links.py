@@ -136,15 +136,22 @@ def parse_posts(fetch_results):
 def pick_site_link(parsed_feed) -> str | None:
     """Best-effort extraction of a feed's public website URL.
 
+    ``parsed_feed`` is the object returned by ``feedparser.parse()``; the
+    channel-level metadata lives under ``parsed_feed.feed`` (a FeedParserDict
+    with ``link`` / ``links`` keys).
+
     Tries, in order:
-      1. ``parsed_feed.link`` if it looks like an absolute http(s) URL.
-      2. The first entry in ``parsed_feed.links`` whose ``rel`` is
+      1. ``parsed_feed.feed.link`` if it looks like an absolute http(s) URL.
+      2. The first entry in ``parsed_feed.feed.links`` whose ``rel`` is
          ``'alternate'`` and whose ``type`` starts with ``'text/html'``
          (or has no type), and whose ``href`` is an absolute http(s) URL.
       3. Otherwise ``None`` -- callers should leave the column untouched
          rather than fall back to the feed XML URL.
     """
     if parsed_feed is None:
+        return None
+    channel = parsed_feed.get('feed') if hasattr(parsed_feed, 'get') else None
+    if channel is None:
         return None
 
     def _is_http_url(value):
@@ -153,11 +160,11 @@ def pick_site_link(parsed_feed) -> str | None:
         v = value.strip()
         return v.startswith('http://') or v.startswith('https://')
 
-    link = parsed_feed.get('link') if hasattr(parsed_feed, 'get') else None
+    link = channel.get('link') if hasattr(channel, 'get') else None
     if _is_http_url(link):
         return link.strip()
 
-    links = parsed_feed.get('links') if hasattr(parsed_feed, 'get') else None
+    links = channel.get('links') if hasattr(channel, 'get') else None
     if isinstance(links, list):
         for entry in links:
             if not hasattr(entry, 'get'):

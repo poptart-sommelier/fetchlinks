@@ -394,24 +394,32 @@ class RunTests(unittest.TestCase):
 
 
 class PickSiteLinkTests(unittest.TestCase):
+    @staticmethod
+    def _wrap(channel_dict):
+        """Build a feedparser-shaped object: top-level dict with a 'feed' key
+        holding the channel-level metadata (link, links, ...)."""
+        channel = SimpleNamespace(
+            get=lambda key, default=None, _d=channel_dict: _d.get(key, default),
+        )
+        return SimpleNamespace(
+            get=lambda key, default=None, _c=channel: (
+                _c if key == 'feed' else default
+            ),
+        )
+
     def test_returns_none_when_feed_missing(self):
         self.assertIsNone(rss_links.pick_site_link(None))
 
+    def test_returns_none_when_channel_missing(self):
+        bare = SimpleNamespace(get=lambda key, default=None: default)
+        self.assertIsNone(rss_links.pick_site_link(bare))
+
     def test_prefers_top_level_link(self):
-        feed = SimpleNamespace(
-            get=lambda key, default=None: {
-                'link': 'https://example.com/',
-                'links': [],
-            }.get(key, default),
-        )
+        feed = self._wrap({'link': 'https://example.com/', 'links': []})
         self.assertEqual(rss_links.pick_site_link(feed), 'https://example.com/')
 
     def test_strips_whitespace_on_link(self):
-        feed = SimpleNamespace(
-            get=lambda key, default=None: {
-                'link': '  https://example.com/news  ',
-            }.get(key, default),
-        )
+        feed = self._wrap({'link': '  https://example.com/news  '})
         self.assertEqual(
             rss_links.pick_site_link(feed), 'https://example.com/news',
         )
@@ -427,30 +435,15 @@ class PickSiteLinkTests(unittest.TestCase):
                 'href': 'https://example.com/',
             }.get(k, d)),
         ]
-        feed = SimpleNamespace(
-            get=lambda key, default=None: {
-                'link': '',
-                'links': link_entries,
-            }.get(key, default),
-        )
+        feed = self._wrap({'link': '', 'links': link_entries})
         self.assertEqual(rss_links.pick_site_link(feed), 'https://example.com/')
 
     def test_returns_none_when_only_non_http_scheme(self):
-        feed = SimpleNamespace(
-            get=lambda key, default=None: {
-                'link': 'javascript:alert(1)',
-                'links': [],
-            }.get(key, default),
-        )
+        feed = self._wrap({'link': 'javascript:alert(1)', 'links': []})
         self.assertIsNone(rss_links.pick_site_link(feed))
 
     def test_returns_none_when_nothing_usable(self):
-        feed = SimpleNamespace(
-            get=lambda key, default=None: {
-                'link': None,
-                'links': [],
-            }.get(key, default),
-        )
+        feed = self._wrap({'link': None, 'links': []})
         self.assertIsNone(rss_links.pick_site_link(feed))
 
 
