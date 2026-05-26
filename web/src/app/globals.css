@@ -411,6 +411,18 @@ p {
   font-size: 15px;
 }
 
+.feed-row-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.feed-row-actions {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 .feed-url-host {
   font-weight: 700;
 }

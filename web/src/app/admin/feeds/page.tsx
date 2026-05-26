@@ -173,19 +173,21 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         </a>
         <FeedStatusPill feed={feed} />
       </header>
-      <FeedStats feed={feed} />
-      <nav aria-label="Feed actions" className="post-links">
-        {feed.status !== "removed" ? (
-          <FeedAction
-            action={deleteFeedAction}
-            feedId={feed.id}
-            label="Remove feed"
-          />
-        ) : null}
-        {feed.status === "removed" ? (
-          <FeedAction action={restoreFeedAction} feedId={feed.id} label="Restore" />
-        ) : null}
-      </nav>
+      <div className="feed-row-footer">
+        <FeedStats feed={feed} />
+        <nav aria-label="Feed actions" className="post-links feed-row-actions">
+          {feed.status !== "removed" ? (
+            <FeedAction
+              action={deleteFeedAction}
+              feedId={feed.id}
+              label="Remove feed"
+            />
+          ) : null}
+          {feed.status === "removed" ? (
+            <FeedAction action={restoreFeedAction} feedId={feed.id} label="Restore" />
+          ) : null}
+        </nav>
+      </div>
     </article>
   );
 }
