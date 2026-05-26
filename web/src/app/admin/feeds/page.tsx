@@ -288,10 +288,15 @@ export function FeedStatusPill({ feed }: { feed: RssFeed }) {
   const health = getFeedHealth(feed);
   const label = HEALTH_PILL_LABEL[health];
   if (!label) return null;
-  const title = health === "unhealthy" ? buildUnhealthyTitle(feed) : undefined;
+  const tip = health === "unhealthy" ? buildUnhealthyTitle(feed) : undefined;
   return (
-    <span className={`status-pill status-pill-${health}`} title={title}>
+    <span
+      className={`status-pill status-pill-${health}${tip ? " status-pill-has-tip" : ""}`}
+      tabIndex={tip ? 0 : undefined}
+      title={tip}
+    >
       {label}
+      {tip ? <span className="status-pill-tip" role="tooltip">{tip}</span> : null}
     </span>
   );
 }

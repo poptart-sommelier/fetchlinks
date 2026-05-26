@@ -341,6 +341,7 @@ p {
 }
 
 .status-pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
@@ -351,6 +352,38 @@ p {
   line-height: 1.5;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+}
+
+.status-pill-has-tip {
+  cursor: help;
+}
+
+.status-pill-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  display: none;
+  max-width: min(420px, 90vw);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.status-pill-has-tip:hover .status-pill-tip,
+.status-pill-has-tip:focus-visible .status-pill-tip,
+.status-pill-has-tip:focus-within .status-pill-tip {
+  display: block;
 }
 
 .status-pill-healthy {
