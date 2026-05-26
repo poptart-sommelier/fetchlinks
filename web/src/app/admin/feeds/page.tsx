@@ -93,14 +93,11 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
           <h1>RSS feeds</h1>
         </div>
         <p className="page-summary">
-          <strong>{counts.active.toLocaleString("en-US")}</strong>{" "}
-          <span>active</span>
+          <CountLink count={counts.active} label="active" status="active" />
           {" / "}
-          <strong>{counts.disabled.toLocaleString("en-US")}</strong>{" "}
-          <span>disabled</span>
+          <CountLink count={counts.disabled} label="disabled" status="disabled" />
           {" / "}
-          <strong>{counts.removed.toLocaleString("en-US")}</strong>{" "}
-          <span>removed</span>
+          <CountLink count={counts.removed} label="removed" status="removed" />
         </p>
       </header>
 
@@ -232,6 +229,22 @@ export function FeedStatusPill({ status }: { status: RssFeedStatus }) {
     <span className={`status-pill status-pill-${status}`}>
       {STATUS_PILL_LABEL[status]}
     </span>
+  );
+}
+
+function CountLink({
+  count,
+  label,
+  status,
+}: {
+  count: number;
+  label: string;
+  status: RssFeedStatus;
+}) {
+  return (
+    <Link className="count-link" href={`/admin/feeds?status=${status}`}>
+      <strong>{count.toLocaleString("en-US")}</strong> <span>{label}</span>
+    </Link>
   );
 }
 

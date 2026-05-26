@@ -123,6 +123,23 @@ p {
   line-height: 1;
 }
 
+.count-link {
+  color: inherit;
+  border-radius: 4px;
+}
+
+.count-link:hover strong,
+.count-link:focus-visible strong {
+  color: var(--accent-strong);
+}
+
+.count-link:hover span,
+.count-link:focus-visible span {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .filter-bar {
   display: grid;
   grid-template-columns: minmax(240px, 2fr) minmax(180px, 1fr) minmax(180px, 1fr) auto;
