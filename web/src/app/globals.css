@@ -246,6 +246,37 @@ p {
   color: var(--border);
 }
 
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.status-pill-active {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.status-pill-disabled {
+  border-color: var(--border-strong);
+  background: var(--subtle);
+  color: var(--muted);
+}
+
+.status-pill-removed {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+  color: var(--danger);
+}
+
 .post-source {
   max-width: min(560px, 100%);
   overflow: hidden;

@@ -182,7 +182,7 @@ function FeedRow({ feed }: { feed: RssFeed }) {
             {feed.feedUrl}
           </a>
           <span aria-hidden="true" className="post-meta-separator">/</span>
-          <span>{feed.status}</span>
+          <FeedStatusPill status={feed.status} />
           {feed.consecutiveFailures > 0 ? (
             <>
               <span aria-hidden="true" className="post-meta-separator">/</span>
@@ -215,6 +215,20 @@ function FeedRow({ feed }: { feed: RssFeed }) {
         ) : null}
       </nav>
     </article>
+  );
+}
+
+const STATUS_PILL_LABEL: Record<RssFeedStatus, string> = {
+  active: "Active",
+  disabled: "Disabled",
+  removed: "Removed",
+};
+
+export function FeedStatusPill({ status }: { status: RssFeedStatus }) {
+  return (
+    <span className={`status-pill status-pill-${status}`}>
+      {STATUS_PILL_LABEL[status]}
+    </span>
   );
 }
 
