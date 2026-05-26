@@ -127,9 +127,12 @@ sudo -u "${APP_USER}" bash -c "cd '${APP_DIR}/web' && npm ci && npm run build"
 
 # ---- config + env files -----------------------------------------------------
 
-log "Installing /etc/fetchlinks/fetchlinks.toml (non-secret)"
-install -o root -g "${APP_GROUP}" -m 0640 \
-    "${APP_DIR}/deploy/config/fetchlinks.toml" "${ETC_DIR}/fetchlinks.toml"
+# Seed fetchlinks.toml only on first install; preserve operator edits on upgrade.
+if [[ ! -f "${ETC_DIR}/fetchlinks.toml" ]]; then
+    log "Installing /etc/fetchlinks/fetchlinks.toml (non-secret)"
+    install -o root -g "${APP_GROUP}" -m 0640 \
+        "${APP_DIR}/deploy/config/fetchlinks.toml" "${ETC_DIR}/fetchlinks.toml"
+fi
 
 # Seed rss_feeds.txt only on first install; preserve operator edits on upgrade.
 if [[ ! -f "${ETC_DIR}/rss_feeds.txt" ]]; then
