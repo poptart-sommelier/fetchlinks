@@ -176,7 +176,7 @@ function FeedRow({ feed }: { feed: RssFeed }) {
           target="_blank"
           title={feed.feedUrl}
         >
-          {feed.feedUrl}
+          <FeedUrlLabel url={feed.feedUrl} />
         </a>
         <FeedStatusPill status={feed.status} />
       </header>
@@ -309,6 +309,25 @@ function CountLink({
     <Link className="count-link" href={`/admin/feeds?status=${status}`}>
       <strong>{count.toLocaleString("en-US")}</strong> <span>{label}</span>
     </Link>
+  );
+}
+
+function FeedUrlLabel({ url }: { url: string }) {
+  let host: string | null = null;
+  let tail = "";
+  try {
+    const parsed = new URL(url);
+    host = parsed.hostname.replace(/^www\./, "");
+    tail = parsed.pathname + parsed.search + parsed.hash;
+    if (tail === "/") tail = "";
+  } catch {
+    return <>{url}</>;
+  }
+  return (
+    <>
+      <span className="feed-url-host">{host}</span>
+      {tail ? <span className="feed-url-path">{tail}</span> : null}
+    </>
   );
 }
 

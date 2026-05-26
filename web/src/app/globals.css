@@ -400,6 +400,15 @@ p {
   font-size: 15px;
 }
 
+.feed-url-host {
+  font-weight: 700;
+}
+
+.feed-url-path {
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .feed-stats {
   display: flex;
   flex-wrap: wrap;
