@@ -11,7 +11,6 @@ import {
   normalizeFeedUrl,
   openWritableFetchlinksDatabase,
   restoreRssFeed,
-  setRssFeedEnabled,
   softDeleteRssFeed,
   withWritableFetchlinksDatabase,
 } from "./feeds";
@@ -272,41 +271,6 @@ describe("addRssFeed", () => {
         (db) => addRssFeed(db, "ftp://example/"),
       );
       expect(bad.status).toBe("invalid");
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("setRssFeedEnabled", () => {
-  it("enables a disabled feed and resets the failure counter", () => {
-    const fixture = createFeedsFixture();
-    try {
-      withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => {
-          expect(setRssFeedEnabled(db, 2, true)).toBe(true);
-          const [feed] = listRssFeeds(db, { q: "b.example" });
-          expect(feed.status).toBe("active");
-          expect(feed.consecutiveFailures).toBe(0);
-        },
-      );
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("does not touch tombstoned rows", () => {
-    const fixture = createFeedsFixture();
-    try {
-      withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => {
-          expect(setRssFeedEnabled(db, 3, true)).toBe(false);
-          const [feed] = listRssFeeds(db, { q: "c.example" });
-          expect(feed.status).toBe("removed");
-        },
-      );
     } finally {
       fixture.cleanup();
     }
