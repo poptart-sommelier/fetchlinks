@@ -409,6 +409,54 @@ p {
   font-weight: 400;
 }
 
+.admin-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.admin-section-card {
+  display: block;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+  color: inherit;
+}
+
+.admin-section-card:hover,
+.admin-section-card:focus-visible {
+  background: var(--panel-alt);
+  border-left-color: var(--accent-strong);
+}
+
+.admin-section-card h2 {
+  margin-bottom: 4px;
+  color: var(--accent-strong);
+  font-size: 18px;
+}
+
+.admin-section-card p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-section-card-planned {
+  border-left-color: var(--border-strong);
+  background: var(--subtle);
+  cursor: not-allowed;
+}
+
+.admin-section-card-planned:hover {
+  background: var(--subtle);
+}
+
+.admin-section-card-planned h2 {
+  color: var(--muted);
+}
+
 .feed-stats {
   display: flex;
   flex-wrap: wrap;
