@@ -135,6 +135,61 @@ p {
   background: var(--panel);
 }
 
+.add-form {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--panel));
+}
+
+.add-form-field {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+
+.add-form-field span {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.add-form-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+}
+
+.add-form-btn {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-form-btn:hover {
+  background: var(--accent-strong);
+}
+
 .filter-bar label {
   display: grid;
   min-width: 0;
@@ -470,6 +525,11 @@ p {
 
   .filter-actions {
     grid-column: auto;
+  }
+
+  .add-form {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .post-item,

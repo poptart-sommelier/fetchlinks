@@ -104,22 +104,20 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
         </p>
       </header>
 
-      <section aria-label="Add feed" className="filter-bar">
-        <form action={addFeedAction} className="filter-bar">
-          <label>
-            <span>Add feed</span>
-            <input
-              name="feed_url"
-              placeholder="https://example.com/feed.xml"
-              required
-              type="url"
-            />
-          </label>
-          <div className="filter-actions">
-            <button type="submit">Add</button>
-          </div>
-        </form>
-      </section>
+      <form action={addFeedAction} aria-label="Add feed" className="add-form">
+        <label className="add-form-field">
+          <span>Add feed</span>
+          <input
+            name="feed_url"
+            placeholder="https://example.com/feed.xml"
+            required
+            type="url"
+          />
+        </label>
+        <button className="add-form-btn" type="submit">
+          Add feed
+        </button>
+      </form>
 
       <form action="/admin/feeds" aria-label="Filter feeds" className="filter-bar" method="get">
         <label>
