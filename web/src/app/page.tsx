@@ -221,11 +221,10 @@ function PostListItem({
       <header className="post-heading">
         <div className="post-meta">
           <SourceLabel currentQ={filters.q} post={post} />
-          <span aria-hidden="true" className="post-meta-separator">
-            /
-          </span>
-          <time dateTime={post.dateCreated}>{formatPostDate(post.dateCreated)}</time>
         </div>
+        <time className="post-date" dateTime={post.dateCreated}>
+          {formatPostDate(post.dateCreated)}
+        </time>
       </header>
       <h2>{post.description ?? "Untitled post"}</h2>
       {post.urls.length > 0 || directHref ? (
