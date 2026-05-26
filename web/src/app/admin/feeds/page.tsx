@@ -208,7 +208,12 @@ function FeedRow({ feed }: { feed: RssFeed }) {
           <FeedAction action={enableFeedAction} feedId={feed.id} label="enable" />
         ) : null}
         {feed.status !== "removed" ? (
-          <FeedAction action={deleteFeedAction} feedId={feed.id} label="remove" />
+          <FeedAction
+            action={deleteFeedAction}
+            feedId={feed.id}
+            label="remove"
+            tone="danger"
+          />
         ) : null}
         {feed.status === "removed" ? (
           <FeedAction action={restoreFeedAction} feedId={feed.id} label="restore" />
@@ -236,15 +241,20 @@ function FeedAction({
   action,
   feedId,
   label,
+  tone = "default",
 }: {
   action: (formData: FormData) => Promise<void>;
   feedId: number;
   label: string;
+  tone?: "default" | "danger";
 }) {
+  const toneClass = tone === "danger" ? " feed-action-btn-danger" : "";
   return (
-    <form action={action} className="post-link-action" style={{ display: "inline" }}>
+    <form action={action} className="feed-action">
       <input name="feed_id" type="hidden" value={feedId} />
-      <button type="submit">{label}</button>
+      <button className={`feed-action-btn${toneClass}`} type="submit">
+        {label}
+      </button>
     </form>
   );
 }
