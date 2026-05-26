@@ -344,7 +344,7 @@ function normalizePostFilters(filters: PostFilters): NormalizedPostFilters {
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {
-  const text = value?.trim();
+  const text = value?.trim().slice(0, 200);
 
   return text ? text : undefined;
 }
