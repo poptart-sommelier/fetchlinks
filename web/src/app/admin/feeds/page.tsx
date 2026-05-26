@@ -30,6 +30,7 @@ type LoadResult =
 type ActiveFilters = {
   status: RssFeedStatus | "all";
   q?: string;
+  errors: boolean;
 };
 
 export const dynamic = "force-dynamic";
@@ -89,17 +90,24 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
       <header className="page-header">
         <div className="page-title">
           <p className="eyebrow">
-            <Link href="/">&larr; Fetchlinks</Link> &middot; admin
+            <Link href="/admin">&larr; Admin</Link>
           </p>
           <h1>RSS feeds</h1>
         </div>
-        <p className="page-summary">
-          <CountLink count={counts.active} label="active" status="active" />
-          {" / "}
-          <CountLink count={counts.disabled} label="disabled" status="disabled" />
-          {" / "}
-          <CountLink count={counts.removed} label="removed" status="removed" />
-        </p>
+        <div className="feed-counts-tile" aria-label="Feed totals">
+          <CountTile
+            count={counts.active}
+            label={counts.active === 1 ? "active" : "active"}
+            href="/admin/feeds?status=active"
+            tone="ok"
+          />
+          <CountTile
+            count={counts.errors}
+            label={counts.errors === 1 ? "error" : "errors"}
+            href="/admin/feeds?errors=1"
+            tone={counts.errors > 0 ? "error" : "muted"}
+          />
+        </div>
       </header>
 
       <form action={addFeedAction} aria-label="Add feed" className="add-form">
@@ -139,7 +147,7 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
         </label>
         <div className="filter-actions">
           <button type="submit">Apply</button>
-          {filters.status !== "all" || filters.q ? (
+          {filters.status !== "all" || filters.q || filters.errors ? (
             <Link className="clear-filters" href="/admin/feeds">
               Clear
             </Link>
@@ -288,18 +296,21 @@ export function FeedStatusPill({ status }: { status: RssFeedStatus }) {
   );
 }
 
-function CountLink({
+function CountTile({
   count,
   label,
-  status,
+  href,
+  tone,
 }: {
   count: number;
   label: string;
-  status: RssFeedStatus;
+  href: string;
+  tone: "ok" | "error" | "muted";
 }) {
   return (
-    <Link className="count-link" href={`/admin/feeds?status=${status}`}>
-      <strong>{count.toLocaleString("en-US")}</strong> <span>{label}</span>
+    <Link className={`count-tile count-tile-${tone}`} href={href}>
+      <strong>{count.toLocaleString("en-US")}</strong>
+      <span>{label}</span>
     </Link>
   );
 }
@@ -348,7 +359,8 @@ function FeedAction({
 function parseFilters(searchParams: PageSearchParams | undefined): ActiveFilters {
   const status = pickStatus(getSingleSearchParam(searchParams, "status"));
   const q = getSingleSearchParam(searchParams, "q")?.trim() || undefined;
-  return { status, q };
+  const errors = getSingleSearchParam(searchParams, "errors") === "1";
+  return { status, q, errors };
 }
 
 function pickStatus(value: string | undefined): ActiveFilters["status"] {

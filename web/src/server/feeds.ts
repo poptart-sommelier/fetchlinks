@@ -121,6 +121,12 @@ export function listRssFeeds(
     clauses.push("deleted_at IS NOT NULL");
   }
 
+  if (filters.errors) {
+    clauses.push(
+      "enabled = 1 AND deleted_at IS NULL AND (consecutive_failures > 0 OR last_status >= 400)",
+    );
+  }
+
   const q = filters.q?.trim();
   if (q) {
     const pattern = `%${escapeLikeValue(q.toLowerCase())}%`;
@@ -143,6 +149,7 @@ export type RssFeedCounts = {
   active: number;
   disabled: number;
   removed: number;
+  errors: number;
   total: number;
 };
 
@@ -153,6 +160,12 @@ export function countRssFeedsByStatus(database: DatabaseSync): RssFeedCounts {
         SUM(CASE WHEN deleted_at IS NULL AND enabled = 1 THEN 1 ELSE 0 END) AS active,
         SUM(CASE WHEN deleted_at IS NULL AND enabled = 0 THEN 1 ELSE 0 END) AS disabled,
         SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END) AS removed,
+        SUM(CASE
+              WHEN deleted_at IS NULL
+                AND enabled = 1
+                AND (consecutive_failures > 0 OR last_status >= 400)
+              THEN 1 ELSE 0
+            END) AS errors,
         COUNT(*) AS total
       FROM rss_feeds`,
     )
@@ -160,12 +173,14 @@ export function countRssFeedsByStatus(database: DatabaseSync): RssFeedCounts {
       active: number | null;
       disabled: number | null;
       removed: number | null;
+      errors: number | null;
       total: number | null;
     };
   return {
     active: row.active ?? 0,
     disabled: row.disabled ?? 0,
     removed: row.removed ?? 0,
+    errors: row.errors ?? 0,
     total: row.total ?? 0,
   };
 }

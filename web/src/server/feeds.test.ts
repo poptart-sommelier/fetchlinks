@@ -118,9 +118,72 @@ describe("countRssFeedsByStatus", () => {
         { fetchlinksDbPath: fixture.dbPath },
         (db) => countRssFeedsByStatus(db),
       );
-      expect(counts).toEqual({ active: 1, disabled: 1, removed: 1, total: 3 });
+      expect(counts).toEqual({
+        active: 1,
+        disabled: 1,
+        removed: 1,
+        errors: 0,
+        total: 3,
+      });
     } finally {
       fixture.cleanup();
+    }
+  });
+
+  it("counts active feeds with failures or HTTP errors as errors", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-feeds-err-"));
+    const dbPath = path.join(directory, "fetchlinks.db");
+    const database = new DatabaseSync(dbPath);
+    database.exec(`
+      CREATE TABLE rss_feeds (
+        feed_id              INTEGER PRIMARY KEY,
+        feed_url             TEXT NOT NULL,
+        normalized_url       TEXT NOT NULL UNIQUE,
+        enabled              INTEGER NOT NULL DEFAULT 1,
+        added_at             TEXT NOT NULL,
+        deleted_at           TEXT,
+        last_fetched_at      TEXT,
+        last_success_at      TEXT,
+        last_status          INTEGER,
+        last_error           TEXT,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        etag                 TEXT,
+        last_modified        TEXT,
+        latest_entry_at      TEXT
+      );
+      INSERT INTO rss_feeds
+        (feed_id, feed_url, normalized_url, enabled, added_at,
+         last_status, consecutive_failures)
+      VALUES
+        (1, 'https://ok.example/feed',     'https://ok.example/feed',     1, 'x', 200, 0),
+        (2, 'https://fails.example/feed',  'https://fails.example/feed',  1, 'x', 200, 3),
+        (3, 'https://http500.example/feed','https://http500.example/feed',1, 'x', 500, 0),
+        (4, 'https://disabled.example/feed','https://disabled.example/feed',0,'x',500, 5);
+    `);
+    database.close();
+    try {
+      const counts = withWritableFetchlinksDatabase(
+        { fetchlinksDbPath: dbPath },
+        (db) => countRssFeedsByStatus(db),
+      );
+      expect(counts).toEqual({
+        active: 3,
+        disabled: 1,
+        removed: 0,
+        errors: 2,
+        total: 4,
+      });
+
+      const onlyErrors = withWritableFetchlinksDatabase(
+        { fetchlinksDbPath: dbPath },
+        (db) => listRssFeeds(db, { errors: true }),
+      );
+      expect(onlyErrors.map((f) => f.feedUrl).sort()).toEqual([
+        "https://fails.example/feed",
+        "https://http500.example/feed",
+      ]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
     }
   });
 });
