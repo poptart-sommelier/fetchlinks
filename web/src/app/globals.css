@@ -251,6 +251,68 @@ p {
   background: color-mix(in srgb, var(--accent-soft) 55%, var(--panel));
 }
 
+.add-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+  margin: -4px 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.add-feedback-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.add-feedback-body {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.add-feedback-body code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--panel-alt);
+  font-size: 12px;
+}
+
+.add-feedback-ok {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.add-feedback-ok .add-feedback-label {
+  color: var(--accent-strong);
+}
+
+.add-feedback-warn {
+  border-left-color: var(--border-strong);
+  background: var(--subtle);
+}
+
+.add-feedback-warn .add-feedback-label {
+  color: var(--muted);
+}
+
+.add-feedback-error {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+}
+
+.add-feedback-error .add-feedback-label {
+  color: var(--danger);
+}
+
 .add-form-field {
   display: grid;
   flex: 1;

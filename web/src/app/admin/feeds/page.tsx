@@ -24,7 +24,13 @@ type AdminFeedsPageProps = {
 };
 
 type LoadResult =
-  | { status: "ready"; feeds: RssFeed[]; counts: RssFeedCounts; filters: ActiveFilters }
+  | {
+      status: "ready";
+      feeds: RssFeed[];
+      counts: RssFeedCounts;
+      filters: ActiveFilters;
+      addFeedback: AddFeedback | null;
+    }
   | { status: "error" };
 
 type ActiveFilters = {
@@ -33,6 +39,11 @@ type ActiveFilters = {
   errors: boolean;
 };
 
+type AddFeedback =
+  | { kind: "ok"; url: string }
+  | { kind: "exists"; url: string }
+  | { kind: "invalid"; reason: string; url?: string };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminFeedsPage({
@@ -40,11 +51,15 @@ export default async function AdminFeedsPage({
 }: AdminFeedsPageProps = {}) {
   const resolved = await searchParams;
   const filters = parseFilters(resolved);
-  const result = loadFeeds(filters);
+  const addFeedback = parseAddFeedback(resolved);
+  const result = loadFeeds(filters, addFeedback);
   return <AdminFeedsView result={result} />;
 }
 
-function loadFeeds(filters: ActiveFilters): LoadResult {
+function loadFeeds(
+  filters: ActiveFilters,
+  addFeedback: AddFeedback | null,
+): LoadResult {
   try {
     const config = loadAppConfig(process.env);
     return withWritableFetchlinksDatabase(config, (db) => ({
@@ -52,6 +67,7 @@ function loadFeeds(filters: ActiveFilters): LoadResult {
       feeds: listRssFeeds(db, filters),
       counts: countRssFeedsByStatus(db),
       filters,
+      addFeedback,
     }));
   } catch {
     return { status: "error" };
@@ -76,7 +92,7 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
     );
   }
 
-  const { feeds, counts, filters } = result;
+  const { feeds, counts, filters, addFeedback } = result;
 
   return (
     <main className="shell">
@@ -117,6 +133,8 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
           Add feed
         </button>
       </form>
+
+      {addFeedback ? <AddFeedbackBanner feedback={addFeedback} /> : null}
 
       <form action="/admin/feeds" aria-label="Search feeds" className="search-form" method="get">
         <label className="search-form-field">
@@ -411,6 +429,58 @@ function parseFilters(searchParams: PageSearchParams | undefined): ActiveFilters
   const q = getSingleSearchParam(searchParams, "q")?.trim() || undefined;
   const errors = getSingleSearchParam(searchParams, "errors") === "1";
   return { status, q, errors };
+}
+
+function parseAddFeedback(
+  searchParams: PageSearchParams | undefined,
+): AddFeedback | null {
+  const added = getSingleSearchParam(searchParams, "added");
+  const url = getSingleSearchParam(searchParams, "url");
+  if (added === "ok" && url) return { kind: "ok", url };
+  if (added === "exists" && url) return { kind: "exists", url };
+  if (added === "invalid") {
+    const reason =
+      getSingleSearchParam(searchParams, "reason") || "Could not add feed.";
+    return { kind: "invalid", reason, url };
+  }
+  return null;
+}
+
+function AddFeedbackBanner({ feedback }: { feedback: AddFeedback }) {
+  if (feedback.kind === "ok") {
+    return (
+      <p className="add-feedback add-feedback-ok" role="status">
+        <span className="add-feedback-label">Added</span>
+        <span className="add-feedback-body">
+          <code>{feedback.url}</code> is now being fetched.
+        </span>
+      </p>
+    );
+  }
+  if (feedback.kind === "exists") {
+    return (
+      <p className="add-feedback add-feedback-warn" role="status">
+        <span className="add-feedback-label">Already added</span>
+        <span className="add-feedback-body">
+          <code>{feedback.url}</code> is already in the list.
+        </span>
+      </p>
+    );
+  }
+  return (
+    <p className="add-feedback add-feedback-error" role="alert">
+      <span className="add-feedback-label">Not added</span>
+      <span className="add-feedback-body">
+        {feedback.reason}
+        {feedback.url ? (
+          <>
+            {" "}
+            <code>{feedback.url}</code>
+          </>
+        ) : null}
+      </span>
+    </p>
+  );
 }
 
 function pickStatus(value: string | undefined): ActiveFilters["status"] {
