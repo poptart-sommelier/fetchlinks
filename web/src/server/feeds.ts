@@ -64,7 +64,7 @@ export function openWritableFetchlinksDatabase(
 }
 
 // Idempotent in-place upgrade for DBs created before site_link existed.
-// Mirrors the ingest-side ALTER in ingest/fetchlinks/db_setup.py so the
+// Mirrors the ingest-side ALTER in ingest/db_setup.py so the
 // web admin doesn't 500 when a fresh column hasn't been added by ingest
 // yet. Safe to call on every writable open; the PRAGMA lookup is cheap
 // and the ALTER only fires once per DB.

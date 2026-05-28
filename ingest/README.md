@@ -20,7 +20,7 @@ For complete setup steps, see [SETUP.md](SETUP.md).
 Once setup is complete, run:
 
 ```bash
-cd ingest/fetchlinks
+cd ingest
 python3 fetch_links.py
 ```
 
@@ -28,7 +28,7 @@ To use a non-default config file, pass `--config /path/to/fetchlinks.toml`.
 
 ## Config files
 
-- Runtime config: `ingest/fetchlinks/data/config/fetchlinks.toml`
+- Runtime config: `ingest/data/config/fetchlinks.toml`
   (paths, ingest policy, and per-source `enabled` flags + credential paths).
 - RSS feeds: stored in the SQLite `rss_feeds` table (the source of truth).
   Manage with `rss_feed_import.py` (`--input` / `--pruned` / `--seed-if-empty`).

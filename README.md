@@ -22,7 +22,7 @@ both expect:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r ingest/requirements.txt
-cd ingest/fetchlinks
+cd ingest
 python3 fetch_links.py
 ```
 
@@ -39,7 +39,7 @@ FETCHLINKS_DB=/absolute/path/to/fetchlinks.db npm run dev
 Run Python tests:
 
 ```bash
-cd ingest/fetchlinks
+cd ingest
 python -m unittest discover tests
 ```
 

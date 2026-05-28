@@ -4,6 +4,6 @@
 # Manage this file in place, or use:
 #
 #   sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
-#       /opt/fetchlinks/ingest/fetchlinks/rss_feed_import.py \
+#       /opt/fetchlinks/ingest/rss_feed_import.py \
 #       --input /tmp/new-feeds.txt \
 #       --feeds-file /etc/fetchlinks/rss_feeds.txt
