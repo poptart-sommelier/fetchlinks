@@ -250,7 +250,6 @@ https://erev0s.com/rss/
 https://exploitreversing.com/feed/
 https://export.arxiv.org/rss/cs.CR/
 https://facecrooks.com/feed
-https://feeds.bloomberg.com/technology/news.rss
 https://feeds.feedburner.com/tenable/qaXL
 https://feeds.feedburner.com/TheHackersNews
 https://feeds.feedburner.com/TroyHunt
