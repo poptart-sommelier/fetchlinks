@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import db_setup
 import db_utils
@@ -52,7 +53,8 @@ class RenderSnapshotTests(unittest.TestCase):
         self.assertIn('active=0', text)
         self.assertIn('disabled=0', text)
         self.assertIn('removed=0', text)
-        self.assertIn('DO NOT hand-edit', text)
+        self.assertIn('seed/snapshot copy', text)
+        self.assertIn('/opt/fetchlinks/ingest/data/config/rss_feeds.txt', text)
 
     def test_renders_three_sections_in_order(self):
         rows = [
@@ -94,6 +96,17 @@ class WriteAtomicTests(unittest.TestCase):
             # Overwrites cleanly.
             export_rss_feeds.write_atomic(target, 'world\n')
             self.assertEqual(target.read_text(encoding='utf-8'), 'world\n')
+            self.assertFalse(target.with_name('out.txt.tmp').exists())
+
+    def test_falls_back_to_direct_write_when_atomic_replace_is_not_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / 'out.txt'
+            target.write_text('old\n', encoding='utf-8')
+
+            with patch.object(export_rss_feeds.os, 'replace', side_effect=PermissionError):
+                export_rss_feeds.write_atomic(target, 'new\n')
+
+            self.assertEqual(target.read_text(encoding='utf-8'), 'new\n')
             self.assertFalse(target.with_name('out.txt.tmp').exists())
 
 

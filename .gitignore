@@ -2,10 +2,12 @@
 .venv
 data/logs/
 **/data/logs/
+ingest/data/logs/
 fetch_links.log
 *.log
 *.log.*
 db/
+ingest/db/
 .vscode/
 .idea/
 __pycache__/
