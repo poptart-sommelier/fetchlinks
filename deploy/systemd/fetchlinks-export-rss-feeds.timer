@@ -1,10 +1,11 @@
 [Unit]
-Description=Run Fetchlinks export rss_feeds snapshot daily
+Description=Run Fetchlinks export rss_feeds snapshot every 5 minutes
 Requires=fetchlinks-export-rss-feeds.service
 
 [Timer]
-OnCalendar=daily
-RandomizedDelaySec=15min
+OnBootSec=1min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
 Persistent=true
 Unit=fetchlinks-export-rss-feeds.service
 

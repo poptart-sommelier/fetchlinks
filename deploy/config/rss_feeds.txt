@@ -1,9 +1,0 @@
-# Fetchlinks RSS feeds (production seed list).
-#
-# One feed URL per line. Lines beginning with '#' and blank lines are ignored.
-# Manage this file in place, or use:
-#
-#   sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
-#       /opt/fetchlinks/ingest/rss_feed_import.py \
-#       --input /tmp/new-feeds.txt \
-#       --feeds-file /etc/fetchlinks/rss_feeds.txt

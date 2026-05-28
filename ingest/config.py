@@ -1,9 +1,8 @@
 """Typed configuration loader for Fetchlinks ingest.
 
 Loads ``fetchlinks.toml`` into a frozen dataclass tree. Path values are
-resolved relative to the TOML file itself (so paths in the dev config
-work regardless of cwd), unless the operator supplies absolute paths
-(as the production /etc/fetchlinks/fetchlinks.toml does).
+resolved relative to the TOML file itself (so the same config works
+regardless of cwd), unless the operator supplies absolute paths.
 """
 
 from __future__ import annotations

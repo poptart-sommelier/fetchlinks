@@ -51,9 +51,9 @@ Restrict permissions so only your user can read it:
 chmod 600 ~/.fetchlinks/reddit.json
 ```
 
-### Bluesky credential file (optional)
+### Bluesky credential file
 
-Bluesky is disabled by default. If you want to enable it, create ~/.fetchlinks/bluesky.json:
+Create ~/.fetchlinks/bluesky.json:
 
 ```json
 {
@@ -70,11 +70,11 @@ Restrict permissions:
 chmod 600 ~/.fetchlinks/bluesky.json
 ```
 
-### Mastodon credential files (optional)
+### Mastodon credential files
 
-Mastodon is disabled by default. Each Mastodon instance/account gets its own
-credential file so multiple instances can be configured independently. For
-example, create ~/.fetchlinks/mastodon-infosec.json:
+Each Mastodon instance/account gets its own credential file so multiple
+instances can be configured independently. For example, create
+~/.fetchlinks/mastodon-infosec.json:
 
 ```json
 {
@@ -104,9 +104,9 @@ or relative to the TOML file's directory. The schema is:
   (default `1000`). Drives the weekly retention job (`retain.py`).
 - `[sources.rss]` — `enabled`, optional `seed_file` (read only when the
   `rss_feeds` table is empty), optional `export_path` (where
-  `export_rss_feeds.py` writes its snapshot), `auto_disable_after_failures`
-  (default `10`; set `0` to disable), `request_timeout_seconds`
-  (default `10`).
+  `export_rss_feeds.py` writes the DB snapshot; in dev this is the seed
+  file), `auto_disable_after_failures` (default `10`; set `0` to disable),
+  `request_timeout_seconds` (default `10`).
 - `[sources.reddit]` — `enabled`, `credential_location`, `subreddits`,
   optional `listing_limit` (default 100) and `max_pages` (default 5).
 - `[sources.bluesky]` — `enabled`, `credential_location`, `timeline_limit`.
@@ -151,10 +151,11 @@ python3 rss_feed_import.py --pruned /tmp/rss-list.txt.pruned
 Use `--abandoned-days N` to change the cutoff for rejecting feeds with no
 recent posts.
 
-A daily snapshot of the table is written by `export_rss_feeds.py` to
-`[sources.rss].export_path` (three sections: active feeds, commented
-disabled feeds with their failure reason, commented tombstoned feeds).
-The snapshot is for backup/diffing only — do not hand-edit it.
+A snapshot of the table is written by `export_rss_feeds.py` to
+`[sources.rss].export_path` (three sections: active feeds, commented disabled
+feeds with their failure reason, commented tombstoned feeds). In dev that path
+is `data/config/rss_feeds.txt`, so the seed file stays aligned with DB changes
+and can be committed after review.
 
 ## 5) Seed the rss_feeds table (first run only)
 

@@ -8,8 +8,7 @@ Type=oneshot
 User=fetchlinks
 Group=fetchlinks
 WorkingDirectory=/opt/fetchlinks/ingest
-EnvironmentFile=-/etc/fetchlinks/ingest.env
-ExecStart=/opt/fetchlinks/.venv/bin/python /opt/fetchlinks/ingest/fetch_links.py --config /etc/fetchlinks/fetchlinks.toml
+ExecStart=/opt/fetchlinks/.venv/bin/python /opt/fetchlinks/ingest/fetch_links.py --config /opt/fetchlinks/ingest/data/config/fetchlinks.toml
 Nice=10
 TimeoutStartSec=30min
 SyslogIdentifier=fetchlinks-ingest
@@ -18,7 +17,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/fetchlinks /var/log/fetchlinks
+ReadWritePaths=/opt/fetchlinks/ingest
 
 [Install]
 WantedBy=multi-user.target

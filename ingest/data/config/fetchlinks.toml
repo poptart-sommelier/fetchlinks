@@ -1,13 +1,12 @@
-# Fetchlinks runtime configuration (dev / local).
+# Fetchlinks runtime configuration.
 #
 # All path values may be absolute or relative to this file's directory.
-# In production, /etc/fetchlinks/fetchlinks.toml uses absolute paths
-# (/var/lib/fetchlinks/..., /var/log/fetchlinks/..., etc.).
+# The production install lives at /opt/fetchlinks and uses this file directly.
 
 [paths]
 db        = "../../db/fetchlinks.db"
 log_file  = "../logs/fetch_links.log"
-log_level = "DEBUG"
+log_level = "INFO"
 
 [ingest]
 max_post_age_months                  = 3
@@ -28,8 +27,9 @@ vacuum_threshold_pages  = 1000
 enabled                     = true
 # One-time seed; loaded into the rss_feeds table only when the table is empty.
 seed_file                   = "rss_feeds.txt"
-# Where fetchlinks-export-rss-feeds writes the deterministic snapshot.
-export_path                 = "../data/rss_feeds.export.txt"
+# Where fetchlinks-export-rss-feeds writes the deterministic DB snapshot.
+# In dev this intentionally updates the seed file you review and commit.
+export_path                 = "rss_feeds.txt"
 auto_disable_after_failures = 10
 request_timeout_seconds     = 10
 

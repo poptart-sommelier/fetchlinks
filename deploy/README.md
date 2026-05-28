@@ -9,20 +9,16 @@ Ubuntu 24.04 VM.
 deploy/
 ├── bootstrap.sh                       one-shot installer / updater (run on VM)
 ├── tls.sh                             nginx + Let's Encrypt provisioner (run after bootstrap)
-├── config/
-│   ├── fetchlinks.toml                production ingest config (paths, ingest, sources)
-│   └── rss_feeds.txt                  seed RSS feed list (one URL per line, used only on first install)
 ├── nginx/
 │   └── fetchlinks-web.conf.example    nginx reverse-proxy site
 └── systemd/
     ├── fetchlinks-web.service         Next.js web app
-    ├── fetchlinks-web.env.example     env file template for the web service
     ├── fetchlinks-ingest.service      Python ingest one-shot
     ├── fetchlinks-ingest.timer        ingest schedule (every 30 min)
     ├── fetchlinks-retain.service      weekly DB retention one-shot
     ├── fetchlinks-retain.timer        retention schedule (Sun 03:30)
-    ├── fetchlinks-export-rss-feeds.service  daily rss_feeds DB → text snapshot
-    └── fetchlinks-export-rss-feeds.timer    snapshot schedule (daily)
+    ├── fetchlinks-export-rss-feeds.service  rss_feeds DB → text seed snapshot
+    └── fetchlinks-export-rss-feeds.timer    snapshot schedule (every 5 min)
 ```
 
 ## First-time install
@@ -41,43 +37,44 @@ deploy/
     `bootstrap.sh` installs the app, services, and firewall rules. It does
     **not** touch nginx or TLS — see step 7 for that.
 
-4. Drop your API credential files into `/etc/fetchlinks/credentials/` and
-   enable the matching sources in `/etc/fetchlinks/fetchlinks.toml`:
+4. Ensure the API credential files referenced by
+   `/opt/fetchlinks/ingest/data/config/fetchlinks.toml` exist. The bootstrap
+   script does not create, copy, chmod, or otherwise manage credentials.
+
+   Then edit `/opt/fetchlinks/web/.env.production` and set the admin Basic
+   auth credentials:
 
     ```bash
-    # One file per credentialed source, names match `credential_location` in fetchlinks.toml.
-    scp reddit.json bluesky.json mastodon-infosec.json deploy@<vm>:/tmp/
-    ssh deploy@<vm> 'sudo install -d -o root -g fetchlinks -m 0750 /etc/fetchlinks/credentials \
-        && sudo install -o root -g fetchlinks -m 0640 /tmp/reddit.json   /etc/fetchlinks/credentials/ \
-        && sudo install -o root -g fetchlinks -m 0640 /tmp/bluesky.json  /etc/fetchlinks/credentials/ \
-        && sudo install -o root -g fetchlinks -m 0640 /tmp/mastodon-infosec.json /etc/fetchlinks/credentials/'
-    sudo -e /etc/fetchlinks/fetchlinks.toml      # flip `enabled = true` for each source
+    sudo editor /opt/fetchlinks/web/.env.production
+    sudo systemctl restart fetchlinks-web.service
     ```
 
     Then (optionally) seed or extend the RSS feed list. The DB table
-    `rss_feeds` is the source of truth; `/etc/fetchlinks/rss_feeds.txt` is
-    only consulted on first install (when the table is empty) or as input
-    to the importer:
+    `rss_feeds` is the live source of truth;
+    `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` is the first-install
+    seed and the 5-minute snapshot exported back from the DB:
 
     ```bash
     # First-time seed (no-op once the rss_feeds table has any rows):
     sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
         /opt/fetchlinks/ingest/rss_feed_import.py \
-        --config /etc/fetchlinks/fetchlinks.toml \
-        --seed-if-empty /etc/fetchlinks/rss_feeds.txt
+        --config /opt/fetchlinks/ingest/data/config/fetchlinks.toml \
+        --seed-if-empty /opt/fetchlinks/ingest/data/config/rss_feeds.txt
 
     # Vet and add new feeds from an arbitrary text blob:
     sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
         /opt/fetchlinks/ingest/rss_feed_import.py \
-        --config /etc/fetchlinks/fetchlinks.toml \
+        --config /opt/fetchlinks/ingest/data/config/fetchlinks.toml \
         --input /tmp/new-feeds.txt
     ```
 
-    A daily timer (`fetchlinks-export-rss-feeds.timer`) writes a
-    deterministic text snapshot of the live table to
-    `/var/lib/fetchlinks/rss_feeds.txt` for backup / diffing.
+    A short timer (`fetchlinks-export-rss-feeds.timer`, every 5 minutes)
+    writes a deterministic text snapshot of the live table back to
+    `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` for backup / diffing
+    and occasional commit back to the repo seed file.
 
-5. (Optional) copy an existing `fetchlinks.db` to `/var/lib/fetchlinks/`.
+5. (Optional) copy an existing `fetchlinks.db` to
+   `/opt/fetchlinks/ingest/db/fetchlinks.db`.
 6. Kick off an ingest run to verify:
 
     ```bash
@@ -103,8 +100,10 @@ deploy/
 sudo /opt/fetchlinks/deploy/bootstrap.sh
 ```
 
-The script is idempotent. It pulls the latest commit on `master`, reinstalls
-ingest deps, rebuilds the web app, re-renders config, restarts services.
+The script is idempotent. It fast-forwards the checkout on `master`, reinstalls
+ingest deps, rebuilds the web app, preserves `.env.production`, and restarts
+services. If the checkout has local tracked-file changes or diverged history,
+the fast-forward fails and the script stops rather than overwriting work.
 
 To deploy a specific tag/branch:
 
@@ -131,14 +130,11 @@ journalctl -u fetchlinks-export-rss-feeds.service --since '7 days ago'
 ```
 /opt/fetchlinks/                       git checkout, owned by fetchlinks
 /opt/fetchlinks/.venv/                 Python venv for ingest
-/var/lib/fetchlinks/fetchlinks.db      SQLite DB (mode 0640 fetchlinks:fetchlinks)
-/var/lib/fetchlinks/rss_feeds.txt      Daily exported snapshot of the rss_feeds table
-/var/log/fetchlinks/                   ingest logs
-/etc/fetchlinks/fetchlinks.toml        non-secret config (mode 0640 root:fetchlinks)
-/etc/fetchlinks/rss_feeds.txt          Seed feed list (read only when rss_feeds is empty)
-/etc/fetchlinks/credentials/           per-source API credential JSON files
-/etc/fetchlinks/web.env                env vars for the web service
-/etc/fetchlinks/ingest.env             env vars for the ingest service (optional)
+/opt/fetchlinks/ingest/data/config/fetchlinks.toml  runtime config
+/opt/fetchlinks/ingest/data/config/rss_feeds.txt    first-install seed, then 5-minute DB snapshot
+/opt/fetchlinks/ingest/db/fetchlinks.db             SQLite DB
+/opt/fetchlinks/ingest/data/logs/                   ingest logs
+/opt/fetchlinks/web/.env.production                 env vars for the web service
 ```
 
 All services run as the unprivileged `fetchlinks` system user.

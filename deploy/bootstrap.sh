@@ -8,7 +8,7 @@
 #   sudo /opt/fetchlinks/deploy/bootstrap.sh
 #
 # Re-running this script later is safe; it acts as the upgrade path
-# (pulls latest from git, rebuilds web, restarts services).
+# (fast-forwards git, rebuilds web, restarts services).
 #
 # Public TLS / nginx is provisioned by a separate script, deploy/tls.sh.
 # Run it once you have a DNS record pointing at this VM.
@@ -24,10 +24,12 @@ set -euo pipefail
 APP_USER="fetchlinks"
 APP_GROUP="fetchlinks"
 APP_DIR="/opt/fetchlinks"
-DATA_DIR="/var/lib/fetchlinks"
-ETC_DIR="/etc/fetchlinks"
-LOG_DIR="/var/log/fetchlinks"
 VENV_DIR="${APP_DIR}/.venv"
+INGEST_DIR="${APP_DIR}/ingest"
+WEB_DIR="${APP_DIR}/web"
+CONFIG_FILE="${INGEST_DIR}/data/config/fetchlinks.toml"
+RSS_FEEDS_FILE="${INGEST_DIR}/data/config/rss_feeds.txt"
+WEB_ENV_FILE="${WEB_DIR}/.env.production"
 NODE_MAJOR=24
 PYTHON_BIN="/usr/bin/python3.12"
 
@@ -76,16 +78,13 @@ EOF
 
 # ---- user, group, directories ----------------------------------------------
 
-log "Ensuring ${APP_USER} user and directories"
+log "Ensuring ${APP_USER} user and app directory"
 getent group  "${APP_GROUP}" >/dev/null || groupadd --system "${APP_GROUP}"
 getent passwd "${APP_USER}"  >/dev/null || useradd  --system --gid "${APP_GROUP}" \
-    --home-dir "${DATA_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
+    --home-dir "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
 
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${DATA_DIR}"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${LOG_DIR}"
-install -d -o root          -g "${APP_GROUP}" -m 0750 "${ETC_DIR}"
-install -d -o root          -g "${APP_GROUP}" -m 0750 "${ETC_DIR}/credentials"
+chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
 
 # ---- firewall ---------------------------------------------------------------
 
@@ -99,17 +98,23 @@ ufw --force enable >/dev/null
 
 log "Syncing repository (${REPO_URL} @ ${REPO_REF})"
 if [[ -d "${APP_DIR}/.git" ]]; then
-    sudo -u "${APP_USER}" git -C "${APP_DIR}" fetch --depth 1 origin "${REPO_REF}"
-    sudo -u "${APP_USER}" git -C "${APP_DIR}" reset --hard "origin/${REPO_REF}"
+    sudo -u "${APP_USER}" git -C "${APP_DIR}" fetch origin "${REPO_REF}"
+    sudo -u "${APP_USER}" git -C "${APP_DIR}" merge --ff-only "origin/${REPO_REF}"
 else
     # The README's bootstrap clones into ${APP_DIR} as root; reset ownership
     # in case this is the first run after that clone.
     if [[ -d "${APP_DIR}" ]] && [[ -z "$(ls -A "${APP_DIR}")" ]]; then
-        sudo -u "${APP_USER}" git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${APP_DIR}"
+        sudo -u "${APP_USER}" git clone --branch "${REPO_REF}" "${REPO_URL}" "${APP_DIR}"
     else
-        chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
+        echo "${APP_DIR} exists but is not a git checkout. Move it aside or clone the repo there first." >&2
+        exit 1
     fi
 fi
+
+chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/db"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/data/logs"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/data/config"
 
 # ---- python venv + ingest deps ---------------------------------------------
 
@@ -118,40 +123,19 @@ if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
     sudo -u "${APP_USER}" "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --upgrade pip >/dev/null
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -r "${APP_DIR}/ingest/requirements.txt"
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -r "${INGEST_DIR}/requirements.txt"
 
 # ---- web build --------------------------------------------------------------
 
 log "Building Next.js web app"
-sudo -u "${APP_USER}" bash -c "cd '${APP_DIR}/web' && npm ci && npm run build"
+sudo -u "${APP_USER}" bash -c "cd '${WEB_DIR}' && npm ci && npm run build"
 
 # ---- config + env files -----------------------------------------------------
 
-# Seed fetchlinks.toml only on first install; preserve operator edits on upgrade.
-if [[ ! -f "${ETC_DIR}/fetchlinks.toml" ]]; then
-    log "Installing /etc/fetchlinks/fetchlinks.toml (non-secret)"
-    install -o root -g "${APP_GROUP}" -m 0640 \
-        "${APP_DIR}/deploy/config/fetchlinks.toml" "${ETC_DIR}/fetchlinks.toml"
-fi
-
-# Seed rss_feeds.txt only on first install; preserve operator edits on upgrade.
-if [[ ! -f "${ETC_DIR}/rss_feeds.txt" ]]; then
-    log "Seeding ${ETC_DIR}/rss_feeds.txt from example"
-    install -o root -g "${APP_GROUP}" -m 0640 \
-        "${APP_DIR}/deploy/config/rss_feeds.txt" "${ETC_DIR}/rss_feeds.txt"
-fi
-
-# Seed web.env from the example if not already present.
-if [[ ! -f "${ETC_DIR}/web.env" ]]; then
-    log "Seeding ${ETC_DIR}/web.env from example"
-    install -o root -g "${APP_GROUP}" -m 0640 \
-        "${APP_DIR}/deploy/systemd/fetchlinks-web.env.example" "${ETC_DIR}/web.env"
-fi
-
-# Empty ingest.env placeholder so EnvironmentFile= can omit the '-' tolerance
-# without an error on first run; edit it later if ingest needs env-based config.
-if [[ ! -f "${ETC_DIR}/ingest.env" ]]; then
-    install -o root -g "${APP_GROUP}" -m 0640 /dev/null "${ETC_DIR}/ingest.env"
+if [[ ! -f "${WEB_ENV_FILE}" ]]; then
+    log "Seeding ${WEB_ENV_FILE} from example"
+    install -o "${APP_USER}" -g "${APP_GROUP}" -m 0600 \
+        "${WEB_DIR}/.env.production.example" "${WEB_ENV_FILE}"
 fi
 
 # ---- systemd units ----------------------------------------------------------
@@ -170,16 +154,21 @@ systemctl enable --now fetchlinks-web.service
 systemctl enable --now fetchlinks-ingest.timer
 systemctl enable --now fetchlinks-retain.timer
 systemctl enable --now fetchlinks-export-rss-feeds.timer
+systemctl restart   fetchlinks-export-rss-feeds.timer
 systemctl restart   fetchlinks-web.service
 
-# ---- one-time seed: import /etc/fetchlinks/rss_feeds.txt into the DB if the
+# ---- one-time seed: import ingest/data/config/rss_feeds.txt into the DB if the
 # rss_feeds table is empty. No-op on upgrade once the operator has feeds.
-log "Seeding rss_feeds table from ${ETC_DIR}/rss_feeds.txt if empty"
+log "Seeding rss_feeds table from ${RSS_FEEDS_FILE} if empty"
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
-    "${APP_DIR}/ingest/rss_feed_import.py" \
-    --config "${ETC_DIR}/fetchlinks.toml" \
-    --seed-if-empty "${ETC_DIR}/rss_feeds.txt" || \
+    "${INGEST_DIR}/rss_feed_import.py" \
+    --config "${CONFIG_FILE}" \
+    --seed-if-empty "${RSS_FEEDS_FILE}" || \
     warn "rss_feeds seed step reported a failure; check the output above."
+
+log "Exporting rss_feeds table back to ${RSS_FEEDS_FILE}"
+systemctl start fetchlinks-export-rss-feeds.service || \
+    warn "rss_feeds export step reported a failure; check the journal."
 
 # nginx + TLS are provisioned separately by deploy/tls.sh.
 
@@ -195,17 +184,17 @@ cat <<EOF
 
 ------------------------------------------------------------
 Manual steps still required:
-  1. Drop credential files referenced by ${ETC_DIR}/fetchlinks.toml
-     into ${ETC_DIR}/credentials/ (mode 0640 root:${APP_GROUP}),
-     e.g. reddit.json, bluesky.json, mastodon-<instance>.json.
-  2. Edit ${ETC_DIR}/fetchlinks.toml and flip `enabled = true`
-     for each source you have credentials for.
-  3. (Optional) edit ${ETC_DIR}/rss_feeds.txt before re-running this
-     script if you want a different first-bootstrap seed. The DB is the
-     source of truth after seeding; later use rss_feed_import.py to add
-     more feeds (writes to the DB, not the file).
+  1. Ensure credential files referenced by ${CONFIG_FILE} exist.
+      bootstrap.sh does not create, copy, or chmod credentials.
+  2. Edit ${WEB_ENV_FILE} and set FETCHLINKS_ADMIN_USER / FETCHLINKS_ADMIN_PASS,
+      then restart fetchlinks-web.service.
+  3. (Optional) edit ${RSS_FEEDS_FILE} before re-running this
+      script if you want a different first-bootstrap seed. The DB is the
+      live source of truth after seeding; later use the web admin or
+      rss_feed_import.py to update the DB. fetchlinks-export-rss-feeds.timer
+      writes the DB snapshot back to this file every 5 minutes.
   4. (Optional) drop an existing DB snapshot at:
-       ${DATA_DIR}/fetchlinks.db
+         ${INGEST_DIR}/db/fetchlinks.db
   5. Trigger an ingest run to verify:
        sudo systemctl start fetchlinks-ingest.service
        sudo journalctl -u fetchlinks-ingest.service -n 50 --no-pager
