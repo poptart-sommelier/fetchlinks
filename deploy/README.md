@@ -62,13 +62,13 @@ deploy/
     ```bash
     # First-time seed (no-op once the rss_feeds table has any rows):
     sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
-        /opt/fetchlinks/ingest/fetchlinks/rss_feed_import.py \
+        /opt/fetchlinks/ingest/rss_feed_import.py \
         --config /etc/fetchlinks/fetchlinks.toml \
         --seed-if-empty /etc/fetchlinks/rss_feeds.txt
 
     # Vet and add new feeds from an arbitrary text blob:
     sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
-        /opt/fetchlinks/ingest/fetchlinks/rss_feed_import.py \
+        /opt/fetchlinks/ingest/rss_feed_import.py \
         --config /etc/fetchlinks/fetchlinks.toml \
         --input /tmp/new-feeds.txt
     ```

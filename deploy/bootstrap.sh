@@ -176,7 +176,7 @@ systemctl restart   fetchlinks-web.service
 # rss_feeds table is empty. No-op on upgrade once the operator has feeds.
 log "Seeding rss_feeds table from ${ETC_DIR}/rss_feeds.txt if empty"
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
-    "${APP_DIR}/ingest/fetchlinks/rss_feed_import.py" \
+    "${APP_DIR}/ingest/rss_feed_import.py" \
     --config "${ETC_DIR}/fetchlinks.toml" \
     --seed-if-empty "${ETC_DIR}/rss_feeds.txt" || \
     warn "rss_feeds seed step reported a failure; check the output above."

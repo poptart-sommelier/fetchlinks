@@ -93,7 +93,7 @@ chmod 600 ~/.fetchlinks/mastodon-infosec.json
 ## 4) Configure runtime
 
 All non-secret runtime configuration lives in a single TOML file:
-`ingest/fetchlinks/data/config/fetchlinks.toml`. Path values may be absolute
+`ingest/data/config/fetchlinks.toml`. Path values may be absolute
 or relative to the TOML file's directory. The schema is:
 
 - `[paths]` — `db`, `log_file`, `log_level` (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`).
@@ -136,7 +136,7 @@ feed after `auto_disable_after_failures` consecutive failures.
 Three workflows feed rows into the table via `rss_feed_import.py`:
 
 ```bash
-cd fetchlinks
+cd ingest
 # First-time bulk seed from a plain-text file (no-op once the table has rows):
 python3 rss_feed_import.py --seed-if-empty data/config/rss_feeds.txt
 
@@ -166,7 +166,7 @@ table is empty. On production this is run once by `deploy/bootstrap.sh`; in
 dev you do it by hand:
 
 ```bash
-cd fetchlinks
+cd ingest
 python3 rss_feed_import.py --seed-if-empty data/config/rss_feeds.txt
 ```
 
@@ -177,7 +177,7 @@ workflows (validated add / dry-run / pruned import).
 ## 6) Run the backend
 
 ```bash
-cd fetchlinks
+cd ingest
 python3 fetch_links.py
 ```
 
