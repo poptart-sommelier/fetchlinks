@@ -26,6 +26,7 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  devIndicators: false,
   async headers() {
     return [
       {
