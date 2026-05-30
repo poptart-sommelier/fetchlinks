@@ -17,10 +17,6 @@ MAX_LISTING_LIMIT = 100
 MAX_PAGES = 5
 
 
-def _normalize_subreddit_name(subreddit: str) -> str:
-    return subreddit.strip().removeprefix('r/').strip('/').lower()
-
-
 def _post_fullname(post: dict) -> str:
     if not isinstance(post, dict):
         return ''
@@ -55,6 +51,7 @@ def _log_rate_limit(response):
 def get_subreddits(reddit_config: RedditSource, db_path: Path) -> tuple[list[dict], list[tuple[str, str]]]:
     subreddit_posts = []
     state_updates = []
+    active_subreddits = db_utils.db_get_active_subreddits(db_path)
     reddit_states = db_utils.db_get_reddit_states(db_path)
 
     reddit_auth = RedditAuth(str(reddit_config.credential_location))
@@ -65,18 +62,17 @@ def get_subreddits(reddit_config: RedditSource, db_path: Path) -> tuple[list[dic
 
     with requests.Session() as session:
         session.headers.update(headers)
-        for subreddit in reddit_config.subreddits:
-            subreddit_name = _normalize_subreddit_name(subreddit)
+        for _subreddit_id, _name, normalized_name in active_subreddits:
             posts, newest_fullname = get_subreddit(
                 session,
-                subreddit_name,
-                reddit_states.get(subreddit_name),
+                normalized_name,
+                reddit_states.get(normalized_name),
                 limit=limit,
                 max_pages=max_pages,
             )
             subreddit_posts.extend(posts)
             if newest_fullname:
-                state_updates.append((subreddit_name, newest_fullname))
+                state_updates.append((normalized_name, newest_fullname))
 
     return subreddit_posts, state_updates
 

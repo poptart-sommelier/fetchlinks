@@ -36,15 +36,10 @@ request_timeout_seconds     = 10
 [sources.reddit]
 enabled             = true
 credential_location = "~/.fetchlinks/reddit.json"
-subreddits          = [
-    "Netsec",
-    "Malware",
-    "Computerforensics",
-    "ReverseEngineering",
-    "BlueTeamSec",
-    "InfoSecNews",
-    "redteamsec",
-]
+# One-time seed; loaded into the subreddits table only when the table is empty
+# (via subreddit_import.py --seed-if-empty, run by bootstrap). After seeding the
+# DB is the live source of truth; manage subreddits from the web admin.
+seed_file           = "subreddits.txt"
 # Optional: listing_limit (default 100), max_pages (default 5)
 
 [sources.bluesky]

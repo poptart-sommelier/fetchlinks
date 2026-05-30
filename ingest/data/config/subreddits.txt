@@ -1,0 +1,14 @@
+# Fetchlinks subreddit list. One subreddit name per line.
+# An optional r/ prefix is allowed; names are case-insensitive.
+# Lines starting with # and blank lines are ignored.
+# Loaded into the subreddits table only when the table is empty
+# (subreddit_import.py --seed-if-empty, run by bootstrap). After seeding the
+# DB is the live source of truth; manage subreddits from the web admin.
+
+Netsec
+Malware
+Computerforensics
+ReverseEngineering
+BlueTeamSec
+InfoSecNews
+redteamsec

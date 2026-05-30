@@ -138,6 +138,11 @@ class RedditLinksTests(unittest.TestCase):
         db_path = Path('/tmp/db/fetchlinks.db')
 
         with patch.object(reddit_links.db_utils, 'db_get_reddit_states', return_value={'netsec': 't3_seen'}), \
+             patch.object(
+                 reddit_links.db_utils,
+                 'db_get_active_subreddits',
+                 return_value=[(1, 'Netsec', 'netsec')],
+             ), \
              patch.object(reddit_links, 'RedditAuth') as auth_class, \
              patch.object(reddit_links.requests, 'Session') as session_class, \
              patch.object(

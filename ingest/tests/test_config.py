@@ -159,6 +159,39 @@ class LoadConfigTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 app_config.load_config(cfg)
 
+    def test_reddit_accepts_seed_file_without_inline_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            cred = tmp_path / 'reddit.json'
+            cred.write_text('{}', encoding='utf-8')
+            (tmp_path / 'subreddits.txt').write_text('Netsec\n', encoding='utf-8')
+            cfg = _toml(
+                tmp_path,
+                extra=(
+                    '\n[sources.reddit]\nenabled = true\n'
+                    'seed_file = "subreddits.txt"\n'
+                    f'credential_location = "{cred.as_posix()}"\n'
+                ),
+            )
+            loaded = app_config.load_config(cfg)
+            self.assertEqual(loaded.sources.reddit.seed_file.name, 'subreddits.txt')
+            self.assertEqual(loaded.sources.reddit.subreddits, ())
+
+    def test_reddit_requires_subreddits_or_seed_file_when_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            cred = tmp_path / 'reddit.json'
+            cred.write_text('{}', encoding='utf-8')
+            cfg = _toml(
+                tmp_path,
+                extra=(
+                    '\n[sources.reddit]\nenabled = true\n'
+                    f'credential_location = "{cred.as_posix()}"\n'
+                ),
+            )
+            with self.assertRaises(ValueError):
+                app_config.load_config(cfg)
+
 
 class RetentionConfigTests(unittest.TestCase):
     def test_defaults_when_section_absent(self):

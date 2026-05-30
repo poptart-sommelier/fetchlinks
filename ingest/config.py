@@ -65,6 +65,9 @@ class RedditSource:
     enabled: bool
     credential_location: Path
     subreddits: tuple[str, ...]
+    # Optional one-time seed file (used only when the subreddits table is
+    # empty). One subreddit name per line; ``#`` comments and blanks ignored.
+    seed_file: Path | None = None
     listing_limit: int = 100
     max_pages: int = 5
 
@@ -278,13 +281,22 @@ def _build_reddit(section: dict | None, base: Path) -> RedditSource | None:
         raise ValueError('[sources.reddit] credential_location required when enabled')
     cred_path = _expand_credential(cred, base, label='reddit') if enabled else _maybe_path(cred, base)
 
+    seed_file_value = section.get('seed_file')
+    seed_file = _resolve_path(seed_file_value, base) if seed_file_value else None
+
     subreddits = section.get('subreddits')
-    if enabled:
-        if not isinstance(subreddits, list) or not subreddits:
-            raise ValueError('[sources.reddit] subreddits must be a non-empty list')
+    if subreddits is not None:
+        if not isinstance(subreddits, list):
+            raise ValueError('[sources.reddit] subreddits must be a list')
         for sr in subreddits:
             if not isinstance(sr, str) or not sr.strip():
                 raise ValueError('[sources.reddit] subreddits must be non-empty strings')
+    # A subreddit list may come from the inline list and/or the seed file.
+    # Require at least one source of names when the source is enabled.
+    if enabled and not subreddits and seed_file is None:
+        raise ValueError(
+            '[sources.reddit] requires a non-empty subreddits list or a seed_file'
+        )
 
     listing_limit = section.get('listing_limit', 100)
     if not isinstance(listing_limit, int) or isinstance(listing_limit, bool) or listing_limit < 1:
@@ -298,6 +310,7 @@ def _build_reddit(section: dict | None, base: Path) -> RedditSource | None:
         enabled=enabled,
         credential_location=cred_path or Path(),
         subreddits=tuple(subreddits or ()),
+        seed_file=seed_file,
         listing_limit=listing_limit,
         max_pages=max_pages,
     )

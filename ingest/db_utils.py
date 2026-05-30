@@ -140,6 +140,22 @@ def _ensure_reddit_state_table(db):
     """)
 
 
+def _ensure_subreddits_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS subreddits (
+    subreddit_id    INTEGER PRIMARY KEY,
+    name            TEXT NOT NULL,
+    normalized_name TEXT NOT NULL UNIQUE,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    added_at        TEXT NOT NULL,
+    deleted_at      TEXT)
+    """)
+    db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_subreddits_live '
+        'ON subreddits(enabled, deleted_at)'
+    )
+
+
 def _ensure_mastodon_state_table(db):
     db.execute("""
     CREATE TABLE IF NOT EXISTS mastodon_state (
@@ -378,6 +394,89 @@ def db_set_reddit_states(states, db_location):
             db.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not persist Reddit state: {exc}') from exc
+
+
+# --- subreddits (subscription list, supersedes config subreddits) ---------
+
+
+def db_count_subreddits(db_location):
+    """Return total row count of subreddits (including tombstoned)."""
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_subreddits_table(db)
+            return db.execute('SELECT COUNT(*) FROM subreddits').fetchone()[0]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not count subreddits: {exc}') from exc
+
+
+def db_insert_subreddits(subreddits, db_location):
+    """Bulk INSERT OR IGNORE subreddits.
+
+    ``subreddits`` is an iterable of ``(name, normalized_name)`` tuples.
+    Rows whose ``normalized_name`` collides with an existing row (including
+    tombstoned rows where ``deleted_at`` is set) are skipped. Returns the
+    number of rows actually inserted.
+    """
+    subreddits = list(subreddits)
+    if not subreddits:
+        return 0
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    rows = [(name, normalized, now) for (name, normalized) in subreddits]
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_subreddits_table(db)
+            inserted = 0
+            cur = db.cursor()
+            for row in rows:
+                cur.execute(
+                    'INSERT OR IGNORE INTO subreddits '
+                    '(name, normalized_name, added_at) VALUES (?, ?, ?)',
+                    row,
+                )
+                inserted += cur.rowcount
+            db.commit()
+            return inserted
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not insert subreddits: {exc}') from exc
+
+
+def db_get_active_subreddits(db_location):
+    """Return live (enabled, not tombstoned) subreddits for ingestion.
+
+    Each row is ``(subreddit_id, name, normalized_name)``.
+    """
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_subreddits_table(db)
+            cur = db.execute(
+                'SELECT subreddit_id, name, normalized_name '
+                'FROM subreddits '
+                'WHERE enabled = 1 AND deleted_at IS NULL '
+                'ORDER BY normalized_name'
+            )
+            return [(row[0], row[1], row[2]) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load active subreddits: {exc}') from exc
+
+
+def db_get_all_subreddits(db_location):
+    """Return every subreddit row, including disabled and tombstoned.
+
+    Used by any future admin tooling and exporters. Each row is a dict with
+    all canonical columns from ``subreddits``.
+    """
+    cols = ['subreddit_id', 'name', 'normalized_name', 'enabled',
+            'added_at', 'deleted_at']
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_subreddits_table(db)
+            cur = db.execute(
+                f'SELECT {", ".join(cols)} FROM subreddits '
+                'ORDER BY normalized_name'
+            )
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load subreddits: {exc}') from exc
 
 
 def db_get_mastodon_last_seen_id(source_name, db_location):

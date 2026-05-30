@@ -19,8 +19,8 @@ const SECTIONS: AdminSection[] = [
   {
     href: "/admin/reddit",
     title: "Reddit",
-    description: "Manage subreddit list and credentials. (planned)",
-    status: "planned",
+    description: "Add, search, and remove subreddit subscriptions.",
+    status: "available",
   },
   {
     href: "/admin/bluesky",
