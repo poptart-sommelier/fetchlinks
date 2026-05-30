@@ -20,7 +20,8 @@ MAX_TIMELINE_LIMIT = 80
 MAX_PAGES = 5
 REQUEST_TIMEOUT_SECONDS = 20
 SUPPORTED_TIMELINES = {'home'}
-
+# Cap pages when mirroring the following list so a huge graph can't stall ingest.
+MAX_FOLLOWING_PAGES = 40
 
 class _StatusContentParser(HTMLParser):
     def __init__(self):
@@ -282,3 +283,101 @@ def run(
         )
 
     logger.info('Inserted %s Mastodon posts into DB', total_inserted)
+
+
+def _verify_credentials_account_id(session: requests.Session, instance_url: str) -> str | None:
+    url = urljoin(_normalize_instance_url(instance_url) + '/', 'api/v1/accounts/verify_credentials')
+    try:
+        response = session.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        payload = response.json()
+    except ValueError as exc:
+        logger.error('Invalid JSON verifying Mastodon credentials for %s: %s', instance_url, exc)
+        return None
+    except requests.RequestException as exc:
+        logger.error('Request error verifying Mastodon credentials for %s: %s', instance_url, exc)
+        return None
+    account_id = payload.get('id') if isinstance(payload, dict) else None
+    return str(account_id) if account_id else None
+
+
+def _next_following_url_from_link_header(link_header: str) -> str | None:
+    if not link_header:
+        return None
+    for link in requests.utils.parse_header_links(link_header):
+        if link.get('rel') == 'next':
+            url = link.get('url')
+            return url or None
+    return None
+
+
+def _fetch_following_pages(session: requests.Session, instance_url: str, account_id: str) -> list[dict]:
+    following: list[dict] = []
+    next_url: str | None = urljoin(
+        _normalize_instance_url(instance_url) + '/',
+        f'api/v1/accounts/{account_id}/following',
+    )
+    params: dict | None = {'limit': 80}
+    for _page in range(1, MAX_FOLLOWING_PAGES + 1):
+        if not next_url:
+            break
+        try:
+            response = session.get(next_url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+            response.raise_for_status()
+            payload = response.json()
+        except ValueError as exc:
+            logger.error('Invalid JSON listing Mastodon following for %s: %s', instance_url, exc)
+            break
+        except requests.RequestException as exc:
+            logger.error('Request error listing Mastodon following for %s: %s', instance_url, exc)
+            break
+        if not isinstance(payload, list) or not payload:
+            break
+        following.extend(payload)
+        # Subsequent pages come from the Link header's `next` URL (which
+        # already carries its own max_id query), so drop our initial params.
+        next_url = _next_following_url_from_link_header(response.headers.get('Link', ''))
+        params = None
+    return following
+
+
+def sync_follows(mastodon_config: MastodonSource, db_path: Path) -> None:
+    """Refresh the read-only follows snapshot for each enabled instance.
+
+    Best-effort: a failure for one instance is logged and does not abort the
+    others, and never raises into the ingest run.
+    """
+    if not mastodon_config.enabled:
+        return
+
+    for instance_config in mastodon_config.instances:
+        if not instance_config.enabled:
+            continue
+        source_name = instance_config.name
+        instance_url = _normalize_instance_url(instance_config.instance_url)
+        try:
+            auth_client = MastodonAuth(str(instance_config.credential_location))
+            with requests.Session() as session:
+                session.headers.update(auth_client.headers)
+                account_id = _verify_credentials_account_id(session, instance_url)
+                if not account_id:
+                    logger.warning(
+                        'Mastodon %s: could not resolve own account id; skipping follows sync',
+                        source_name,
+                    )
+                    continue
+                accounts = _fetch_following_pages(session, instance_url, account_id)
+            follows = [
+                (
+                    str(acc.get('id') or ''),
+                    acc.get('acct') or acc.get('username') or '',
+                    acc.get('display_name') or '',
+                    acc.get('url') or '',
+                )
+                for acc in accounts
+                if isinstance(acc, dict)
+            ]
+            written = db_utils.db_replace_mastodon_follows(source_name, follows, db_path)
+            logger.info('Mastodon %s: synced %s follows', source_name, written)
+        except Exception as exc:  # noqa: BLE001 - best-effort snapshot
+            logger.error('Mastodon %s: follows sync failed: %s', source_name, exc)

@@ -25,14 +25,14 @@ const SECTIONS: AdminSection[] = [
   {
     href: "/admin/bluesky",
     title: "Bluesky",
-    description: "Manage handles to follow and credentials. (planned)",
-    status: "planned",
+    description: "Read-only view of the accounts this credential follows.",
+    status: "available",
   },
   {
     href: "/admin/mastodon",
     title: "Mastodon",
-    description: "Manage instances, handles, and credentials. (planned)",
-    status: "planned",
+    description: "Read-only view of the accounts each instance follows.",
+    status: "available",
   },
 ];
 

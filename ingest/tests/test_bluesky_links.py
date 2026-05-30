@@ -199,5 +199,71 @@ class BlueskyRunTests(unittest.TestCase):
         self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
 
 
+class BlueskySyncFollowsTests(unittest.TestCase):
+    def setUp(self):
+        self.db_path = Path('/tmp/db/fetchlinks.db')
+
+    def _config(self, enabled=True):
+        return BlueskySource(
+            enabled=enabled,
+            credential_location=Path('/tmp/bsky.json'),
+            timeline_limit=50,
+        )
+
+    def test_skips_when_disabled(self):
+        with patch.object(bluesky_links, 'BlueskyAuth') as auth_cls, \
+             patch.object(bluesky_links.db_utils, 'db_replace_bluesky_follows') as replace:
+            bluesky_links.sync_follows(self._config(enabled=False), self.db_path)
+        auth_cls.assert_not_called()
+        replace.assert_not_called()
+
+    def test_paginates_and_writes_snapshot(self):
+        client = Mock()
+        client.me.did = 'did:self'
+        auth_client = Mock()
+        auth_client.get_client.return_value = client
+        auth_client.identifier = 'self.bsky.social'
+
+        pages = [
+            {
+                'follows': [
+                    {'did': 'did:a', 'handle': 'a.bsky.social', 'displayName': 'A'},
+                    {'did': 'did:b', 'handle': 'b.bsky.social', 'displayName': ''},
+                ],
+                'cursor': 'page-2',
+            },
+            {
+                'follows': [{'did': 'did:c', 'handle': 'c.bsky.social', 'displayName': 'C'}],
+                'cursor': None,
+            },
+        ]
+
+        with patch.object(bluesky_links, 'BlueskyAuth', return_value=auth_client), \
+             patch.object(bluesky_links, '_call_get_follows', side_effect=pages) as call_follows, \
+             patch.object(bluesky_links.db_utils, 'db_replace_bluesky_follows', return_value=3) as replace:
+            bluesky_links.sync_follows(self._config(), self.db_path)
+
+        # Uses the resolved self DID as the actor, paginates by cursor.
+        self.assertEqual(call_follows.call_args_list[0].args[1], 'did:self')
+        self.assertEqual(call_follows.call_args_list[1].args[2], 'page-2')
+        written = replace.call_args.args[0]
+        self.assertEqual(
+            written,
+            [
+                ('did:a', 'a.bsky.social', 'A'),
+                ('did:b', 'b.bsky.social', ''),
+                ('did:c', 'c.bsky.social', 'C'),
+            ],
+        )
+
+    def test_failure_is_swallowed(self):
+        auth_client = Mock()
+        auth_client.get_client.side_effect = RuntimeError('login failed')
+        with patch.object(bluesky_links, 'BlueskyAuth', return_value=auth_client), \
+             patch.object(bluesky_links.db_utils, 'db_replace_bluesky_follows') as replace:
+            bluesky_links.sync_follows(self._config(), self.db_path)
+        replace.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()
