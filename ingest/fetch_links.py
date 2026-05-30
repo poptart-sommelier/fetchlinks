@@ -43,9 +43,11 @@ def fetch_links(cfg: app_config.AppConfig) -> None:
 
     if cfg.sources.bluesky and cfg.sources.bluesky.enabled:
         bluesky_links.run(cfg.sources.bluesky, db_path, max_age, host_kw, desc_kw)
+        bluesky_links.sync_follows(cfg.sources.bluesky, db_path)
 
     if cfg.sources.mastodon and cfg.sources.mastodon.enabled:
         mastodon_links.run(cfg.sources.mastodon, db_path, max_age, host_kw, desc_kw)
+        mastodon_links.sync_follows(cfg.sources.mastodon, db_path)
 
 
 def main() -> None:

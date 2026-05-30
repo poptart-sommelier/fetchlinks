@@ -557,6 +557,20 @@ p {
   font-weight: 700;
 }
 
+.admin-readonly-note {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.feed-group-heading {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: lowercase;
+  color: var(--muted);
+}
+
 .feed-url-path {
   color: var(--muted);
   font-weight: 400;

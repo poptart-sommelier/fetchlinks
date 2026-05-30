@@ -240,6 +240,43 @@ def table_mastodon_state_configure(conn):
         raise RuntimeError('Failed to configure mastodon_state table') from exc
 
 
+def table_bluesky_follows_configure(conn):
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS bluesky_follows (
+    did          TEXT PRIMARY KEY,
+    handle       TEXT NOT NULL,
+    display_name TEXT,
+    synced_at    TEXT NOT NULL)
+    """)
+        conn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_bluesky_follows_handle '
+            'ON bluesky_follows(handle)'
+        )
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure bluesky_follows table') from exc
+
+
+def table_mastodon_follows_configure(conn):
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS mastodon_follows (
+    instance_name TEXT NOT NULL,
+    account_id    TEXT NOT NULL,
+    acct          TEXT NOT NULL,
+    display_name  TEXT,
+    url           TEXT,
+    synced_at     TEXT NOT NULL,
+    PRIMARY KEY (instance_name, account_id))
+    """)
+        conn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_mastodon_follows_instance '
+            'ON mastodon_follows(instance_name)'
+        )
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure mastodon_follows table') from exc
+
+
 def db_initial_setup(db_path):
     db_path = Path(db_path)
     logger.info('Creating or validating %s', db_path)
@@ -255,6 +292,8 @@ def db_initial_setup(db_path):
     table_reddit_state_configure(conn)
     table_subreddits_configure(conn)
     table_mastodon_state_configure(conn)
+    table_bluesky_follows_configure(conn)
+    table_mastodon_follows_configure(conn)
     conn.commit()
     conn.close()
     logger.info('Successfully created DB')

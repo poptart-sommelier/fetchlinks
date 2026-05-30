@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMELINE_LIMIT = 100
 MAX_TIMELINE_LIMIT = 100
 MAX_PAGES = 10
-
+# Cap pages when mirroring the follows list so a huge graph can't stall ingest.
+FOLLOWS_PAGE_LIMIT = 100
+MAX_FOLLOWS_PAGES = 50
 # Hosts to exclude from extracted links (we don't want to link back to Bluesky itself).
 EXCLUDED_HOSTS = ('bsky.app', 'bsky.social')
 
@@ -249,3 +251,62 @@ def run(
         inserted_count,
         bool(next_cursor),
     )
+
+
+def _self_did(client) -> Optional[str]:
+    me = getattr(client, 'me', None)
+    did = getattr(me, 'did', None) if me is not None else None
+    return did if isinstance(did, str) and did else None
+
+
+def _call_get_follows(client, actor: str, cursor: Optional[str], limit: int) -> Dict[str, Any]:
+    params: Dict[str, Any] = {'actor': actor, 'limit': limit}
+    if cursor:
+        params['cursor'] = cursor
+
+    if hasattr(client, 'app') and hasattr(client.app, 'bsky') and hasattr(client.app.bsky, 'graph'):
+        response = client.app.bsky.graph.get_follows(params=params)
+    else:
+        response = client.get_follows(actor=actor, cursor=cursor, limit=limit)
+
+    return _as_dict(response)
+
+
+def sync_follows(bluesky_config: BlueskySource, db_path: Path) -> None:
+    """Refresh the read-only snapshot of accounts this Bluesky account follows.
+
+    Best-effort: any failure is logged and never raised into the ingest run.
+    """
+    if not bluesky_config.enabled:
+        return
+
+    try:
+        auth_client = BlueskyAuth(str(bluesky_config.credential_location))
+        client = auth_client.get_client()
+
+        actor = _self_did(client) or auth_client.identifier
+        if not actor:
+            logger.warning('Bluesky: could not resolve own actor; skipping follows sync')
+            return
+
+        follows: List[Tuple[str, str, str]] = []
+        cursor: Optional[str] = None
+        for _page in range(1, MAX_FOLLOWS_PAGES + 1):
+            response = _call_get_follows(client, actor, cursor, FOLLOWS_PAGE_LIMIT)
+            page = response.get('follows', [])
+            if not isinstance(page, list) or not page:
+                break
+            for entry in page:
+                profile = _as_dict(entry)
+                did = profile.get('did')
+                handle = profile.get('handle')
+                if isinstance(did, str) and isinstance(handle, str) and did and handle:
+                    follows.append((did, handle, profile.get('displayName') or ''))
+            cursor = response.get('cursor')
+            if not cursor:
+                break
+
+        written = db_utils.db_replace_bluesky_follows(follows, db_path)
+        logger.info('Bluesky: synced %s follows', written)
+    except Exception as exc:  # noqa: BLE001 - best-effort snapshot
+        logger.error('Bluesky: follows sync failed: %s', exc)

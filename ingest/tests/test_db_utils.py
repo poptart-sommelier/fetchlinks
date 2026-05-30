@@ -239,5 +239,84 @@ class MastodonStateTests(_TmpDbCase):
         self.assertEqual(rows, [('infosec', 'https://infosec.exchange', '789')])
 
 
+class BlueskyFollowsTests(_TmpDbCase):
+    def test_get_returns_empty_on_fresh_db(self):
+        self.assertEqual(db_utils.db_get_bluesky_follows(self.db_path), [])
+
+    def test_replace_writes_and_reads_back_sorted(self):
+        written = db_utils.db_replace_bluesky_follows(
+            [
+                ('did:zed', 'zed.bsky.social', 'Zed'),
+                ('did:abc', 'abc.bsky.social', 'Abc'),
+            ],
+            self.db_path,
+        )
+        self.assertEqual(written, 2)
+        follows = db_utils.db_get_bluesky_follows(self.db_path)
+        self.assertEqual([f['handle'] for f in follows], ['abc.bsky.social', 'zed.bsky.social'])
+        self.assertEqual(follows[0]['did'], 'did:abc')
+        self.assertTrue(follows[0]['synced_at'])
+
+    def test_replace_is_a_full_snapshot(self):
+        db_utils.db_replace_bluesky_follows([('did:a', 'a.bsky.social', 'A')], self.db_path)
+        db_utils.db_replace_bluesky_follows([('did:b', 'b.bsky.social', 'B')], self.db_path)
+        follows = db_utils.db_get_bluesky_follows(self.db_path)
+        self.assertEqual([f['handle'] for f in follows], ['b.bsky.social'])
+
+    def test_replace_skips_rows_missing_did_or_handle(self):
+        written = db_utils.db_replace_bluesky_follows(
+            [('did:a', 'a.bsky.social', 'A'), ('', 'no-did', 'X'), ('did:c', '', 'Y')],
+            self.db_path,
+        )
+        self.assertEqual(written, 1)
+
+    def test_replace_empty_clears_snapshot(self):
+        db_utils.db_replace_bluesky_follows([('did:a', 'a.bsky.social', 'A')], self.db_path)
+        self.assertEqual(db_utils.db_replace_bluesky_follows([], self.db_path), 0)
+        self.assertEqual(db_utils.db_get_bluesky_follows(self.db_path), [])
+
+
+class MastodonFollowsTests(_TmpDbCase):
+    def test_get_returns_empty_on_fresh_db(self):
+        self.assertEqual(db_utils.db_get_mastodon_follows(self.db_path), [])
+
+    def test_replace_writes_per_instance_and_reads_sorted(self):
+        written = db_utils.db_replace_mastodon_follows(
+            'infosec',
+            [
+                ('2', 'zed', 'Zed', 'https://infosec.exchange/@zed'),
+                ('1', 'abe', 'Abe', 'https://infosec.exchange/@abe'),
+            ],
+            self.db_path,
+        )
+        self.assertEqual(written, 2)
+        follows = db_utils.db_get_mastodon_follows(self.db_path)
+        self.assertEqual([f['acct'] for f in follows], ['abe', 'zed'])
+        self.assertEqual(follows[0]['instance_name'], 'infosec')
+
+    def test_replace_only_affects_named_instance(self):
+        db_utils.db_replace_mastodon_follows(
+            'infosec', [('1', 'abe', 'Abe', 'https://infosec.exchange/@abe')], self.db_path
+        )
+        db_utils.db_replace_mastodon_follows(
+            'hachyderm', [('9', 'cleo', 'Cleo', 'https://hachyderm.io/@cleo')], self.db_path
+        )
+        # Re-syncing infosec must not drop hachyderm rows.
+        db_utils.db_replace_mastodon_follows(
+            'infosec', [('1', 'abe', 'Abe', 'https://infosec.exchange/@abe')], self.db_path
+        )
+        follows = db_utils.db_get_mastodon_follows(self.db_path)
+        instances = {f['instance_name'] for f in follows}
+        self.assertEqual(instances, {'infosec', 'hachyderm'})
+
+    def test_replace_skips_rows_missing_id_or_acct(self):
+        written = db_utils.db_replace_mastodon_follows(
+            'infosec',
+            [('1', 'abe', 'Abe', 'u'), ('', 'noid', 'X', 'u'), ('3', '', 'Y', 'u')],
+            self.db_path,
+        )
+        self.assertEqual(written, 1)
+
+
 if __name__ == '__main__':
     unittest.main()

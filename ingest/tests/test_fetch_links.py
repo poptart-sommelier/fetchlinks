@@ -57,13 +57,17 @@ class FetchLinksRoutingTests(unittest.TestCase):
         with patch.object(fetch_links.rss_links, 'run') as rss_run, \
              patch.object(fetch_links.reddit_links, 'run') as reddit_run, \
              patch.object(fetch_links.bluesky_links, 'run') as bluesky_run, \
-             patch.object(fetch_links.mastodon_links, 'run') as mastodon_run:
+             patch.object(fetch_links.bluesky_links, 'sync_follows') as bluesky_sync, \
+             patch.object(fetch_links.mastodon_links, 'run') as mastodon_run, \
+             patch.object(fetch_links.mastodon_links, 'sync_follows') as mastodon_sync:
             fetch_links.fetch_links(cfg)
 
         rss_run.assert_called_once_with(rss, db_path, default_age, [], [])
         reddit_run.assert_called_once_with(reddit, db_path, default_age, [], [])
         bluesky_run.assert_called_once_with(bluesky, db_path, default_age, [], [])
         mastodon_run.assert_called_once_with(mastodon, db_path, default_age, [], [])
+        bluesky_sync.assert_called_once_with(bluesky, db_path)
+        mastodon_sync.assert_called_once_with(mastodon, db_path)
 
     def test_passes_configured_ingest_age_limit_to_sources(self):
         tmp = Path('/tmp/fl-test')

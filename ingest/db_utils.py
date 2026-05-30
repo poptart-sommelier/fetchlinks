@@ -166,6 +166,29 @@ def _ensure_mastodon_state_table(db):
     """)
 
 
+def _ensure_bluesky_follows_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS bluesky_follows (
+    did          TEXT PRIMARY KEY,
+    handle       TEXT NOT NULL,
+    display_name TEXT,
+    synced_at    TEXT NOT NULL)
+    """)
+
+
+def _ensure_mastodon_follows_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS mastodon_follows (
+    instance_name TEXT NOT NULL,
+    account_id    TEXT NOT NULL,
+    acct          TEXT NOT NULL,
+    display_name  TEXT,
+    url           TEXT,
+    synced_at     TEXT NOT NULL,
+    PRIMARY KEY (instance_name, account_id))
+    """)
+
+
 def db_get_rss_feed_states(db_location):
     """Return a {feed_url: (etag, last_modified)} map for all known feeds."""
     try:
@@ -517,3 +540,99 @@ def db_set_mastodon_last_seen_id(source_name, instance_url, last_seen_id, db_loc
             db.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not persist mastodon state for {source_name}: {exc}') from exc
+
+
+# --- follows snapshots (read-only mirror of remote social graph) -----------
+
+
+def db_replace_bluesky_follows(follows, db_location):
+    """Replace the entire Bluesky follows snapshot in one transaction.
+
+    ``follows`` is an iterable of ``(did, handle, display_name)`` tuples.
+    The table is fully rewritten so removed follows disappear. Returns the
+    number of rows written.
+    """
+    follows = list(follows)
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    rows = [
+        (did, handle, display_name or None, now)
+        for (did, handle, display_name) in follows
+        if did and handle
+    ]
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_bluesky_follows_table(db)
+            db.execute('DELETE FROM bluesky_follows')
+            if rows:
+                db.executemany(
+                    'INSERT OR REPLACE INTO bluesky_follows '
+                    '(did, handle, display_name, synced_at) VALUES (?, ?, ?, ?)',
+                    rows,
+                )
+            db.commit()
+            return len(rows)
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not persist bluesky follows: {exc}') from exc
+
+
+def db_get_bluesky_follows(db_location):
+    """Return every Bluesky follow as a dict, ordered by handle."""
+    cols = ['did', 'handle', 'display_name', 'synced_at']
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_bluesky_follows_table(db)
+            cur = db.execute(
+                f'SELECT {", ".join(cols)} FROM bluesky_follows '
+                'ORDER BY LOWER(handle)'
+            )
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load bluesky follows: {exc}') from exc
+
+
+def db_replace_mastodon_follows(instance_name, follows, db_location):
+    """Replace the follows snapshot for one Mastodon instance.
+
+    ``follows`` is an iterable of ``(account_id, acct, display_name, url)``
+    tuples. Only rows for ``instance_name`` are rewritten, so other instances
+    are left untouched. Returns the number of rows written.
+    """
+    follows = list(follows)
+    now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    rows = [
+        (instance_name, account_id, acct, display_name or None, url or None, now)
+        for (account_id, acct, display_name, url) in follows
+        if account_id and acct
+    ]
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_mastodon_follows_table(db)
+            db.execute('DELETE FROM mastodon_follows WHERE instance_name = ?', [instance_name])
+            if rows:
+                db.executemany(
+                    'INSERT OR REPLACE INTO mastodon_follows '
+                    '(instance_name, account_id, acct, display_name, url, synced_at) '
+                    'VALUES (?, ?, ?, ?, ?, ?)',
+                    rows,
+                )
+            db.commit()
+            return len(rows)
+    except sqlite3.Error as exc:
+        raise RuntimeError(
+            f'Could not persist mastodon follows for {instance_name}: {exc}'
+        ) from exc
+
+
+def db_get_mastodon_follows(db_location):
+    """Return every Mastodon follow as a dict, ordered by instance then acct."""
+    cols = ['instance_name', 'account_id', 'acct', 'display_name', 'url', 'synced_at']
+    try:
+        with sqlite3.connect(db_location) as db:
+            _ensure_mastodon_follows_table(db)
+            cur = db.execute(
+                f'SELECT {", ".join(cols)} FROM mastodon_follows '
+                'ORDER BY instance_name, LOWER(acct)'
+            )
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load mastodon follows: {exc}') from exc

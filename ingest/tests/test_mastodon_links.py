@@ -351,5 +351,83 @@ class RunTests(unittest.TestCase):
         self.assertEqual(run_instance.call_args_list[1].args, (hachyderm, db_path, 3, [], []))
 
 
+class SyncFollowsTests(unittest.TestCase):
+    def setUp(self):
+        self.db_path = Path('/tmp/db/fetchlinks.db')
+
+    def test_skips_when_source_disabled(self):
+        with patch.object(mastodon_links, 'MastodonAuth') as auth_cls, \
+             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows') as replace:
+            mastodon_links.sync_follows(MastodonSource(enabled=False, instances=(_instance(),)), self.db_path)
+        auth_cls.assert_not_called()
+        replace.assert_not_called()
+
+    def test_skips_disabled_instance(self):
+        config = MastodonSource(enabled=True, instances=(_instance(enabled=False),))
+        with patch.object(mastodon_links, 'MastodonAuth') as auth_cls, \
+             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows') as replace:
+            mastodon_links.sync_follows(config, self.db_path)
+        auth_cls.assert_not_called()
+        replace.assert_not_called()
+
+    def test_resolves_account_then_writes_snapshot(self):
+        instance_config = _instance(name='infosec', instance_url='https://infosec.exchange/')
+        config = MastodonSource(enabled=True, instances=(instance_config,))
+        auth_client = Mock()
+        auth_client.headers = {'Authorization': 'Bearer tok'}
+        accounts = [
+            {'id': '1', 'acct': 'abe', 'display_name': 'Abe', 'url': 'https://infosec.exchange/@abe'},
+            {'id': '2', 'acct': 'cleo', 'display_name': '', 'url': 'https://infosec.exchange/@cleo'},
+        ]
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links, '_verify_credentials_account_id', return_value='99') as verify, \
+             patch.object(mastodon_links, '_fetch_following_pages', return_value=accounts) as fetch_following, \
+             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows', return_value=2) as replace:
+            mastodon_links.sync_follows(config, self.db_path)
+
+        verify.assert_called_once()
+        self.assertEqual(fetch_following.call_args.args[2], '99')
+        self.assertEqual(replace.call_args.args[0], 'infosec')
+        self.assertEqual(
+            replace.call_args.args[1],
+            [
+                ('1', 'abe', 'Abe', 'https://infosec.exchange/@abe'),
+                ('2', 'cleo', '', 'https://infosec.exchange/@cleo'),
+            ],
+        )
+
+    def test_skips_instance_when_account_id_unresolved(self):
+        config = MastodonSource(enabled=True, instances=(_instance(),))
+        auth_client = Mock()
+        auth_client.headers = {}
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links, '_verify_credentials_account_id', return_value=None), \
+             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows') as replace:
+            mastodon_links.sync_follows(config, self.db_path)
+        replace.assert_not_called()
+
+    def test_failure_for_one_instance_does_not_abort_others(self):
+        good = _instance(name='infosec')
+        bad = _instance(name='hachyderm', instance_url='https://hachyderm.io')
+        config = MastodonSource(enabled=True, instances=(bad, good))
+        auth_client = Mock()
+        auth_client.headers = {}
+
+        def verify(session, instance_url):
+            if 'hachyderm' in instance_url:
+                raise RuntimeError('boom')
+            return '5'
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links, '_verify_credentials_account_id', side_effect=verify), \
+             patch.object(mastodon_links, '_fetch_following_pages', return_value=[]), \
+             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows', return_value=0) as replace:
+            mastodon_links.sync_follows(config, self.db_path)
+
+        # infosec still synced despite hachyderm raising.
+        self.assertEqual(replace.call_args.args[0], 'infosec')
+
+
 if __name__ == '__main__':
     unittest.main()

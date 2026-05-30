@@ -150,7 +150,7 @@ function PageHeader({
     <header className="page-header">
       <div className="page-title">
         <p className="eyebrow">
-          Fetchlinks &middot; <Link href="/admin/feeds">admin</Link>
+          Fetchlinks
         </p>
         <h1>Latest posts</h1>
       </div>
