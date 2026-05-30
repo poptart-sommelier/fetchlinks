@@ -208,6 +208,25 @@ def table_reddit_state_configure(conn):
         raise RuntimeError('Failed to configure reddit_state table') from exc
 
 
+def table_subreddits_configure(conn):
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS subreddits (
+    subreddit_id    INTEGER PRIMARY KEY,
+    name            TEXT NOT NULL,
+    normalized_name TEXT NOT NULL UNIQUE,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    added_at        TEXT NOT NULL,
+    deleted_at      TEXT)
+    """)
+        conn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_subreddits_live '
+            'ON subreddits(enabled, deleted_at)'
+        )
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure subreddits table') from exc
+
+
 def table_mastodon_state_configure(conn):
     try:
         conn.execute("""
@@ -234,6 +253,7 @@ def db_initial_setup(db_path):
     table_rss_feeds_configure(conn)
     migrate_rss_feed_state_into_rss_feeds(conn)
     table_reddit_state_configure(conn)
+    table_subreddits_configure(conn)
     table_mastodon_state_configure(conn)
     conn.commit()
     conn.close()

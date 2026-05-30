@@ -29,6 +29,7 @@ INGEST_DIR="${APP_DIR}/ingest"
 WEB_DIR="${APP_DIR}/web"
 CONFIG_FILE="${INGEST_DIR}/data/config/fetchlinks.toml"
 RSS_FEEDS_FILE="${INGEST_DIR}/data/config/rss_feeds.txt"
+SUBREDDITS_FILE="${INGEST_DIR}/data/config/subreddits.txt"
 WEB_ENV_FILE="${WEB_DIR}/.env.production"
 NODE_MAJOR=24
 PYTHON_BIN="/usr/bin/python3.12"
@@ -165,6 +166,16 @@ sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
     --config "${CONFIG_FILE}" \
     --seed-if-empty "${RSS_FEEDS_FILE}" || \
     warn "rss_feeds seed step reported a failure; check the output above."
+
+# ---- one-time seed: import [sources.reddit].subreddits from the TOML config
+# into the DB if the subreddits table is empty. No-op on upgrade once the
+# operator has subreddits. No network calls.
+log "Seeding subreddits table from ${SUBREDDITS_FILE} if empty"
+sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
+    "${INGEST_DIR}/subreddit_import.py" \
+    --config "${CONFIG_FILE}" \
+    --seed-if-empty || \
+    warn "subreddits seed step reported a failure; check the output above."
 
 log "Exporting rss_feeds table back to ${RSS_FEEDS_FILE}"
 systemctl start fetchlinks-export-rss-feeds.service || \

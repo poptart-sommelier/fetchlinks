@@ -165,6 +165,55 @@ class RedditStateTests(_TmpDbCase):
         self.assertEqual(db_utils.db_get_reddit_states(self.db_path), {})
 
 
+class SubredditsTableTests(_TmpDbCase):
+    def test_count_is_zero_on_fresh_db(self):
+        self.assertEqual(db_utils.db_count_subreddits(self.db_path), 0)
+
+    def test_insert_then_get_active(self):
+        inserted = db_utils.db_insert_subreddits(
+            [('Netsec', 'netsec'), ('Python', 'python')], self.db_path
+        )
+        self.assertEqual(inserted, 2)
+        self.assertEqual(db_utils.db_count_subreddits(self.db_path), 2)
+
+        active = db_utils.db_get_active_subreddits(self.db_path)
+        self.assertEqual(
+            [(name, normalized) for (_id, name, normalized) in active],
+            [('Netsec', 'netsec'), ('Python', 'python')],
+        )
+
+    def test_insert_ignores_duplicate_normalized_name(self):
+        db_utils.db_insert_subreddits([('Netsec', 'netsec')], self.db_path)
+        inserted = db_utils.db_insert_subreddits([('netsec', 'netsec')], self.db_path)
+        self.assertEqual(inserted, 0)
+        self.assertEqual(db_utils.db_count_subreddits(self.db_path), 1)
+
+    def test_insert_empty_list_is_noop(self):
+        self.assertEqual(db_utils.db_insert_subreddits([], self.db_path), 0)
+
+    def test_get_active_excludes_disabled_and_tombstoned(self):
+        db_utils.db_insert_subreddits(
+            [('Active', 'active'), ('Off', 'off'), ('Gone', 'gone')], self.db_path
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("UPDATE subreddits SET enabled = 0 WHERE normalized_name = 'off'")
+            conn.execute(
+                "UPDATE subreddits SET deleted_at = '2026-01-01 00:00:00', enabled = 0 "
+                "WHERE normalized_name = 'gone'"
+            )
+            conn.commit()
+
+        active = db_utils.db_get_active_subreddits(self.db_path)
+        self.assertEqual([normalized for (_id, _name, normalized) in active], ['active'])
+
+    def test_get_all_includes_disabled_and_tombstoned(self):
+        db_utils.db_insert_subreddits([('Netsec', 'netsec')], self.db_path)
+        rows = db_utils.db_get_all_subreddits(self.db_path)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['normalized_name'], 'netsec')
+        self.assertEqual(rows[0]['enabled'], 1)
+
+
 class MastodonStateTests(_TmpDbCase):
     def test_get_returns_none_on_empty(self):
         self.assertIsNone(db_utils.db_get_mastodon_last_seen_id('infosec', self.db_path))
