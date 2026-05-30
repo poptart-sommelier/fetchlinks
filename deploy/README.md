@@ -111,6 +111,53 @@ To deploy a specific tag/branch:
 sudo FETCHLINKS_REPO_REF=v1.2.3 /opt/fetchlinks/deploy/bootstrap.sh
 ```
 
+## What `bootstrap.sh` does
+
+In order:
+
+1. Sanity-checks root + Ubuntu.
+2. `apt-get install` base packages, Python 3.12 toolchain, Node 24 (NodeSource),
+   sqlite3, ufw, unattended-upgrades. **No nginx here** — that's `tls.sh`.
+3. Enables the unattended-upgrades schedule.
+4. Creates the `fetchlinks` system user/group and standard directories under
+   `/opt/fetchlinks` (`ingest/db`, `ingest/data/logs`, `ingest/data/config`).
+5. Configures `ufw` (deny inbound, allow 22/80/443).
+6. Clones or fast-forwards the repo at `/opt/fetchlinks` using
+   `git merge --ff-only` (no destructive reset).
+7. Builds the Python venv and installs `ingest/requirements.txt`.
+8. `npm ci && npm run build` in `web/`.
+9. Seeds `/opt/fetchlinks/web/.env.production` from
+   `web/.env.production.example` if missing, then preserves it on upgrade.
+10. Installs the seven systemd units (web + ingest + retain + export-rss-feeds),
+    daemon-reload, enable + start.
+11. On first run, seeds the `rss_feeds` SQLite table from
+    `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` (no-op once the table
+    has any rows), then immediately exports the DB snapshot back to that file.
+
+## What `tls.sh` does
+
+Decoupled from bootstrap so you can stand the box up before DNS exists and
+add TLS later, or re-run only the TLS step when changing domain.
+
+1. Requires `FETCHLINKS_DOMAIN` + `FETCHLINKS_EMAIL` (env or positional args).
+2. Bails if `bootstrap.sh` hasn't already run (looks for the nginx site
+   template in the repo).
+3. `apt-get install nginx python3-certbot-nginx`.
+4. Renders `deploy/nginx/fetchlinks-web.conf.example` for the domain,
+   enables the site, removes the default nginx welcome site, reloads nginx.
+5. Runs `certbot --nginx --redirect` to obtain (or renew) the cert.
+6. Enables `certbot.timer` for unattended renewals.
+
+## Rebuild drill
+
+1. Provision a new Ubuntu VM, point DNS at it.
+2. SSH in, run `bootstrap.sh`.
+3. `scp` the credential JSON files (and optionally a `fetchlinks.db`
+   snapshot) into place. Set the admin user/pass in
+   `/opt/fetchlinks/web/.env.production` and `systemctl restart fetchlinks-web`.
+4. Run `tls.sh` with domain + email.
+5. Done.
+
 ## Day-to-day ops
 
 ```bash

@@ -11,6 +11,10 @@ The shared boundary between the apps is the SQLite database. The ingest app owns
 creating and updating the database; the web app opens it read-only via the
 `FETCHLINKS_DB` environment variable.
 
+For project orientation (goal, architecture, cost, layout, security) see
+[OVERVIEW.md](OVERVIEW.md). For deploy and operations see
+[deploy/README.md](deploy/README.md).
+
 ## Quick Start
 
 Install and run the ingest app. Create the virtualenv at `.venv` in the
