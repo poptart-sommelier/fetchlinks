@@ -23,10 +23,10 @@ deploy/
 
 ## First-time install
 
-1. Create a fresh Ubuntu 24.04 VM in Azure. Add your SSH public key, open
-   ports 22/80/443.
-2. SSH in as your admin user.
-3. Run:
+1. Create a fresh Ubuntu 24.04 VM in Azure. Add your SSH public key and open
+   ports 22, 80, and 443.
+
+2. SSH in as your admin user, clone the repo, and run bootstrap:
 
     ```bash
     sudo apt-get update && sudo apt-get install -y git
@@ -34,56 +34,38 @@ deploy/
     sudo /opt/fetchlinks/deploy/bootstrap.sh
     ```
 
-    `bootstrap.sh` installs the app, services, and firewall rules. It does
-    **not** touch nginx or TLS — see step 7 for that.
+   `bootstrap.sh` installs packages, builds the app, installs the systemd
+   services, enables the firewall, and starts the app. It does **not** install
+   nginx or TLS.
 
-4. Ensure the API credential files referenced by
-   `/opt/fetchlinks/ingest/data/config/fetchlinks.toml` exist. The bootstrap
-   script does not create, copy, chmod, or otherwise manage credentials.
+3. Answer the first-install prompts.
 
-   Then edit `/opt/fetchlinks/web/.env.production` and set the admin Basic
-   auth credentials:
+   For each missing enabled source, bootstrap asks whether to configure it.
+   Enter either a path to an existing JSON credential file or paste a JSON
+   object directly. Pasted JSON is written to the default path from
+   `/opt/fetchlinks/ingest/data/config/fetchlinks.toml`; copied/pasted secrets
+   are owned by `fetchlinks:fetchlinks` and chmod `0600`.
 
-    ```bash
-    sudo editor /opt/fetchlinks/web/.env.production
-    sudo systemctl restart fetchlinks-web.service
-    ```
+   You can skip credential setup at the first prompt and do it later. Bootstrap
+   leaves sources enabled when credentials are skipped, so validation may warn
+   until those files exist. See `ingest/SETUP.md` for the JSON formats.
 
-    Then (optionally) seed or extend the RSS feed list. The DB table
-    `rss_feeds` is the live source of truth;
-    `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` is the first-install
-    seed and the 5-minute snapshot exported back from the DB:
+   Bootstrap also configures `/opt/fetchlinks/web/.env.production` when it is
+   missing. The admin password defaults to a generated strong password unless
+   you enter your own.
 
-    ```bash
-    # First-time seed (no-op once the rss_feeds table has any rows):
-    sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
-        /opt/fetchlinks/ingest/rss_feed_import.py \
-        --config /opt/fetchlinks/ingest/data/config/fetchlinks.toml \
-        --seed-if-empty /opt/fetchlinks/ingest/data/config/rss_feeds.txt
+4. Review the validation output.
 
-    # Vet and add new feeds from an arbitrary text blob:
-    sudo -u fetchlinks /opt/fetchlinks/.venv/bin/python \
-        /opt/fetchlinks/ingest/rss_feed_import.py \
-        --config /opt/fetchlinks/ingest/data/config/fetchlinks.toml \
-        --input /tmp/new-feeds.txt
-    ```
+   Bootstrap seeds the source tables, validates each enabled ingest source, and
+   finishes successfully even if one source fails. Failed sources are printed as
+   clear warnings so you can fix credentials or API access without reinstalling
+   the VM.
 
-    A short timer (`fetchlinks-export-rss-feeds.timer`, every 5 minutes)
-    writes a deterministic text snapshot of the live table back to
-    `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` for backup / diffing
-    and occasional commit back to the repo seed file.
-
-5. (Optional) copy an existing `fetchlinks.db` to
+5. Optional: copy an existing `fetchlinks.db` to
    `/opt/fetchlinks/ingest/db/fetchlinks.db`.
-6. Kick off an ingest run to verify:
 
-    ```bash
-    sudo systemctl start fetchlinks-ingest.service
-    sudo journalctl -u fetchlinks-ingest.service -n 50 --no-pager
-    ```
-
-7. (Optional) point a DNS record at the VM, then provision nginx + Let's
-   Encrypt TLS with the dedicated script:
+6. Optional: point a DNS record at the VM, then install nginx and Let's Encrypt
+   TLS:
 
     ```bash
     sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
@@ -124,15 +106,21 @@ In order:
 5. Configures `ufw` (deny inbound, allow 22/80/443).
 6. Clones or fast-forwards the repo at `/opt/fetchlinks` using
    `git merge --ff-only` (no destructive reset).
-7. Builds the Python venv and installs `ingest/requirements.txt`.
-8. `npm ci && npm run build` in `web/`.
-9. Seeds `/opt/fetchlinks/web/.env.production` from
-   `web/.env.production.example` if missing, then preserves it on upgrade.
-10. Installs the seven systemd units (web + ingest + retain + export-rss-feeds),
+7. Prompts for missing enabled-source credentials. Each prompt accepts either a
+   readable JSON file path or a pasted JSON object. Skipped credentials leave
+   sources enabled and produce warnings later.
+8. Prompts for web admin credentials when `/opt/fetchlinks/web/.env.production`
+   is missing. Press Enter at the password prompt to generate a strong random
+   password.
+9. Builds the Python venv and installs `ingest/requirements.txt`.
+10. `npm ci && npm run build` in `web/`.
+11. Installs the seven systemd units (web + ingest + retain + export-rss-feeds),
     daemon-reload, enable + start.
-11. On first run, seeds the `rss_feeds` SQLite table from
+12. On first run, seeds the `rss_feeds` SQLite table from
     `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` (no-op once the table
     has any rows), then immediately exports the DB snapshot back to that file.
+13. Runs per-source ingest validation and prints non-fatal warnings for sources
+   that fail.
 
 ## What `tls.sh` does
 
