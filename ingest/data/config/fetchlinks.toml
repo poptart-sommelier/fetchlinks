@@ -1,7 +1,8 @@
 # Fetchlinks runtime configuration.
 #
 # All path values may be absolute or relative to this file's directory.
-# The production install lives at /opt/fetchlinks and uses this file directly.
+# Production installs use this file directly from whichever checkout directory
+# bootstrap.sh is run from.
 
 [paths]
 db        = "../../db/fetchlinks.db"

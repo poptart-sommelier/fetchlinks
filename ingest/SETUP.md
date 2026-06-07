@@ -6,8 +6,8 @@ These instructions configure and run the Fetchlinks ingest app on Linux.
 
 From the monorepo root. The venv MUST live at `.venv` in the repo root
 (not a sibling `../venv`): VS Code (`.vscode/settings.json`,
-`.vscode/tasks.json`) and the production install at `/opt/fetchlinks/.venv`
-both assume this path. `.venv/` is already in `.gitignore`.
+`.vscode/tasks.json`) and the production bootstrap both assume this path.
+`.venv/` is already in `.gitignore`.
 
 ```bash
 python3 -m venv .venv

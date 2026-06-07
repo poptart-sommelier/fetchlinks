@@ -26,12 +26,12 @@ No Docker. No Ansible. No container registry. No managed database.
 Azure VM (Ubuntu 24.04 LTS, B1ms, East US)
   ├─ nginx + certbot                            host TLS reverse proxy (optional, via tls.sh)
   ├─ Node.js 24                                 runs `next start`
-  ├─ Python 3.12 + venv at /opt/fetchlinks/.venv
-  ├─ /opt/fetchlinks                            git checkout + runtime home
-  ├─ /opt/fetchlinks/ingest/db/fetchlinks.db    SQLite (WAL)
-  ├─ /opt/fetchlinks/ingest/data/config/        fetchlinks.toml + rss_feeds.txt
-  ├─ /opt/fetchlinks/ingest/data/logs/          ingest logs
-  ├─ /opt/fetchlinks/web/.env.production        web env + admin Basic auth
+  ├─ Python 3.12 + venv at <checkout>/.venv
+  ├─ <checkout>                            git checkout + runtime home
+  ├─ <checkout>/ingest/db/fetchlinks.db    SQLite (WAL)
+  ├─ <checkout>/ingest/data/config/        fetchlinks.toml + rss_feeds.txt
+  ├─ <checkout>/ingest/data/logs/          ingest logs
+  ├─ <checkout>/web/.env.production        web env + admin Basic auth
   ├─ systemd: fetchlinks-web.service            127.0.0.1:3000 (Next.js)
   ├─ systemd: fetchlinks-ingest.{service,timer} oneshot Python ingest, every 30 min
   ├─ systemd: fetchlinks-retain.{service,timer} weekly retention + conditional VACUUM
@@ -94,7 +94,7 @@ web/                                   Next.js webapp (TypeScript, vitest)
   credentials live in ignored `web/.env.production`.
 - Web admin (`/admin/*`) is gated by HTTP Basic against
   `FETCHLINKS_ADMIN_USER` / `FETCHLINKS_ADMIN_PASS` in
-  `/opt/fetchlinks/web/.env.production`. Constant-time credential compare. If either
+  `<checkout>/web/.env.production`. Constant-time credential compare. If either
   var is unset, `/admin/*` returns 503 instead of granting access.
 - TLS via certbot with auto-renewal timer.
 - Security updates via `unattended-upgrades`.

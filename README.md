@@ -19,8 +19,7 @@ For project orientation (goal, architecture, cost, layout, security) see
 
 Install and run the ingest app. Create the virtualenv at `.venv` in the
 repo root — that's the path the VS Code workspace (`.vscode/settings.json`,
-`.vscode/tasks.json`) and the production layout (`/opt/fetchlinks/.venv`)
-both expect:
+`.vscode/tasks.json`) and the production bootstrap both expect:
 
 ```bash
 python3 -m venv .venv
@@ -57,7 +56,7 @@ npm run validate
 ## Deployment Examples
 
 Example systemd and nginx files for running the web app on a VM live in
-`deploy/`. They are adapted for a single checkout at `/opt/fetchlinks` with the
-web app at `/opt/fetchlinks/web`.
+`deploy/`. Bootstrap renders them for whichever checkout directory contains the
+project, commonly `~/fetchlinks` on the VM.
 
 For detailed setup notes, see `ingest/SETUP.md` and `web/README.md`.
