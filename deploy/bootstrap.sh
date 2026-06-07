@@ -67,6 +67,32 @@ render_systemd_unit() {
     chmod 0644 "${target_path}"
 }
 
+grant_app_user_checkout_access() {
+    local dir="${APP_DIR}"
+    local parent_dirs=()
+    local index=0
+
+    if sudo -u "${APP_USER}" test -x "${APP_DIR}"; then
+        return 0
+    fi
+
+    while [[ "${dir}" != "/" ]]; do
+        dir="$(dirname -- "${dir}")"
+        [[ "${dir}" == "/" ]] && break
+        parent_dirs+=("${dir}")
+    done
+
+    log "Granting ${APP_USER} traversal access to checkout parent directories"
+    for ((index = ${#parent_dirs[@]} - 1; index >= 0; index--)); do
+        setfacl -m "u:${APP_USER}:x" "${parent_dirs[${index}]}" || \
+            die "Unable to grant ${APP_USER} execute access on ${parent_dirs[${index}]}"
+    done
+
+    if ! sudo -u "${APP_USER}" test -x "${APP_DIR}"; then
+        die "${APP_USER} still cannot access ${APP_DIR}. Check parent directory permissions and ACL support on this filesystem."
+    fi
+}
+
 GENERATED_ADMIN_PASSWORD=""
 declare -a SKIPPED_CREDENTIAL_SOURCES=()
 declare -a VALIDATION_FAILED_SOURCES=()
@@ -705,7 +731,7 @@ log "Updating apt and installing base packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y \
-    git curl ca-certificates sqlite3 ufw unattended-upgrades \
+    git curl ca-certificates sqlite3 ufw unattended-upgrades acl \
     python3.12 python3.12-venv python3.12-dev \
     build-essential libffi-dev libssl-dev
 
@@ -735,6 +761,7 @@ usermod --home "${APP_DIR}" "${APP_USER}"
 
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}"
 chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
+grant_app_user_checkout_access
 
 # ---- firewall ---------------------------------------------------------------
 

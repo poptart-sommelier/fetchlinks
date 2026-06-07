@@ -71,7 +71,7 @@ deploy/
     ```bash
     sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
          FETCHLINKS_EMAIL=you@example.com \
-         ~/fetchlinks/deploy/tls.sh
+          ~/fetchlinks/deploy/tls.sh
     ```
 
     `tls.sh` is idempotent — re-run it to rotate cert metadata or after
@@ -94,8 +94,13 @@ To deploy a specific tag/branch:
 sudo FETCHLINKS_REPO_REF=v1.2.3 ~/fetchlinks/deploy/bootstrap.sh
 ```
 
-By default, `bootstrap.sh` uses the checkout that contains the script. To use a
-different checkout path, set `FETCHLINKS_APP_DIR=/absolute/path/to/fetchlinks`.
+By default, `bootstrap.sh` uses the checkout that contains the script. The
+checkout can live under your admin user's home directory, such as
+`/home/azureuser/fetchlinks`. Bootstrap grants the unprivileged `fetchlinks`
+service account execute-only ACL access on the checkout's parent directories so
+git, systemd, and the app can traverse the known path without making the home
+directory listable. To use a different checkout path, set
+`FETCHLINKS_APP_DIR=/absolute/path/to/fetchlinks`.
 
 ## What `bootstrap.sh` does
 
@@ -103,10 +108,13 @@ In order:
 
 1. Sanity-checks root + Ubuntu.
 2. `apt-get install` base packages, Python 3.12 toolchain, Node 24 (NodeSource),
-   sqlite3, ufw, unattended-upgrades. **No nginx here** — that's `tls.sh`.
+   sqlite3, ufw, unattended-upgrades, and ACL tooling. **No nginx here** —
+   that's `tls.sh`.
 3. Enables the unattended-upgrades schedule.
 4. Creates the `fetchlinks` system user/group and standard directories under
-   the checkout (`ingest/db`, `ingest/data/logs`, `ingest/data/config`).
+   the checkout (`ingest/db`, `ingest/data/logs`, `ingest/data/config`), then
+   grants the service account execute-only ACL access to checkout parent
+   directories when needed.
 5. Configures `ufw` (deny inbound, allow 22/80/443).
 6. Fast-forwards the checkout using
    `git merge --ff-only` (no destructive reset).
@@ -144,7 +152,7 @@ add TLS later, or re-run only the TLS step when changing domain.
 ## Rebuild drill
 
 1. Provision a new Ubuntu VM, point DNS at it.
-2. SSH in, run `bootstrap.sh`.
+2. SSH in, clone the repo, and run `bootstrap.sh`.
 3. `scp` the credential JSON files (and optionally a `fetchlinks.db`
    snapshot) into place. Set the admin user/pass in
    `<checkout>/web/.env.production` and `systemctl restart fetchlinks-web`.

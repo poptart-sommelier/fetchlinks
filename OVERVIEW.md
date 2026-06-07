@@ -90,8 +90,8 @@ web/                                   Next.js webapp (TypeScript, vitest)
 - Firewall: `ufw` deny inbound, allow 22/80/443 only.
 - Services run as `fetchlinks`, never root.
 - API credentials live wherever `ingest/data/config/fetchlinks.toml` points;
-  bootstrap does not create, copy, chmod, or otherwise manage them. Web admin
-  credentials live in ignored `web/.env.production`.
+  bootstrap can install missing enabled-source credential files during first
+  setup. Web admin credentials live in ignored `web/.env.production`.
 - Web admin (`/admin/*`) is gated by HTTP Basic against
   `FETCHLINKS_ADMIN_USER` / `FETCHLINKS_ADMIN_PASS` in
   `<checkout>/web/.env.production`. Constant-time credential compare. If either
