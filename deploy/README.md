@@ -17,7 +17,7 @@ deploy/
     ├── fetchlinks-ingest.timer        ingest schedule (every 30 min)
     ├── fetchlinks-retain.service      weekly DB retention one-shot
     ├── fetchlinks-retain.timer        retention schedule (Sun 03:30)
-    ├── fetchlinks-export-rss-feeds.service  rss_feeds DB → text seed snapshot
+    ├── fetchlinks-export-rss-feeds.service  rss_feeds DB → runtime text snapshot
     └── fetchlinks-export-rss-feeds.timer    snapshot schedule (every 5 min)
 ```
 
@@ -118,8 +118,9 @@ In order:
 11. Installs the seven systemd units (web + ingest + retain + export-rss-feeds),
     daemon-reload, enable + start.
 12. On first run, seeds the `rss_feeds` SQLite table from
-    `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` (no-op once the table
-    has any rows), then immediately exports the DB snapshot back to that file.
+   `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` (no-op once the table
+   has any rows), then exports the DB snapshot to
+   `/var/lib/fetchlinks/rss_feeds.txt`.
 13. Runs per-source ingest validation and prints non-fatal warnings for sources
    that fail.
 
@@ -167,7 +168,8 @@ journalctl -u fetchlinks-export-rss-feeds.service --since '7 days ago'
 /opt/fetchlinks/                       git checkout, owned by fetchlinks
 /opt/fetchlinks/.venv/                 Python venv for ingest
 /opt/fetchlinks/ingest/data/config/fetchlinks.toml  runtime config
-/opt/fetchlinks/ingest/data/config/rss_feeds.txt    first-install seed, then 5-minute DB snapshot
+/opt/fetchlinks/ingest/data/config/rss_feeds.txt    first-install seed file
+/var/lib/fetchlinks/rss_feeds.txt                   5-minute DB snapshot
 /opt/fetchlinks/ingest/db/fetchlinks.db             SQLite DB
 /opt/fetchlinks/ingest/data/logs/                   ingest logs
 /opt/fetchlinks/web/.env.production                 env vars for the web service

@@ -53,8 +53,12 @@ class RenderSnapshotTests(unittest.TestCase):
         self.assertIn('active=0', text)
         self.assertIn('disabled=0', text)
         self.assertIn('removed=0', text)
-        self.assertIn('seed/snapshot copy', text)
-        self.assertIn('/opt/fetchlinks/ingest/data/config/rss_feeds.txt', text)
+        self.assertIn('snapshot copy', text)
+
+    def test_header_can_include_snapshot_path(self):
+        output = Path('/var/lib/fetchlinks/rss_feeds.txt')
+        text = export_rss_feeds.render_snapshot([], datetime(2026, 5, 1, tzinfo=UTC), output)
+        self.assertIn(f'Snapshot path: {output}', text)
 
     def test_renders_three_sections_in_order(self):
         rows = [
@@ -132,6 +136,34 @@ class ExportFlowTests(unittest.TestCase):
             self.assertIn('https://active/', body)
             self.assertIn('# https://disabled/', body)
             self.assertIn('# https://removed/', body)
+
+    def test_main_ignores_unrelated_source_credentials(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_path = _fresh_db(tmp_path)
+            _insert(db_path, url='https://active/', enabled=1)
+            output = tmp_path / 'snapshot.txt'
+            log_file = tmp_path / 'logs' / 'export.log'
+            config_path = tmp_path / 'fetchlinks.toml'
+            config_path.write_text(
+                f'''
+[paths]
+db = "{db_path}"
+log_file = "{log_file}"
+
+[sources.rss]
+export_path = "{output}"
+
+[sources.reddit]
+enabled = true
+credential_location = "{tmp_path / 'missing-reddit.json'}"
+seed_file = "subreddits.txt"
+'''.lstrip(),
+                encoding='utf-8',
+            )
+
+            self.assertEqual(export_rss_feeds.main(['--config', str(config_path)]), 0)
+            self.assertIn('https://active/', output.read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':
