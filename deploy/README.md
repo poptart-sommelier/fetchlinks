@@ -36,7 +36,8 @@ deploy/
 
    `bootstrap.sh` installs packages, builds the app, installs the systemd
    services, enables the firewall, and starts the app. It does **not** install
-   nginx or TLS.
+   nginx or TLS. Run it from an interactive SSH terminal so you can answer the
+   first-install prompts.
 
 3. Answer the first-install prompts.
 

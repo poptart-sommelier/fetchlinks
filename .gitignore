@@ -1,5 +1,13 @@
 .venv/
 .venv
+.fetchlinks/
+.cache/
+.npm/
+**/.cache/
+**/.npm/
+**/_cacache/
+node_modules/
+**/node_modules/
 data/logs/
 **/data/logs/
 ingest/data/logs/

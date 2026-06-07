@@ -31,6 +31,7 @@ CONFIG_FILE="${INGEST_DIR}/data/config/fetchlinks.toml"
 RSS_FEEDS_FILE="${INGEST_DIR}/data/config/rss_feeds.txt"
 SUBREDDITS_FILE="${INGEST_DIR}/data/config/subreddits.txt"
 WEB_ENV_FILE="${WEB_DIR}/.env.production"
+CACHE_DIR="/var/cache/fetchlinks"
 NODE_MAJOR=24
 PYTHON_BIN="/usr/bin/python3.12"
 
@@ -39,10 +40,22 @@ REPO_REF="${FETCHLINKS_REPO_REF:-master}"
 
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m!!\033[0m %s\n' "$*" >&2; }
+die()  { printf '\n\033[1;31m!!\033[0m %s\n' "$*" >&2; exit 1; }
 
 GENERATED_ADMIN_PASSWORD=""
 declare -a SKIPPED_CREDENTIAL_SOURCES=()
 declare -a VALIDATION_FAILED_SOURCES=()
+declare -a TEMP_FILES=()
+
+cleanup_temp_files() {
+    local temp_file=""
+    for temp_file in "${TEMP_FILES[@]}"; do
+        rm -f "${temp_file}"
+    done
+}
+
+trap cleanup_temp_files EXIT
+trap 'cleanup_temp_files; exit 130' INT TERM
 
 prompt_yes_no() {
     local prompt="$1"
@@ -75,17 +88,18 @@ read_json_or_path_input() {
     local next_line=""
     local trimmed=""
 
-    printf '%s' "${prompt}"
-    IFS= read -r -s value || true
-    printf '\n'
+    printf '%s' "${prompt}" >&2
+    IFS= read -r value || true
 
     trimmed="${value#"${value%%[![:space:]]*}"}"
-    if [[ "${trimmed}" == \{* ]]; then
-        until json_object_is_valid "${value}"; do
-            printf 'json> '
-            IFS= read -r -s next_line || break
-            printf '\n'
+    if [[ "${trimmed}" == \{* ]] && ! json_object_is_valid "${value}"; then
+        printf 'JSON is not complete yet. Paste remaining lines; bootstrap continues once the JSON object parses. Enter EOF to stop input.\n' >&2
+        while true; do
+            printf 'json> ' >&2
+            IFS= read -r next_line || true
+            [[ "${next_line}" == "EOF" ]] && break
             value+=$'\n'"${next_line}"
+            json_object_is_valid "${value}" && break
         done
     fi
 
@@ -153,7 +167,7 @@ target_path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n', encod
 PY
     then
         rm -f "${temp_json}"
-        warn "Skipped ${label}; input was neither a readable path nor a valid JSON object."
+        warn "Skipped ${label}; input was neither a readable path nor a valid JSON object. For multi-line JSON, paste it and then enter EOF on its own line."
         SKIPPED_CREDENTIAL_SOURCES+=("${label}")
         return 1
     fi
@@ -253,7 +267,7 @@ configure_missing_credentials() {
     for credential_entry in "${missing_entries[@]}"; do
         IFS='|' read -r source_label credential_path <<<"${credential_entry}"
         if prompt_yes_no "Configure ${source_label} credentials now?" "y"; then
-            credential_input="$(read_json_or_path_input "${source_label} JSON or path [${credential_path}] (input hidden, blank skips): ")"
+            credential_input="$(read_json_or_path_input "${source_label} JSON or path [${credential_path}] (blank skips; use a file path to avoid showing secrets): ")"
             install_credential_input "${source_label}" "${credential_path}" "${credential_input}" || true
         else
             SKIPPED_CREDENTIAL_SOURCES+=("${source_label}")
@@ -506,6 +520,7 @@ seed_source_tables() {
     local reddit_placeholder=""
 
     rss_seed_config="$(mktemp "${CONFIG_FILE}.rss-seed.XXXXXX")"
+    TEMP_FILES+=("${rss_seed_config}")
     write_single_source_config "rss" "${rss_seed_config}"
     log "Seeding rss_feeds table from ${RSS_FEEDS_FILE} if empty"
     sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
@@ -517,6 +532,7 @@ seed_source_tables() {
 
     reddit_seed_config="$(mktemp "${CONFIG_FILE}.reddit-seed.XXXXXX")"
     reddit_placeholder="$(mktemp)"
+    TEMP_FILES+=("${reddit_seed_config}" "${reddit_placeholder}")
     printf '{"reddit": {}}\n' >"${reddit_placeholder}"
     chmod 0644 "${reddit_placeholder}"
     write_reddit_seed_config "${reddit_seed_config}" "${reddit_placeholder}"
@@ -529,19 +545,61 @@ seed_source_tables() {
     rm -f "${reddit_seed_config}" "${reddit_placeholder}"
 }
 
+validate_rss_seed() {
+    "${PYTHON_BIN}" - "${CONFIG_FILE}" <<'PY'
+from pathlib import Path
+import sqlite3
+import sys
+import tomllib
+
+config_path = Path(sys.argv[1])
+base = config_path.resolve().parent
+with config_path.open('rb') as handle:
+    raw = tomllib.load(handle)
+
+db_value = raw.get('paths', {}).get('db')
+if not isinstance(db_value, str) or not db_value.strip():
+    print('missing [paths].db', file=sys.stderr)
+    raise SystemExit(1)
+
+db_path = Path(db_value)
+if not db_path.is_absolute():
+    db_path = (base / db_path).resolve()
+
+with sqlite3.connect(db_path) as db:
+    count = db.execute('SELECT COUNT(*) FROM rss_feeds').fetchone()[0]
+
+print(count)
+raise SystemExit(0 if count > 0 else 1)
+PY
+}
+
 validate_ingest_sources() {
     local source_key=""
     local source_label=""
     local temp_config=""
     local temp_output=""
     local found_source=0
+    local rss_count=""
 
     log "Validating enabled ingest sources"
     while IFS='|' read -r source_key source_label; do
         [[ -z "${source_key}" ]] && continue
         found_source=1
+
+        if [[ "${source_key}" == "rss" ]]; then
+            if rss_count="$(validate_rss_seed 2>/dev/null)"; then
+                printf '  ok - %s (%s feed rows seeded)\n' "${source_label}" "${rss_count}"
+            else
+                VALIDATION_FAILED_SOURCES+=("${source_label}")
+                warn "${source_label} failed validation; rss_feeds table is empty or unreadable."
+            fi
+            continue
+        fi
+
         temp_config="$(mktemp "${CONFIG_FILE}.validate.XXXXXX")"
         temp_output="$(mktemp)"
+        TEMP_FILES+=("${temp_config}" "${temp_output}")
         write_single_source_config "${source_key}" "${temp_config}"
 
         if sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
@@ -571,6 +629,10 @@ fi
 
 if ! grep -q '^ID=ubuntu' /etc/os-release; then
     warn "Not Ubuntu; tested only on Ubuntu 24.04. Continuing anyway."
+fi
+
+if [[ ! -t 0 ]]; then
+    die "bootstrap.sh must be run from an interactive terminal because first install may prompt for credentials and admin setup."
 fi
 
 # ---- swap -------------------------------------------------------------------
@@ -663,6 +725,8 @@ chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/db"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/data/logs"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/data/config"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${CACHE_DIR}/pip"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${CACHE_DIR}/npm"
 
 # ---- first-install interactive setup ----------------------------------------
 
@@ -676,12 +740,14 @@ if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
     sudo -u "${APP_USER}" "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 fi
 sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --upgrade pip >/dev/null
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install -r "${INGEST_DIR}/requirements.txt"
+sudo -u "${APP_USER}" env PIP_CACHE_DIR="${CACHE_DIR}/pip" \
+    "${VENV_DIR}/bin/pip" install -r "${INGEST_DIR}/requirements.txt"
 
 # ---- web build --------------------------------------------------------------
 
 log "Building Next.js web app"
-sudo -u "${APP_USER}" bash -c "cd '${WEB_DIR}' && npm ci && npm run build"
+sudo -u "${APP_USER}" env npm_config_cache="${CACHE_DIR}/npm" \
+    bash -c "cd '${WEB_DIR}' && npm ci && npm run build"
 
 # ---- systemd units ----------------------------------------------------------
 
