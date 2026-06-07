@@ -51,6 +51,31 @@ if ! grep -q '^ID=ubuntu' /etc/os-release; then
     warn "Not Ubuntu; tested only on Ubuntu 24.04. Continuing anyway."
 fi
 
+# ---- swap -------------------------------------------------------------------
+# A 2 GB VM (B1ms) has little/no swap by default, and `next build` can spike
+# memory enough to OOM. Ensure a swap file exists before the web build.
+
+SWAP_FILE="/swapfile"
+SWAP_SIZE="2G"
+
+if ! swapon --show --noheadings | grep -q "${SWAP_FILE}"; then
+    log "Setting up ${SWAP_SIZE} swap file at ${SWAP_FILE}"
+    if [[ ! -f "${SWAP_FILE}" ]]; then
+        fallocate -l "${SWAP_SIZE}" "${SWAP_FILE}" || \
+            dd if=/dev/zero of="${SWAP_FILE}" bs=1M count=2048
+    fi
+    chmod 600 "${SWAP_FILE}"
+    if ! file "${SWAP_FILE}" 2>/dev/null | grep -q 'swap file'; then
+        mkswap "${SWAP_FILE}" >/dev/null
+    fi
+    swapon "${SWAP_FILE}"
+    if ! grep -q "^${SWAP_FILE} " /etc/fstab; then
+        echo "${SWAP_FILE} none swap sw 0 0" >>/etc/fstab
+    fi
+else
+    log "Swap already active at ${SWAP_FILE}; skipping"
+fi
+
 # ---- apt + base packages ----------------------------------------------------
 
 log "Updating apt and installing base packages"
