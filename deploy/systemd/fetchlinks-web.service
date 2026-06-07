@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 User=fetchlinks
 Group=fetchlinks
-WorkingDirectory=/opt/fetchlinks/web
-EnvironmentFile=/opt/fetchlinks/web/.env.production
+WorkingDirectory=__FETCHLINKS_APP_DIR__/web
+EnvironmentFile=__FETCHLINKS_APP_DIR__/web/.env.production
 ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
 Restart=on-failure
 RestartSec=5
@@ -18,7 +18,7 @@ SyslogIdentifier=fetchlinks-web
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/opt/fetchlinks/web
+ReadWritePaths=__FETCHLINKS_APP_DIR__/web
 
 [Install]
 WantedBy=multi-user.target

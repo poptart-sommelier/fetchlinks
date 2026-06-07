@@ -22,12 +22,12 @@ describe("loadAppConfig", () => {
 
   it("loads the configured database path and read-only SQLite URI", () => {
     const config = loadAppConfig({
-      FETCHLINKS_DB: "/opt/fetchlinks/ingest/db/fetchlinks.db",
+      FETCHLINKS_DB: "/home/ubuntu/fetchlinks/ingest/db/fetchlinks.db",
     });
 
     expect(config).toEqual({
-      fetchlinksDbPath: "/opt/fetchlinks/ingest/db/fetchlinks.db",
-      fetchlinksDbReadOnlyUri: "file:///opt/fetchlinks/ingest/db/fetchlinks.db?mode=ro",
+      fetchlinksDbPath: "/home/ubuntu/fetchlinks/ingest/db/fetchlinks.db",
+      fetchlinksDbReadOnlyUri: "file:///home/ubuntu/fetchlinks/ingest/db/fetchlinks.db?mode=ro",
     });
   });
 });

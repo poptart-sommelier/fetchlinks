@@ -4,8 +4,8 @@
 # Run this ON the VM, as root, from a fresh Ubuntu 24.04 install:
 #
 #   sudo apt-get update && sudo apt-get install -y git
-#   sudo git clone https://github.com/poptart-sommelier/fetchlinks.git /opt/fetchlinks
-#   sudo /opt/fetchlinks/deploy/bootstrap.sh
+#   git clone https://github.com/poptart-sommelier/fetchlinks.git ~/fetchlinks
+#   sudo ~/fetchlinks/deploy/bootstrap.sh
 #
 # Re-running this script later is safe; it acts as the upgrade path
 # (fast-forwards git, rebuilds web, restarts services).
@@ -14,6 +14,7 @@
 # Run it once you have a DNS record pointing at this VM.
 #
 # Optional environment variables:
+#   FETCHLINKS_APP_DIR  checkout directory to install/update (default: parent of this script's deploy/ dir)
 #   FETCHLINKS_REPO_URL git URL to clone/pull (default: poptart-sommelier/fetchlinks)
 #   FETCHLINKS_REPO_REF branch/tag to deploy   (default: master)
 
@@ -21,9 +22,12 @@ set -euo pipefail
 
 # ---- config -----------------------------------------------------------------
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+DEFAULT_APP_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
+
 APP_USER="fetchlinks"
 APP_GROUP="fetchlinks"
-APP_DIR="/opt/fetchlinks"
+APP_DIR="$(realpath -m "${FETCHLINKS_APP_DIR:-${DEFAULT_APP_DIR}}")"
 VENV_DIR="${APP_DIR}/.venv"
 INGEST_DIR="${APP_DIR}/ingest"
 WEB_DIR="${APP_DIR}/web"
@@ -42,6 +46,26 @@ REPO_REF="${FETCHLINKS_REPO_REF:-master}"
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\n\033[1;31m!!\033[0m %s\n' "$*" >&2; exit 1; }
+
+sed_escape_replacement() {
+    printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
+}
+
+render_systemd_unit() {
+    local source_path="$1"
+    local target_path="$2"
+    local app_dir_escaped=""
+    local state_dir_escaped=""
+
+    app_dir_escaped="$(sed_escape_replacement "${APP_DIR}")"
+    state_dir_escaped="$(sed_escape_replacement "${STATE_DIR}")"
+
+    sed \
+        -e "s|__FETCHLINKS_APP_DIR__|${app_dir_escaped}|g" \
+        -e "s|__FETCHLINKS_STATE_DIR__|${state_dir_escaped}|g" \
+        "${source_path}" >"${target_path}"
+    chmod 0644 "${target_path}"
+}
 
 GENERATED_ADMIN_PASSWORD=""
 declare -a SKIPPED_CREDENTIAL_SOURCES=()
@@ -321,6 +345,7 @@ configure_web_admin_if_missing() {
     local admin_user=""
     local admin_pass=""
     local generated_password=""
+    local app_dir_escaped=""
 
     if [[ -f "${WEB_ENV_FILE}" ]]; then
         printf '  ok - web environment exists at %s\n' "${WEB_ENV_FILE}"
@@ -328,8 +353,11 @@ configure_web_admin_if_missing() {
     fi
 
     log "Configuring web admin credentials"
-    install -o "${APP_USER}" -g "${APP_GROUP}" -m 0600 \
-        "${WEB_DIR}/.env.production.example" "${WEB_ENV_FILE}"
+    app_dir_escaped="$(sed_escape_replacement "${APP_DIR}")"
+    sed "s|__FETCHLINKS_APP_DIR__|${app_dir_escaped}|g" \
+        "${WEB_DIR}/.env.production.example" >"${WEB_ENV_FILE}"
+    chown "${APP_USER}:${APP_GROUP}" "${WEB_ENV_FILE}"
+    chmod 0600 "${WEB_ENV_FILE}"
 
     read -r -p "Admin username [admin]: " admin_user
     admin_user="${admin_user:-admin}"
@@ -636,6 +664,16 @@ if [[ ! -t 0 ]]; then
     die "bootstrap.sh must be run from an interactive terminal because first install may prompt for credentials and admin setup."
 fi
 
+case "${APP_DIR}" in
+    /|/home|/root|/opt|/usr|/var)
+        die "Refusing to use broad install directory: ${APP_DIR}"
+        ;;
+esac
+
+if [[ "${APP_DIR}" =~ [[:space:]] ]]; then
+    die "Install directory must not contain whitespace: ${APP_DIR}"
+fi
+
 # ---- swap -------------------------------------------------------------------
 # A 2 GB VM (B1ms) has little/no swap by default, and `next build` can spike
 # memory enough to OOM. Ensure a swap file exists before the web build.
@@ -693,6 +731,7 @@ log "Ensuring ${APP_USER} user and app directory"
 getent group  "${APP_GROUP}" >/dev/null || groupadd --system "${APP_GROUP}"
 getent passwd "${APP_USER}"  >/dev/null || useradd  --system --gid "${APP_GROUP}" \
     --home-dir "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
+usermod --home "${APP_DIR}" "${APP_USER}"
 
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}"
 chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
@@ -712,8 +751,6 @@ if [[ -d "${APP_DIR}/.git" ]]; then
     sudo -u "${APP_USER}" git -C "${APP_DIR}" fetch origin "${REPO_REF}"
     sudo -u "${APP_USER}" git -C "${APP_DIR}" merge --ff-only "origin/${REPO_REF}"
 else
-    # The README's bootstrap clones into ${APP_DIR} as root; reset ownership
-    # in case this is the first run after that clone.
     if [[ -d "${APP_DIR}" ]] && [[ -z "$(ls -A "${APP_DIR}")" ]]; then
         sudo -u "${APP_USER}" git clone --branch "${REPO_REF}" "${REPO_URL}" "${APP_DIR}"
     else
@@ -754,12 +791,12 @@ sudo -u "${APP_USER}" env npm_config_cache="${CACHE_DIR}/npm" \
 # ---- systemd units ----------------------------------------------------------
 
 log "Installing systemd units"
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-web.service"                 /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"              /etc/systemd/system/
+render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-web.service"              /etc/systemd/system/fetchlinks-web.service
+render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"           /etc/systemd/system/fetchlinks-ingest.service
 install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.timer"                /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"              /etc/systemd/system/
+render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"           /etc/systemd/system/fetchlinks-retain.service
 install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.timer"                /etc/systemd/system/
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.service"    /etc/systemd/system/
+render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.service" /etc/systemd/system/fetchlinks-export-rss-feeds.service
 install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.timer"      /etc/systemd/system/
 systemctl daemon-reload
 

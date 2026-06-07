@@ -13,17 +13,19 @@
 # Usage:
 #   sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
 #        FETCHLINKS_EMAIL=you@example.com \
-#        /opt/fetchlinks/deploy/tls.sh
+#        ~/fetchlinks/deploy/tls.sh
 #
 # Or positionally:
-#   sudo /opt/fetchlinks/deploy/tls.sh fetchlinks.example.com you@example.com
+#   sudo ~/fetchlinks/deploy/tls.sh fetchlinks.example.com you@example.com
 #
 # Re-running is safe; certbot will renew rather than re-issue when the cert
 # is still valid.
 
 set -euo pipefail
 
-APP_DIR="/opt/fetchlinks"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+DEFAULT_APP_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
+APP_DIR="$(realpath -m "${FETCHLINKS_APP_DIR:-${DEFAULT_APP_DIR}}")"
 SITE_TEMPLATE="${APP_DIR}/deploy/nginx/fetchlinks-web.conf.example"
 SITE_AVAILABLE="/etc/nginx/sites-available/fetchlinks-web.conf"
 SITE_ENABLED="/etc/nginx/sites-enabled/fetchlinks-web.conf"

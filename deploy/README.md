@@ -30,8 +30,8 @@ deploy/
 
     ```bash
     sudo apt-get update && sudo apt-get install -y git
-    sudo git clone https://github.com/poptart-sommelier/fetchlinks.git /opt/fetchlinks
-    sudo /opt/fetchlinks/deploy/bootstrap.sh
+   git clone https://github.com/poptart-sommelier/fetchlinks.git ~/fetchlinks
+   sudo ~/fetchlinks/deploy/bootstrap.sh
     ```
 
    `bootstrap.sh` installs packages, builds the app, installs the systemd
@@ -44,14 +44,14 @@ deploy/
    For each missing enabled source, bootstrap asks whether to configure it.
    Enter either a path to an existing JSON credential file or paste a JSON
    object directly. Pasted JSON is written to the default path from
-   `/opt/fetchlinks/ingest/data/config/fetchlinks.toml`; copied/pasted secrets
-   are owned by `fetchlinks:fetchlinks` and chmod `0600`.
+   `<checkout>/ingest/data/config/fetchlinks.toml`; copied/pasted secrets are
+   owned by `fetchlinks:fetchlinks` and chmod `0600`.
 
    You can skip credential setup at the first prompt and do it later. Bootstrap
    leaves sources enabled when credentials are skipped, so validation may warn
    until those files exist. See `ingest/SETUP.md` for the JSON formats.
 
-   Bootstrap also configures `/opt/fetchlinks/web/.env.production` when it is
+   Bootstrap also configures `<checkout>/web/.env.production` when it is
    missing. The admin password defaults to a generated strong password unless
    you enter your own.
 
@@ -63,7 +63,7 @@ deploy/
    the VM.
 
 5. Optional: copy an existing `fetchlinks.db` to
-   `/opt/fetchlinks/ingest/db/fetchlinks.db`.
+   `<checkout>/ingest/db/fetchlinks.db`.
 
 6. Optional: point a DNS record at the VM, then install nginx and Let's Encrypt
    TLS:
@@ -71,7 +71,7 @@ deploy/
     ```bash
     sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
          FETCHLINKS_EMAIL=you@example.com \
-         /opt/fetchlinks/deploy/tls.sh
+         ~/fetchlinks/deploy/tls.sh
     ```
 
     `tls.sh` is idempotent — re-run it to rotate cert metadata or after
@@ -80,7 +80,7 @@ deploy/
 ## Updating an existing VM
 
 ```bash
-sudo /opt/fetchlinks/deploy/bootstrap.sh
+sudo ~/fetchlinks/deploy/bootstrap.sh
 ```
 
 The script is idempotent. It fast-forwards the checkout on `master`, reinstalls
@@ -91,8 +91,11 @@ the fast-forward fails and the script stops rather than overwriting work.
 To deploy a specific tag/branch:
 
 ```bash
-sudo FETCHLINKS_REPO_REF=v1.2.3 /opt/fetchlinks/deploy/bootstrap.sh
+sudo FETCHLINKS_REPO_REF=v1.2.3 ~/fetchlinks/deploy/bootstrap.sh
 ```
+
+By default, `bootstrap.sh` uses the checkout that contains the script. To use a
+different checkout path, set `FETCHLINKS_APP_DIR=/absolute/path/to/fetchlinks`.
 
 ## What `bootstrap.sh` does
 
@@ -103,14 +106,14 @@ In order:
    sqlite3, ufw, unattended-upgrades. **No nginx here** — that's `tls.sh`.
 3. Enables the unattended-upgrades schedule.
 4. Creates the `fetchlinks` system user/group and standard directories under
-   `/opt/fetchlinks` (`ingest/db`, `ingest/data/logs`, `ingest/data/config`).
+   the checkout (`ingest/db`, `ingest/data/logs`, `ingest/data/config`).
 5. Configures `ufw` (deny inbound, allow 22/80/443).
-6. Clones or fast-forwards the repo at `/opt/fetchlinks` using
+6. Fast-forwards the checkout using
    `git merge --ff-only` (no destructive reset).
 7. Prompts for missing enabled-source credentials. Each prompt accepts either a
    readable JSON file path or a pasted JSON object. Skipped credentials leave
    sources enabled and produce warnings later.
-8. Prompts for web admin credentials when `/opt/fetchlinks/web/.env.production`
+8. Prompts for web admin credentials when `<checkout>/web/.env.production`
    is missing. Press Enter at the password prompt to generate a strong random
    password.
 9. Builds the Python venv and installs `ingest/requirements.txt`.
@@ -118,7 +121,7 @@ In order:
 11. Installs the seven systemd units (web + ingest + retain + export-rss-feeds),
     daemon-reload, enable + start.
 12. On first run, seeds the `rss_feeds` SQLite table from
-   `/opt/fetchlinks/ingest/data/config/rss_feeds.txt` (no-op once the table
+   `<checkout>/ingest/data/config/rss_feeds.txt` (no-op once the table
    has any rows), then exports the DB snapshot to
    `/var/lib/fetchlinks/rss_feeds.txt`.
 13. Runs per-source ingest validation and prints non-fatal warnings for sources
@@ -144,7 +147,7 @@ add TLS later, or re-run only the TLS step when changing domain.
 2. SSH in, run `bootstrap.sh`.
 3. `scp` the credential JSON files (and optionally a `fetchlinks.db`
    snapshot) into place. Set the admin user/pass in
-   `/opt/fetchlinks/web/.env.production` and `systemctl restart fetchlinks-web`.
+   `<checkout>/web/.env.production` and `systemctl restart fetchlinks-web`.
 4. Run `tls.sh` with domain + email.
 5. Done.
 
@@ -164,15 +167,15 @@ journalctl -u fetchlinks-export-rss-feeds.service --since '7 days ago'
 
 ## Filesystem layout on the VM
 
-```
-/opt/fetchlinks/                       git checkout, owned by fetchlinks
-/opt/fetchlinks/.venv/                 Python venv for ingest
-/opt/fetchlinks/ingest/data/config/fetchlinks.toml  runtime config
-/opt/fetchlinks/ingest/data/config/rss_feeds.txt    first-install seed file
-/var/lib/fetchlinks/rss_feeds.txt                   5-minute DB snapshot
-/opt/fetchlinks/ingest/db/fetchlinks.db             SQLite DB
-/opt/fetchlinks/ingest/data/logs/                   ingest logs
-/opt/fetchlinks/web/.env.production                 env vars for the web service
+```text
+~/fetchlinks/                       git checkout, owned by fetchlinks after bootstrap
+~/fetchlinks/.venv/                 Python venv for ingest
+~/fetchlinks/ingest/data/config/fetchlinks.toml  runtime config
+~/fetchlinks/ingest/data/config/rss_feeds.txt    first-install seed file
+/var/lib/fetchlinks/rss_feeds.txt                5-minute DB snapshot
+~/fetchlinks/ingest/db/fetchlinks.db             SQLite DB
+~/fetchlinks/ingest/data/logs/                   ingest logs
+~/fetchlinks/web/.env.production                 env vars for the web service
 ```
 
 All services run as the unprivileged `fetchlinks` system user.

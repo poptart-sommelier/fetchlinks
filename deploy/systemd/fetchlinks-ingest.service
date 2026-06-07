@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=oneshot
 User=fetchlinks
 Group=fetchlinks
-WorkingDirectory=/opt/fetchlinks/ingest
-ExecStart=/opt/fetchlinks/.venv/bin/python /opt/fetchlinks/ingest/fetch_links.py --config /opt/fetchlinks/ingest/data/config/fetchlinks.toml
+WorkingDirectory=__FETCHLINKS_APP_DIR__/ingest
+ExecStart=__FETCHLINKS_APP_DIR__/.venv/bin/python __FETCHLINKS_APP_DIR__/ingest/fetch_links.py --config __FETCHLINKS_APP_DIR__/ingest/data/config/fetchlinks.toml
 Nice=10
 TimeoutStartSec=30min
 SyslogIdentifier=fetchlinks-ingest
@@ -16,8 +16,8 @@ SyslogIdentifier=fetchlinks-ingest
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/fetchlinks/ingest
+ProtectHome=false
+ReadWritePaths=__FETCHLINKS_APP_DIR__/ingest
 
 [Install]
 WantedBy=multi-user.target
