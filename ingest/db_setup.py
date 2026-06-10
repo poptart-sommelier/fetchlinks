@@ -129,6 +129,75 @@ def table_rss_feeds_configure(conn):
         raise RuntimeError('Failed to configure rss_feeds table') from exc
 
 
+def table_rss_feed_health_configure(conn):
+    """Create the data-side per-feed health table, keyed by ``normalized_url``.
+
+    Part of the ingest/web DB split: feed *identity + on/off* (``rss_feeds``)
+    is admin-owned and lives in the control DB, while per-feed *health/cache*
+    state is ingest-owned and lives here in the data DB. The two tables join
+    on ``normalized_url`` (never the autoincrement id, which won't match
+    across two separate DB files). When both roles run on one host they share
+    a single physical file and the join is native.
+
+    ``backfill_rss_feed_health`` seeds this from the legacy health columns
+    still carried on ``rss_feeds`` the first time it runs; nothing reads this
+    table until the ingest/web rewiring lands.
+    """
+    try:
+        conn.execute("""
+    CREATE TABLE IF NOT EXISTS rss_feed_health (
+    normalized_url       TEXT PRIMARY KEY,
+    last_fetched_at      TEXT,
+    last_success_at      TEXT,
+    last_status          INTEGER,
+    last_error           TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    etag                 TEXT,
+    last_modified        TEXT,
+    latest_entry_at      TEXT,
+    site_link            TEXT)
+    """)
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError('Failed to configure rss_feed_health table') from exc
+
+
+def backfill_rss_feed_health(conn):
+    """One-time copy of health columns from ``rss_feeds`` into
+    ``rss_feed_health``.
+
+    Idempotent and non-destructive: uses ``INSERT OR IGNORE`` keyed by
+    ``normalized_url`` so re-runs are no-ops and existing health rows are
+    never clobbered. The legacy health columns on ``rss_feeds`` are left in
+    place for now (read by the current code until the rewiring lands); a later
+    cleanup drops them once nothing reads them. Runs only when both tables
+    exist in the same connection (single-file mode); in two-file mode the
+    health table starts empty and ingest populates it.
+
+    Returns the number of rows inserted.
+    """
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name IN ('rss_feeds', 'rss_feed_health')"
+        )
+    }
+    if 'rss_feeds' not in tables or 'rss_feed_health' not in tables:
+        return 0
+
+    cur = conn.execute(
+        'INSERT OR IGNORE INTO rss_feed_health '
+        '(normalized_url, last_fetched_at, last_success_at, last_status, '
+        ' last_error, consecutive_failures, etag, last_modified, '
+        ' latest_entry_at, site_link) '
+        'SELECT normalized_url, last_fetched_at, last_success_at, last_status, '
+        '       last_error, consecutive_failures, etag, last_modified, '
+        '       latest_entry_at, site_link '
+        'FROM rss_feeds'
+    )
+    return cur.rowcount
+
+
 def _normalize_feed_url_for_migration(url):
     """Local copy of the normalizer to avoid a circular import on db_setup.
 
@@ -289,6 +358,8 @@ def db_initial_setup(db_path):
     table_rss_feed_state_configure(conn)
     table_rss_feeds_configure(conn)
     migrate_rss_feed_state_into_rss_feeds(conn)
+    table_rss_feed_health_configure(conn)
+    backfill_rss_feed_health(conn)
     table_reddit_state_configure(conn)
     table_subreddits_configure(conn)
     table_mastodon_state_configure(conn)
