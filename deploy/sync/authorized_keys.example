@@ -1,0 +1,42 @@
+# Locking down the Pi's SSH access on the VM
+#
+# The Pi initiates every sync. On the VM, the Pi's key is restricted to rsync
+# against ONE directory so a compromised Pi can never get a shell or touch
+# anything else. This file shows the authorized_keys line to install for the
+# VM's `fetchlinks` service account.
+#
+# Layout assumed on the VM (the web role reads both files):
+#   /var/lib/fetchlinks/sync/control.db   canonical, web writes (admin edits)
+#   /var/lib/fetchlinks/sync/data.db      replica, the Pi pushes (web reads)
+#
+# So the web service env is:
+#   FETCHLINKS_CONTROL_DB=/var/lib/fetchlinks/sync/control.db
+#   FETCHLINKS_DB=/var/lib/fetchlinks/sync/data.db
+#
+# ----------------------------------------------------------------------------
+# rrsync (ships with rsync; usually /usr/share/rsync/scripts/rrsync or
+# /usr/bin/rrsync) restricts an SSH key to rsync within a single directory.
+# A single read-write entry lets the Pi pull control.db and push data.db:
+
+command="/usr/bin/rrsync /var/lib/fetchlinks/sync",restrict ssh-ed25519 AAAA...pi-key... fetchlinks-pi
+
+# `restrict` disables pty, port/agent/X11 forwarding, and exec — only the
+# forced rrsync command runs. The Pi cannot get a shell or escape the
+# /var/lib/fetchlinks/sync directory.
+#
+# Defense-in-depth (optional, stricter): use TWO keys so the Pi can only READ
+# control.db and only WRITE data.db. rrsync supports -ro / -wo:
+#
+#   command="/usr/bin/rrsync -ro /var/lib/fetchlinks/sync",restrict ssh-ed25519 AAAA...pull-key... fetchlinks-pi-pull
+#   command="/usr/bin/rrsync -wo /var/lib/fetchlinks/sync",restrict ssh-ed25519 AAAA...push-key... fetchlinks-pi-push
+#
+# With split keys, point the Pi sync script at each:
+#   pull cycle: FETCHLINKS_SSH_KEY=~/.ssh/fetchlinks_pull
+#   push cycle: FETCHLINKS_SSH_KEY=~/.ssh/fetchlinks_push
+# (The single read-write entry above is simpler and adequate for a single
+# operator; the Pi script itself never writes control.db.)
+#
+# ----------------------------------------------------------------------------
+# If your rsync build does not ship rrsync, install it (Debian/Ubuntu:
+# `apt-get install rsync` provides /usr/bin/rrsync on recent releases) or copy
+# it from the rsync source `support/rrsync`.
