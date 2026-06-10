@@ -19,7 +19,8 @@ from config import (
 
 
 def _paths(tmp: Path) -> PathsConfig:
-    return PathsConfig(db=tmp / 'fetchlinks.db', log_file=tmp / 'fetchlinks.log', log_level='INFO')
+    db = tmp / 'fetchlinks.db'
+    return PathsConfig(db=db, control_db=db, log_file=tmp / 'fetchlinks.log', log_level='INFO')
 
 
 def _cfg(
@@ -62,8 +63,8 @@ class FetchLinksRoutingTests(unittest.TestCase):
              patch.object(fetch_links.mastodon_links, 'sync_follows') as mastodon_sync:
             fetch_links.fetch_links(cfg)
 
-        rss_run.assert_called_once_with(rss, db_path, default_age, [], [])
-        reddit_run.assert_called_once_with(reddit, db_path, default_age, [], [])
+        rss_run.assert_called_once_with(rss, db_path, default_age, [], [], control_db_path=db_path)
+        reddit_run.assert_called_once_with(reddit, db_path, default_age, [], [], control_db_path=db_path)
         bluesky_run.assert_called_once_with(bluesky, db_path, default_age, [], [])
         mastodon_run.assert_called_once_with(mastodon, db_path, default_age, [], [])
         bluesky_sync.assert_called_once_with(bluesky, db_path)
@@ -78,7 +79,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
         with patch.object(fetch_links.reddit_links, 'run') as reddit_run:
             fetch_links.fetch_links(cfg)
 
-        reddit_run.assert_called_once_with(reddit, cfg.paths.db, 6, [], [])
+        reddit_run.assert_called_once_with(reddit, cfg.paths.db, 6, [], [], control_db_path=cfg.paths.control_db)
 
     def test_passes_keyword_filters_to_sources(self):
         tmp = Path('/tmp/fl-test')
@@ -97,6 +98,7 @@ class FetchLinksRoutingTests(unittest.TestCase):
             ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
             ['insider'],
             ['politics'],
+            control_db_path=cfg.paths.control_db,
         )
 
     def test_skips_disabled_sources(self):

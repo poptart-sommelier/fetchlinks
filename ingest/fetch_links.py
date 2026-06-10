@@ -31,15 +31,18 @@ def configure_logging(cfg: app_config.AppConfig) -> None:
 def fetch_links(cfg: app_config.AppConfig) -> None:
     """Run every enabled ingest source."""
     db_path = cfg.paths.db
+    control_db_path = cfg.paths.control_db
     max_age = cfg.ingest.max_post_age_months
     host_kw = list(cfg.ingest.excluded_url_host_keywords)
     desc_kw = list(cfg.ingest.excluded_url_or_description_keywords)
 
     if cfg.sources.rss and cfg.sources.rss.enabled:
-        rss_links.run(cfg.sources.rss, db_path, max_age, host_kw, desc_kw)
+        rss_links.run(cfg.sources.rss, db_path, max_age, host_kw, desc_kw,
+                      control_db_path=control_db_path)
 
     if cfg.sources.reddit and cfg.sources.reddit.enabled:
-        reddit_links.run(cfg.sources.reddit, db_path, max_age, host_kw, desc_kw)
+        reddit_links.run(cfg.sources.reddit, db_path, max_age, host_kw, desc_kw,
+                         control_db_path=control_db_path)
 
     if cfg.sources.bluesky and cfg.sources.bluesky.enabled:
         bluesky_links.run(cfg.sources.bluesky, db_path, max_age, host_kw, desc_kw)

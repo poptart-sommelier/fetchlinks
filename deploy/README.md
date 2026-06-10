@@ -11,15 +11,40 @@ deploy/
 ├── tls.sh                             nginx + Let's Encrypt provisioner (run after bootstrap)
 ├── nginx/
 │   └── fetchlinks-web.conf.example    nginx reverse-proxy site
+├── sync/                              two-host (Pi ingest + VM web) sync layer
+│   ├── README.md                      two-host setup + cycle docs
+│   ├── fetchlinks-sync.sh             Pi cycle: pull control.db, ingest, retain, snapshot, push data.db
+│   ├── fetchlinks-sync.env.example    sync service environment (VM target, paths)
+│   └── authorized_keys.example        VM-side rsync-restricted SSH key
 └── systemd/
-    ├── fetchlinks-web.service         Next.js web app
-    ├── fetchlinks-ingest.service      Python ingest one-shot
-    ├── fetchlinks-ingest.timer        ingest schedule (every 30 min)
-    ├── fetchlinks-retain.service      weekly DB retention one-shot
-    ├── fetchlinks-retain.timer        retention schedule (Sun 03:30)
-    ├── fetchlinks-export-rss-feeds.service  rss_feeds DB → runtime text snapshot
-    └── fetchlinks-export-rss-feeds.timer    snapshot schedule (every 5 min)
+    ├── fetchlinks-web.service         Next.js web app (web role)
+    ├── fetchlinks-ingest.service      Python ingest one-shot (single-host)
+    ├── fetchlinks-ingest.timer        ingest schedule, every 30 min (single-host)
+    ├── fetchlinks-retain.service      weekly DB retention one-shot (single-host)
+    ├── fetchlinks-retain.timer        retention schedule, Sun 03:30 (single-host)
+    ├── fetchlinks-export-rss-feeds.service  rss_feeds DB → runtime text snapshot (web role)
+    ├── fetchlinks-export-rss-feeds.timer    snapshot schedule, every 5 min (web role)
+    ├── fetchlinks-sync.service         Pi sync cycle (ingest role)
+    └── fetchlinks-sync.timer           Pi sync schedule, every 30 min (ingest role)
 ```
+
+## Roles (single-host vs two-host)
+
+`bootstrap.sh` provisions one of three roles via `FETCHLINKS_ROLE`:
+
+- **`all`** (default) — single-host: web + ingest + retain + export on one VM,
+  one SQLite file. This is the standard deployment described below.
+- **`web`** — the Azure VM in a two-host split. Builds/serves the web GUI,
+  owns the canonical control.db (feed/subreddit identity), reads a data.db
+  replica pushed by the Pi. Set `FETCHLINKS_DB` (data.db replica) and
+  `FETCHLINKS_CONTROL_DB` (canonical control.db) in `web/.env.production`.
+- **`ingest`** — a home Raspberry Pi. Runs the sync cycle (pull control.db,
+  ingest, retain, push data.db); no Node/web build, no inbound web ports.
+
+The two-host split exists to move ingest onto a residential IP (Azure IPs are
+throttled by many RSS hosts). Its full setup — VM rsync key lockdown, Pi
+config, env — lives in [sync/README.md](sync/README.md). The rest of this
+document covers the default single-host (`all`) deployment.
 
 ## First-time install
 

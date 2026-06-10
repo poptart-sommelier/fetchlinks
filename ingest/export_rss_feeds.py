@@ -37,6 +37,7 @@ _LOG_LEVEL_VALUES = {'CRITICAL': 50, 'ERROR': 40, 'WARNING': 30, 'INFO': 20, 'DE
 @dataclass(frozen=True)
 class ExportConfig:
     db_path: Path
+    control_db_path: Path
     log_file: Path
     log_level: str
     export_path: Path | None
@@ -97,8 +98,15 @@ def load_export_config(config_path: Path) -> ExportConfig:
 
     log_file = _resolve_config_path(paths['log_file'], base)
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    db_path = _resolve_config_path(paths['db'], base)
+    # control_db is optional; when unset the catalog shares the data db file.
+    if 'control_db' in paths:
+        control_db_path = _resolve_config_path(paths['control_db'], base)
+    else:
+        control_db_path = db_path
     return ExportConfig(
-        db_path=_resolve_config_path(paths['db'], base),
+        db_path=db_path,
+        control_db_path=control_db_path,
         log_file=log_file,
         log_level=log_level,
         export_path=_resolve_config_path(export_value, base) if export_value else None,
@@ -174,12 +182,16 @@ def write_atomic(output_path: Path, text: str) -> None:
         output_path.write_text(text, encoding='utf-8')
 
 
-def export_rss_feeds(db_path: Path, output_path: Path) -> dict:
+def export_rss_feeds(db_path: Path, output_path: Path,
+                     control_db_path: Path | None = None) -> dict:
     """Read every feed from the DB and write a snapshot to ``output_path``.
+
+    Identity comes from ``control_db_path`` (defaults to ``db_path``) and
+    health from ``db_path``; in single-host mode they are the same file.
 
     Returns ``{'total', 'active', 'disabled', 'removed', 'output_path'}``.
     """
-    rows = db_utils.db_get_all_rss_feeds(db_path)
+    rows = db_utils.db_get_all_rss_feeds(control_db_path or db_path, db_path)
     active, disabled, removed = _classify(rows)
     text = render_snapshot(rows, datetime.now(UTC), output_path)
     write_atomic(output_path, text)
@@ -217,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
                 '--output not given and [sources.rss].export_path is not set'
             )
 
-        stats = export_rss_feeds(cfg.db_path, output_path)
+        stats = export_rss_feeds(cfg.db_path, output_path, cfg.control_db_path)
         logger.info(
             'Exported rss_feeds: total=%s active=%s disabled=%s removed=%s -> %s',
             stats['total'], stats['active'], stats['disabled'],

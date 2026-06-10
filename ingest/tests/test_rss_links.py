@@ -270,18 +270,22 @@ class RunTests(unittest.TestCase):
                           'db_update_rss_feed_after_fetch') as update:
             rss_links.run(_rss_source(), self.db_path)
 
-        get_active.assert_called_once_with(self.db_path)
+        # control_db_path defaults to db_path for single-host installs.
+        get_active.assert_called_once_with(self.db_path, self.db_path)
         fetch_feeds.assert_not_called()
         update.assert_not_called()
 
     def test_run_persists_health_even_when_no_posts(self):
         active = [
-            (1, 'https://a.example/feed.xml', 'old-etag', 'old-lm'),
-            (2, 'https://b.example/feed.xml', '', ''),
+            ('https://a.example/feed.xml', 'https://a.example/feed.xml',
+             'old-etag', 'old-lm'),
+            ('https://b.example/feed.xml', 'https://b.example/feed.xml', '', ''),
         ]
         fetch_results = [
-            (1, 'https://a.example/feed.xml', None, 'new-etag', 'new-lm', 304, None),
-            (2, 'https://b.example/feed.xml', None, '', '', 0, 'ConnectionError'),
+            ('https://a.example/feed.xml', 'https://a.example/feed.xml',
+             None, 'new-etag', 'new-lm', 304, None),
+            ('https://b.example/feed.xml', 'https://b.example/feed.xml',
+             None, '', '', 0, 'ConnectionError'),
         ]
 
         with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
@@ -289,33 +293,48 @@ class RunTests(unittest.TestCase):
              patch.object(rss_links, 'fetch_feeds',
                           return_value=fetch_results) as fetch_feeds, \
              patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch',
-                          return_value=0) as update, \
+                          'db_update_rss_feed_after_fetch') as update, \
              patch.object(rss_links, 'parse_posts', return_value=[]), \
              patch.object(rss_links.db_utils, 'db_insert') as db_insert:
             rss_links.run(_rss_source(request_timeout_seconds=20), self.db_path)
 
-        get_active.assert_called_once_with(self.db_path)
+        get_active.assert_called_once_with(self.db_path, self.db_path)
         fetch_feeds.assert_called_once_with(active, 20)
         update.assert_called_once()
-        rows, db_path_arg, auto_disable = update.call_args.args
+        rows, db_path_arg = update.call_args.args
         self.assertEqual(db_path_arg, self.db_path)
-        self.assertEqual(auto_disable, 10)
         self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0]['feed_id'], 1)
+        self.assertEqual(rows[0]['normalized_url'], 'https://a.example/feed.xml')
         self.assertEqual(rows[0]['status'], 304)
         self.assertEqual(rows[1]['error'], 'ConnectionError')
         db_insert.assert_not_called()
 
+    def test_run_uses_separate_control_db_when_provided(self):
+        control_db = Path('/tmp/db/control.db')
+        active = [('https://a/', 'https://a/', '', '')]
+
+        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
+                          return_value=active) as get_active, \
+             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links.db_utils,
+                          'db_update_rss_feed_after_fetch'), \
+             patch.object(rss_links, 'parse_posts', return_value=[]), \
+             patch.object(rss_links.db_utils, 'db_insert'):
+            rss_links.run(_rss_source(), self.db_path,
+                          control_db_path=control_db)
+
+        get_active.assert_called_once_with(control_db, self.db_path)
+
     def test_run_inserts_parsed_posts(self):
-        active = [(1, 'https://feed.example/rss.xml', '', '')]
+        active = [('https://feed.example/rss.xml', 'https://feed.example/rss.xml',
+                   '', '')]
         parsed_posts = [object()]
 
         with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
                           return_value=active), \
              patch.object(rss_links, 'fetch_feeds', return_value=[]), \
              patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch', return_value=0), \
+                          'db_update_rss_feed_after_fetch'), \
              patch.object(rss_links, 'parse_posts', return_value=parsed_posts), \
              patch.object(rss_links.db_utils, 'db_insert',
                           return_value=1) as db_insert:
@@ -324,7 +343,8 @@ class RunTests(unittest.TestCase):
         db_insert.assert_called_once_with(parsed_posts, self.db_path)
 
     def test_run_filters_old_posts_before_insert(self):
-        active = [(1, 'https://feed.example/rss.xml', '', '')]
+        active = [('https://feed.example/rss.xml', 'https://feed.example/rss.xml',
+                   '', '')]
         old_post = SimpleNamespace(date_created='2000-01-01 00:00:00')
         recent_post = SimpleNamespace(date_created='2999-01-01 00:00:00')
 
@@ -332,12 +352,13 @@ class RunTests(unittest.TestCase):
                           return_value=active), \
              patch.object(rss_links, 'fetch_feeds', return_value=[]), \
              patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch', return_value=0), \
+                          'db_update_rss_feed_after_fetch'), \
              patch.object(rss_links, 'parse_posts',
                           return_value=[old_post, recent_post]), \
              patch.object(rss_links.db_utils, 'db_insert',
                           return_value=1) as db_insert:
             rss_links.run(_rss_source(), self.db_path, max_post_age_months=3)
+
 
         db_insert.assert_called_once_with([recent_post], self.db_path)
 

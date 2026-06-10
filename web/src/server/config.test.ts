@@ -28,7 +28,35 @@ describe("loadAppConfig", () => {
     expect(config).toEqual({
       fetchlinksDbPath: "/home/ubuntu/fetchlinks/ingest/db/fetchlinks.db",
       fetchlinksDbReadOnlyUri: "file:///home/ubuntu/fetchlinks/ingest/db/fetchlinks.db?mode=ro",
+      controlDbPath: "/home/ubuntu/fetchlinks/ingest/db/fetchlinks.db",
     });
+  });
+
+  it("defaults the control DB to the data DB when FETCHLINKS_CONTROL_DB is unset", () => {
+    const config = loadAppConfig({
+      FETCHLINKS_DB: "/srv/fetchlinks/data.db",
+    });
+
+    expect(config.controlDbPath).toBe("/srv/fetchlinks/data.db");
+  });
+
+  it("resolves a separate control DB when FETCHLINKS_CONTROL_DB is set", () => {
+    const config = loadAppConfig({
+      FETCHLINKS_DB: "/srv/fetchlinks/data.db",
+      FETCHLINKS_CONTROL_DB: "/srv/fetchlinks/control.db",
+    });
+
+    expect(config.fetchlinksDbPath).toBe("/srv/fetchlinks/data.db");
+    expect(config.controlDbPath).toBe("/srv/fetchlinks/control.db");
+  });
+
+  it("rejects a relative FETCHLINKS_CONTROL_DB", () => {
+    expect(() =>
+      loadAppConfig({
+        FETCHLINKS_DB: "/srv/fetchlinks/data.db",
+        FETCHLINKS_CONTROL_DB: "control.db",
+      }),
+    ).toThrowError(/FETCHLINKS_CONTROL_DB must be an absolute path/);
   });
 });
 

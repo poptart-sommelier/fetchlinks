@@ -41,6 +41,27 @@ class LoadConfigTests(unittest.TestCase):
             self.assertEqual(cfg.sources.bluesky, None)
             self.assertEqual(cfg.sources.mastodon, None)
 
+    def test_control_db_defaults_to_data_db_when_unset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            cfg_path = _toml(tmp_path)
+
+            cfg = app_config.load_config(cfg_path)
+
+            self.assertEqual(cfg.paths.control_db, cfg.paths.db)
+
+    def test_control_db_resolves_separately_when_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            cfg_path = _toml(tmp_path, extra='control_db = "control.db"\n')
+
+            cfg = app_config.load_config(cfg_path)
+
+            self.assertEqual(
+                cfg.paths.control_db, (tmp_path / 'control.db').resolve()
+            )
+            self.assertNotEqual(cfg.paths.control_db, cfg.paths.db)
+
     def test_missing_file_raises(self):
         with self.assertRaises(FileNotFoundError):
             app_config.load_config(Path('/tmp/does-not-exist.toml'))

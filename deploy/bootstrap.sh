@@ -17,6 +17,10 @@
 #   FETCHLINKS_APP_DIR  checkout directory to install/update (default: parent of this script's deploy/ dir)
 #   FETCHLINKS_REPO_URL git URL to clone/pull (default: poptart-sommelier/fetchlinks)
 #   FETCHLINKS_REPO_REF branch/tag to deploy   (default: master)
+#   FETCHLINKS_ROLE     which role to provision: all | web | ingest (default: all)
+#                       - all:    single-host (web + ingest + retain + export); one DB file.
+#                       - web:    VM web GUI; control.db canonical here; reads a pushed data.db.
+#                       - ingest: home Pi; runs the sync cycle (pull control.db, ingest, retain, push data.db).
 
 set -euo pipefail
 
@@ -36,12 +40,23 @@ CONFIG_FILE="${INGEST_DIR}/data/config/fetchlinks.toml"
 RSS_FEEDS_FILE="${INGEST_DIR}/data/config/rss_feeds.txt"
 SUBREDDITS_FILE="${INGEST_DIR}/data/config/subreddits.txt"
 WEB_ENV_FILE="${WEB_DIR}/.env.production"
+SYNC_ENV_FILE="${APP_DIR}/deploy/sync/fetchlinks-sync.env"
+SYNC_ENV_EXAMPLE="${APP_DIR}/deploy/sync/fetchlinks-sync.env.example"
 CACHE_DIR="/var/cache/fetchlinks"
 NODE_MAJOR=24
 PYTHON_BIN="/usr/bin/python3.12"
 
 REPO_URL="${FETCHLINKS_REPO_URL:-https://github.com/poptart-sommelier/fetchlinks.git}"
 REPO_REF="${FETCHLINKS_REPO_REF:-master}"
+
+ROLE="${FETCHLINKS_ROLE:-all}"
+case "${ROLE}" in
+    all|web|ingest) ;;
+    *) echo "FETCHLINKS_ROLE must be one of: all, web, ingest (got '${ROLE}')." >&2; exit 1 ;;
+esac
+
+role_has_web()    { [[ "${ROLE}" == "all" || "${ROLE}" == "web" ]]; }
+role_has_ingest() { [[ "${ROLE}" == "all" || "${ROLE}" == "ingest" ]]; }
 
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m!!\033[0m %s\n' "$*" >&2; }
@@ -400,6 +415,54 @@ configure_web_admin_if_missing() {
     set_web_env_admin "${admin_user}" "${admin_pass}"
 }
 
+configure_sync_env_if_missing() {
+    local app_dir_escaped=""
+    local vm_ssh=""
+
+    if [[ -f "${SYNC_ENV_FILE}" ]]; then
+        printf '  ok - sync environment exists at %s\n' "${SYNC_ENV_FILE}"
+        return 0
+    fi
+
+    if [[ ! -f "${SYNC_ENV_EXAMPLE}" ]]; then
+        warn "Missing ${SYNC_ENV_EXAMPLE}; cannot render the sync environment."
+        return 0
+    fi
+
+    log "Configuring Pi sync environment"
+    app_dir_escaped="$(sed_escape_replacement "${APP_DIR}")"
+    sed "s|__FETCHLINKS_APP_DIR__|${app_dir_escaped}|g" \
+        "${SYNC_ENV_EXAMPLE}" >"${SYNC_ENV_FILE}"
+
+    read -r -p "VM sync SSH target (user@host) [leave blank to edit ${SYNC_ENV_FILE} later]: " vm_ssh
+    if [[ -n "${vm_ssh//[[:space:]]/}" ]]; then
+        "${PYTHON_BIN}" - "${SYNC_ENV_FILE}" "${vm_ssh}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+target = sys.argv[2].strip()
+lines = path.read_text(encoding='utf-8').splitlines()
+out = []
+seen = False
+for line in lines:
+    if line.startswith('FETCHLINKS_VM_SSH='):
+        out.append(f'FETCHLINKS_VM_SSH={target}')
+        seen = True
+    else:
+        out.append(line)
+if not seen:
+    out.append(f'FETCHLINKS_VM_SSH={target}')
+path.write_text('\n'.join(out) + '\n', encoding='utf-8')
+PY
+    else
+        warn "FETCHLINKS_VM_SSH left unset; edit ${SYNC_ENV_FILE} before enabling the sync timer."
+    fi
+
+    chown "${APP_USER}:${APP_GROUP}" "${SYNC_ENV_FILE}"
+    chmod 0600 "${SYNC_ENV_FILE}"
+}
+
 list_enabled_ingest_sources() {
     "${PYTHON_BIN}" - "${CONFIG_FILE}" <<'PY'
 from pathlib import Path
@@ -703,11 +766,14 @@ fi
 # ---- swap -------------------------------------------------------------------
 # A 2 GB VM (B1ms) has little/no swap by default, and `next build` can spike
 # memory enough to OOM. Ensure a swap file exists before the web build.
+# Only the web role builds Next.js, so skip this for the ingest-only Pi.
 
 SWAP_FILE="/swapfile"
 SWAP_SIZE="2G"
 
-if ! swapon --show --noheadings | grep -q "${SWAP_FILE}"; then
+if ! role_has_web; then
+    log "Ingest-only role; skipping web build swap file"
+elif ! swapon --show --noheadings | grep -q "${SWAP_FILE}"; then
     log "Setting up ${SWAP_SIZE} swap file at ${SWAP_FILE}"
     if [[ ! -f "${SWAP_FILE}" ]]; then
         fallocate -l "${SWAP_SIZE}" "${SWAP_FILE}" || \
@@ -735,11 +801,18 @@ apt-get install -y \
     python3.12 python3.12-venv python3.12-dev \
     build-essential libffi-dev libssl-dev
 
-# NodeSource for current Node major
-if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null)" != v${NODE_MAJOR}.* ]]; then
-    log "Installing Node.js ${NODE_MAJOR}.x from NodeSource"
-    curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
-    apt-get install -y nodejs
+# The ingest role ships data.db to the VM over rsync each cycle.
+if role_has_ingest; then
+    apt-get install -y rsync
+fi
+
+# NodeSource for current Node major (web role only builds/runs Next.js)
+if role_has_web; then
+    if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null)" != v${NODE_MAJOR}.* ]]; then
+        log "Installing Node.js ${NODE_MAJOR}.x from NodeSource"
+        curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
+        apt-get install -y nodejs
+    fi
 fi
 
 # ---- unattended-upgrades ----------------------------------------------------
@@ -768,7 +841,11 @@ grant_app_user_checkout_access
 log "Configuring ufw"
 ufw --force default deny incoming  >/dev/null
 ufw --force default allow outgoing >/dev/null
-for port in 22 80 443; do ufw allow "${port}/tcp" >/dev/null; done
+ufw allow 22/tcp >/dev/null
+# Only the web role serves HTTP(S); the ingest Pi needs no inbound web ports.
+if role_has_web; then
+    for port in 80 443; do ufw allow "${port}/tcp" >/dev/null; done
+fi
 ufw --force enable >/dev/null
 
 # ---- repo -------------------------------------------------------------------
@@ -796,10 +873,22 @@ install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${CACHE_DIR}/npm"
 
 # ---- first-install interactive setup ----------------------------------------
 
-configure_missing_credentials
-configure_web_admin_if_missing
+# Ingest credentials live wherever ingest runs (the Pi, or single-host).
+if role_has_ingest; then
+    configure_missing_credentials
+fi
+# Web admin credentials live on the web host.
+if role_has_web; then
+    configure_web_admin_if_missing
+fi
+# The Pi needs the sync environment (VM target) for its push/pull cycle.
+if [[ "${ROLE}" == "ingest" ]]; then
+    configure_sync_env_if_missing
+fi
 
 # ---- python venv + ingest deps ---------------------------------------------
+# Needed by every role: the web host runs the seed/export Python helpers, and
+# the ingest host runs the fetch/retain jobs.
 
 log "Building Python venv and installing ingest requirements"
 if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
@@ -811,58 +900,115 @@ sudo -u "${APP_USER}" env PIP_CACHE_DIR="${CACHE_DIR}/pip" \
 
 # ---- web build --------------------------------------------------------------
 
-log "Building Next.js web app"
-sudo -u "${APP_USER}" env npm_config_cache="${CACHE_DIR}/npm" \
-    bash -c "cd '${WEB_DIR}' && npm ci && npm run build"
+if role_has_web; then
+    log "Building Next.js web app"
+    sudo -u "${APP_USER}" env npm_config_cache="${CACHE_DIR}/npm" \
+        bash -c "cd '${WEB_DIR}' && npm ci && npm run build"
+fi
 
 # ---- systemd units ----------------------------------------------------------
 
-log "Installing systemd units"
-render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-web.service"              /etc/systemd/system/fetchlinks-web.service
-render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"           /etc/systemd/system/fetchlinks-ingest.service
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.timer"                /etc/systemd/system/
-render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"           /etc/systemd/system/fetchlinks-retain.service
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.timer"                /etc/systemd/system/
-render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.service" /etc/systemd/system/fetchlinks-export-rss-feeds.service
-install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.timer"      /etc/systemd/system/
+log "Installing systemd units (role: ${ROLE})"
+
+if role_has_web; then
+    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-web.service"              /etc/systemd/system/fetchlinks-web.service
+    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.service" /etc/systemd/system/fetchlinks-export-rss-feeds.service
+    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.timer"      /etc/systemd/system/
+fi
+
+# Single-host runs the standalone ingest + retain timers directly.
+if [[ "${ROLE}" == "all" ]]; then
+    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"           /etc/systemd/system/fetchlinks-ingest.service
+    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.timer"                /etc/systemd/system/
+    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"           /etc/systemd/system/fetchlinks-retain.service
+    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.timer"                /etc/systemd/system/
+fi
+
+# The Pi runs ingest + retention inside the one-shot sync cycle.
+if [[ "${ROLE}" == "ingest" ]]; then
+    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-sync.service"             /etc/systemd/system/fetchlinks-sync.service
+    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-sync.timer"                  /etc/systemd/system/
+fi
+
 systemctl daemon-reload
 
-systemctl enable --now fetchlinks-web.service
-systemctl enable --now fetchlinks-ingest.timer
-systemctl enable --now fetchlinks-retain.timer
-systemctl enable --now fetchlinks-export-rss-feeds.timer
-systemctl restart   fetchlinks-export-rss-feeds.timer
-systemctl restart   fetchlinks-web.service
+if role_has_web; then
+    systemctl enable --now fetchlinks-web.service
+    systemctl enable --now fetchlinks-export-rss-feeds.timer
+    systemctl restart   fetchlinks-export-rss-feeds.timer
+    systemctl restart   fetchlinks-web.service
+fi
+if [[ "${ROLE}" == "all" ]]; then
+    systemctl enable --now fetchlinks-ingest.timer
+    systemctl enable --now fetchlinks-retain.timer
+fi
+if [[ "${ROLE}" == "ingest" ]]; then
+    systemctl enable --now fetchlinks-sync.timer
+fi
 
 # ---- one-time source table seeds. These use temporary seed-only configs so
 # missing network credentials do not block no-network seed imports.
-seed_source_tables
+# control.db (feed/subreddit identity) is canonical on the web host.
+if role_has_web; then
+    seed_source_tables
 
-log "Exporting rss_feeds table back to ${RSS_FEEDS_FILE}"
-systemctl start fetchlinks-export-rss-feeds.service || \
-    warn "rss_feeds export step reported a failure; check the journal."
+    log "Exporting rss_feeds table back to ${RSS_FEEDS_FILE}"
+    systemctl start fetchlinks-export-rss-feeds.service || \
+        warn "rss_feeds export step reported a failure; check the journal."
+fi
 
-validate_ingest_sources
+# Validate ingest sources wherever ingest actually runs.
+if role_has_ingest; then
+    validate_ingest_sources
+fi
 
 # nginx + TLS are provisioned separately by deploy/tls.sh.
+
 
 # ---- final summary ----------------------------------------------------------
 
 log "Done. Status:"
-systemctl --no-pager --lines=0 status fetchlinks-web.service                  || true
-systemctl --no-pager --lines=0 status fetchlinks-ingest.timer                 || true
-systemctl --no-pager --lines=0 status fetchlinks-retain.timer                 || true
-systemctl --no-pager --lines=0 status fetchlinks-export-rss-feeds.timer       || true
+if role_has_web; then
+    systemctl --no-pager --lines=0 status fetchlinks-web.service                  || true
+    systemctl --no-pager --lines=0 status fetchlinks-export-rss-feeds.timer       || true
+fi
+if [[ "${ROLE}" == "all" ]]; then
+    systemctl --no-pager --lines=0 status fetchlinks-ingest.timer                 || true
+    systemctl --no-pager --lines=0 status fetchlinks-retain.timer                 || true
+fi
+if [[ "${ROLE}" == "ingest" ]]; then
+    systemctl --no-pager --lines=0 status fetchlinks-sync.timer                   || true
+fi
 
 cat <<EOF
 
 ------------------------------------------------------------
-Bootstrap finished.
+Bootstrap finished (role: ${ROLE}).
+EOF
+
+if role_has_web; then
+    cat <<EOF
 
 Optional next step: provision nginx + TLS once DNS points at this VM:
   sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
        FETCHLINKS_EMAIL=you@example.com \
        ${APP_DIR}/deploy/tls.sh
+EOF
+fi
+
+if [[ "${ROLE}" == "ingest" ]]; then
+    cat <<EOF
+
+Ingest (Pi) role next steps:
+  1. Ensure ${SYNC_ENV_FILE} has FETCHLINKS_VM_SSH set (and key path).
+  2. Set distinct [paths].db and [paths].control_db in ${CONFIG_FILE}.
+  3. Add this Pi's SSH public key to the VM, rsync-restricted — see
+     ${APP_DIR}/deploy/sync/authorized_keys.example.
+  4. Trigger one cycle: systemctl start fetchlinks-sync.service
+EOF
+fi
+
+cat <<EOF
 ------------------------------------------------------------
 EOF
 

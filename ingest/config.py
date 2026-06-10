@@ -30,6 +30,10 @@ class PathsConfig:
     db: Path
     log_file: Path
     log_level: str = 'INFO'
+    # Admin-owned catalog DB (rss_feeds + subreddits identity/flags). When the
+    # ingest and web roles run on one host this defaults to ``db`` (one
+    # physical file); the Pi+VM split points it at a separate file.
+    control_db: Path = field(default_factory=Path)
 
 
 @dataclass(frozen=True)
@@ -158,10 +162,18 @@ def _build_paths(section: dict, base: Path) -> PathsConfig:
     if log_level not in _VALID_LOG_LEVELS:
         raise ValueError(f'[paths] log_level must be one of {sorted(_VALID_LOG_LEVELS)}')
 
+    db = _resolve_path(section['db'], base)
+    # control_db is optional; when unset the catalog shares the data db file.
+    if 'control_db' in section:
+        control_db = _resolve_path(section['control_db'], base)
+    else:
+        control_db = db
+
     return PathsConfig(
-        db=_resolve_path(section['db'], base),
+        db=db,
         log_file=_resolve_path(section['log_file'], base),
         log_level=log_level,
+        control_db=control_db,
     )
 
 

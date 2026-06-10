@@ -589,7 +589,9 @@ def parse_args(argv: list[str]):
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     cfg = app_config.load_config(args.config)
-    db_path = cfg.paths.db
+    # rss_feeds is a control-owned identity table; seed it into control_db
+    # (which equals paths.db in single-host mode).
+    db_path = cfg.paths.control_db
     if args.seed_if_empty:
         inserted = seed_if_empty(args.seed_if_empty, db_path)
         if inserted:

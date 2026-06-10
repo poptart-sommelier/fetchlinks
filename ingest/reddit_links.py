@@ -48,10 +48,11 @@ def _log_rate_limit(response):
         logger.debug('Reddit rate limit remaining=%s reset=%s', remaining, reset)
 
 
-def get_subreddits(reddit_config: RedditSource, db_path: Path) -> tuple[list[dict], list[tuple[str, str]]]:
+def get_subreddits(reddit_config: RedditSource, db_path: Path, control_db_path: Path | None = None) -> tuple[list[dict], list[tuple[str, str]]]:
     subreddit_posts = []
     state_updates = []
-    active_subreddits = db_utils.db_get_active_subreddits(db_path)
+    control_db_path = control_db_path or db_path
+    active_subreddits = db_utils.db_get_active_subreddits(control_db_path)
     reddit_states = db_utils.db_get_reddit_states(db_path)
 
     reddit_auth = RedditAuth(str(reddit_config.credential_location))
@@ -168,8 +169,9 @@ def run(
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
+    control_db_path: Path | None = None,
 ):
-    subreddit_posts, state_updates = get_subreddits(reddit_config, db_path)
+    subreddit_posts, state_updates = get_subreddits(reddit_config, db_path, control_db_path)
     parsed_posts = parse_posts(subreddit_posts)
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Reddit')
     recent_posts = url_filters.filter_posts_by_url_host_keywords(

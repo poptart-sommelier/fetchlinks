@@ -24,6 +24,24 @@ def _row_by_id(db_path: Path, feed_id: int) -> dict:
         ).fetchone())
 
 
+def _normalized_for(db_path: Path, feed_id: int) -> str:
+    with sqlite3.connect(db_path) as conn:
+        return conn.execute(
+            'SELECT normalized_url FROM rss_feeds WHERE feed_id = ?', (feed_id,)
+        ).fetchone()[0]
+
+
+def _health_row(db_path: Path, normalized_url: str) -> dict | None:
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            'SELECT * FROM rss_feed_health WHERE normalized_url = ?',
+            (normalized_url,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+
+
 class CountAndInsertTests(unittest.TestCase):
     def test_count_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -70,6 +88,8 @@ class GetActiveTests(unittest.TestCase):
             active = db_utils.db_get_active_rss_feeds(db_path)
             urls = {row[1] for row in active}
             self.assertEqual(urls, {'https://a/'})
+            # First element is now the natural key (normalized_url).
+            self.assertEqual(active[0][0], 'https://a/')
             # Cache headers normalised to empty string.
             self.assertEqual(active[0][2], '')
             self.assertEqual(active[0][3], '')
@@ -90,20 +110,22 @@ class UpdateAfterFetchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = _fresh_db(Path(tmp))
             fid_a, _ = self._setup_two(db_path)
-            # Pre-set a failure count.
-            with sqlite3.connect(db_path) as conn:
-                conn.execute('UPDATE rss_feeds SET consecutive_failures = 5 '
-                             'WHERE feed_id = ?', (fid_a,))
-                conn.commit()
-
-            disabled = db_utils.db_update_rss_feed_after_fetch(
-                [{'feed_id': fid_a, 'status': 200, 'etag': 'e1',
-                  'last_modified': 'lm1', 'error': None}],
-                db_path, 10,
+            norm_a = _normalized_for(db_path, fid_a)
+            # Pre-set a failure count in the health table.
+            db_utils.db_update_rss_feed_after_fetch(
+                [{'normalized_url': norm_a, 'status': 500, 'etag': '',
+                  'last_modified': '', 'error': 'HTTP 500'}],
+                db_path,
             )
 
-            self.assertEqual(disabled, 0)
-            row = _row_by_id(db_path, fid_a)
+            result = db_utils.db_update_rss_feed_after_fetch(
+                [{'normalized_url': norm_a, 'status': 200, 'etag': 'e1',
+                  'last_modified': 'lm1', 'error': None}],
+                db_path,
+            )
+
+            self.assertIsNone(result)
+            row = _health_row(db_path, norm_a)
             self.assertEqual(row['consecutive_failures'], 0)
             self.assertEqual(row['etag'], 'e1')
             self.assertEqual(row['last_modified'], 'lm1')
@@ -115,12 +137,13 @@ class UpdateAfterFetchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = _fresh_db(Path(tmp))
             fid_a, _ = self._setup_two(db_path)
+            norm_a = _normalized_for(db_path, fid_a)
             db_utils.db_update_rss_feed_after_fetch(
-                [{'feed_id': fid_a, 'status': 304, 'etag': 'e2',
+                [{'normalized_url': norm_a, 'status': 304, 'etag': 'e2',
                   'last_modified': 'lm2', 'error': None}],
-                db_path, 10,
+                db_path,
             )
-            row = _row_by_id(db_path, fid_a)
+            row = _health_row(db_path, norm_a)
             self.assertEqual(row['last_status'], 304)
             self.assertEqual(row['consecutive_failures'], 0)
 
@@ -128,56 +151,42 @@ class UpdateAfterFetchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = _fresh_db(Path(tmp))
             fid_a, _ = self._setup_two(db_path)
+            norm_a = _normalized_for(db_path, fid_a)
 
             db_utils.db_update_rss_feed_after_fetch(
-                [{'feed_id': fid_a, 'status': 500, 'etag': '',
+                [{'normalized_url': norm_a, 'status': 500, 'etag': '',
                   'last_modified': '', 'error': 'HTTP 500'}],
-                db_path, 10,
+                db_path,
             )
-            row = _row_by_id(db_path, fid_a)
+            row = _health_row(db_path, norm_a)
             self.assertEqual(row['consecutive_failures'], 1)
             self.assertEqual(row['last_status'], 500)
             self.assertEqual(row['last_error'], 'HTTP 500')
-            self.assertEqual(row['enabled'], 1)
+            # Feed identity (enabled) is never touched by health updates.
+            self.assertEqual(_row_by_id(db_path, fid_a)['enabled'], 1)
 
-    def test_auto_disables_when_threshold_reached(self):
+    def test_repeated_failures_keep_incrementing_without_disabling(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = _fresh_db(Path(tmp))
             fid_a, _ = self._setup_two(db_path)
-            with sqlite3.connect(db_path) as conn:
-                conn.execute('UPDATE rss_feeds SET consecutive_failures = 9 '
-                             'WHERE feed_id = ?', (fid_a,))
-                conn.commit()
+            norm_a = _normalized_for(db_path, fid_a)
+            for _ in range(15):
+                db_utils.db_update_rss_feed_after_fetch(
+                    [{'normalized_url': norm_a, 'status': 0, 'etag': '',
+                      'last_modified': '', 'error': 'ConnectionError'}],
+                    db_path,
+                )
 
-            disabled = db_utils.db_update_rss_feed_after_fetch(
-                [{'feed_id': fid_a, 'status': 0, 'etag': '',
-                  'last_modified': '', 'error': 'ConnectionError'}],
-                db_path, 10,
-            )
+            self.assertEqual(
+                _health_row(db_path, norm_a)['consecutive_failures'], 15)
+            # enabled stays 1 -- ingest never auto-disables.
+            self.assertEqual(_row_by_id(db_path, fid_a)['enabled'], 1)
 
-            self.assertEqual(disabled, 1)
-            row = _row_by_id(db_path, fid_a)
-            self.assertEqual(row['enabled'], 0)
-            self.assertEqual(row['consecutive_failures'], 10)
-
-    def test_auto_disable_threshold_zero_means_never(self):
+    def test_empty_results_is_noop(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = _fresh_db(Path(tmp))
-            fid_a, _ = self._setup_two(db_path)
-            with sqlite3.connect(db_path) as conn:
-                conn.execute('UPDATE rss_feeds SET consecutive_failures = 999 '
-                             'WHERE feed_id = ?', (fid_a,))
-                conn.commit()
-
-            disabled = db_utils.db_update_rss_feed_after_fetch(
-                [{'feed_id': fid_a, 'status': 500, 'etag': '',
-                  'last_modified': '', 'error': 'HTTP 500'}],
-                db_path, 0,
-            )
-
-            self.assertEqual(disabled, 0)
-            row = _row_by_id(db_path, fid_a)
-            self.assertEqual(row['enabled'], 1)
+            self.assertIsNone(
+                db_utils.db_update_rss_feed_after_fetch([], db_path))
 
 
 class GetAllRssFeedsTests(unittest.TestCase):
@@ -196,6 +205,63 @@ class GetAllRssFeedsTests(unittest.TestCase):
                         'latest_entry_at'):
                 self.assertIn(key, row)
             self.assertEqual(row['feed_url'], 'https://a/')
+
+    def test_merges_health_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = _fresh_db(Path(tmp))
+            db_utils.db_insert_rss_feeds([('https://a/', 'https://a/')], db_path)
+            db_utils.db_update_rss_feed_after_fetch(
+                [{'normalized_url': 'https://a/', 'status': 200, 'etag': 'e1',
+                  'last_modified': 'lm1', 'error': None}],
+                db_path,
+            )
+            row = db_utils.db_get_all_rss_feeds(db_path)[0]
+            self.assertEqual(row['etag'], 'e1')
+            self.assertEqual(row['last_status'], 200)
+            self.assertEqual(row['consecutive_failures'], 0)
+
+    def test_feeds_without_health_default_to_null(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = _fresh_db(Path(tmp))
+            db_utils.db_insert_rss_feeds([('https://a/', 'https://a/')], db_path)
+            row = db_utils.db_get_all_rss_feeds(db_path)[0]
+            self.assertIsNone(row['etag'])
+            self.assertIsNone(row['last_status'])
+            self.assertEqual(row['consecutive_failures'], 0)
+
+
+class TwoFileModeTests(unittest.TestCase):
+    """Identity in the control DB, health in a separate data DB."""
+
+    def test_active_and_all_merge_across_separate_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            control_db = Path(tmp) / 'control.db'
+            data_db = Path(tmp) / 'data.db'
+            db_setup.db_initial_setup(control_db)
+            db_setup.db_initial_setup(data_db)
+
+            # Identity lives only in the control DB.
+            db_utils.db_insert_rss_feeds([('https://a/', 'https://a/')], control_db)
+            # Health lives only in the data DB.
+            db_utils.db_update_rss_feed_after_fetch(
+                [{'normalized_url': 'https://a/', 'status': 200, 'etag': 'e1',
+                  'last_modified': 'lm1', 'error': None}],
+                data_db,
+            )
+
+            active = db_utils.db_get_active_rss_feeds(control_db, data_db)
+            self.assertEqual(len(active), 1)
+            normalized, feed_url, etag, last_mod = active[0]
+            self.assertEqual(normalized, 'https://a/')
+            self.assertEqual(feed_url, 'https://a/')
+            self.assertEqual(etag, 'e1')
+            self.assertEqual(last_mod, 'lm1')
+
+            row = db_utils.db_get_all_rss_feeds(control_db, data_db)[0]
+            self.assertEqual(row['feed_url'], 'https://a/')
+            self.assertEqual(row['etag'], 'e1')
+            self.assertEqual(row['last_status'], 200)
+
 
 
 if __name__ == '__main__':
