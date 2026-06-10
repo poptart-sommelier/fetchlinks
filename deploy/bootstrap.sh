@@ -35,14 +35,17 @@ APP_DIR="$(realpath -m "${FETCHLINKS_APP_DIR:-${DEFAULT_APP_DIR}}")"
 VENV_DIR="${APP_DIR}/.venv"
 INGEST_DIR="${APP_DIR}/ingest"
 WEB_DIR="${APP_DIR}/web"
-STATE_DIR="/var/lib/fetchlinks"
+# State (the rss_feeds.txt snapshot) and build caches live inside the checkout
+# so the whole project is self-contained in one directory. Override with
+# FETCHLINKS_STATE_DIR / FETCHLINKS_CACHE_DIR for FHS-style system layouts.
+STATE_DIR="${FETCHLINKS_STATE_DIR:-${APP_DIR}/ingest/data/state}"
 CONFIG_FILE="${INGEST_DIR}/data/config/fetchlinks.toml"
 RSS_FEEDS_FILE="${INGEST_DIR}/data/config/rss_feeds.txt"
 SUBREDDITS_FILE="${INGEST_DIR}/data/config/subreddits.txt"
 WEB_ENV_FILE="${WEB_DIR}/.env.production"
 SYNC_ENV_FILE="${APP_DIR}/deploy/sync/fetchlinks-sync.env"
 SYNC_ENV_EXAMPLE="${APP_DIR}/deploy/sync/fetchlinks-sync.env.example"
-CACHE_DIR="/var/cache/fetchlinks"
+CACHE_DIR="${FETCHLINKS_CACHE_DIR:-${APP_DIR}/.cache}"
 NODE_MAJOR=24
 PYTHON_BIN="/usr/bin/python3.12"
 

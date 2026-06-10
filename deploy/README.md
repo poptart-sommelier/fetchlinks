@@ -156,7 +156,7 @@ In order:
 12. On first run, seeds the `rss_feeds` SQLite table from
    `<checkout>/ingest/data/config/rss_feeds.txt` (no-op once the table
    has any rows), then exports the DB snapshot to
-   `/var/lib/fetchlinks/rss_feeds.txt`.
+   `<checkout>/ingest/data/state/rss_feeds.txt`.
 13. Runs per-source ingest validation and prints non-fatal warnings for sources
    that fail.
 
@@ -203,9 +203,10 @@ journalctl -u fetchlinks-export-rss-feeds.service --since '7 days ago'
 ```text
 ~/fetchlinks/                       git checkout, owned by fetchlinks after bootstrap
 ~/fetchlinks/.venv/                 Python venv for ingest
+~/fetchlinks/.cache/                pip + npm build caches
 ~/fetchlinks/ingest/data/config/fetchlinks.toml  runtime config
 ~/fetchlinks/ingest/data/config/rss_feeds.txt    first-install seed file
-/var/lib/fetchlinks/rss_feeds.txt                5-minute DB snapshot
+~/fetchlinks/ingest/data/state/rss_feeds.txt     5-minute DB snapshot
 ~/fetchlinks/ingest/db/fetchlinks.db             SQLite DB
 ~/fetchlinks/ingest/data/logs/                   ingest logs
 ~/fetchlinks/web/.env.production                 env vars for the web service
