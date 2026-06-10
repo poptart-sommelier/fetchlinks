@@ -1,13 +1,14 @@
 """RSS ingestion using requests + ETag/Last-Modified caching.
 
-- Active feeds are read from the ``rss_feeds`` DB table (enabled = 1 and
-  not tombstoned). The seed file is only consulted at first bootstrap by
+- Active feeds are read from the control DB ``rss_feeds`` table (enabled = 1
+  and not tombstoned). The seed file is only consulted at first bootstrap by
   ``rss_feed_import.py --seed-if-empty``.
 - Uses requests with explicit timeouts so a single slow feed can't hang a worker.
 - Sends If-None-Match / If-Modified-Since headers; 304 responses skip parsing.
 - Per-feed health (etag, last_modified, last_status, consecutive_failures)
-  is persisted back into ``rss_feeds``; feeds whose failure count crosses
-  ``auto_disable_after_failures`` are auto-disabled.
+  is persisted into the data DB ``rss_feed_health`` table, keyed by
+  ``normalized_url``. Feeds are never auto-disabled by ingest; the failure
+  count is surfaced to the admin for manual removal.
 - Connection pooling via shared requests.Session.
 - Hands raw bytes to feedparser.parse() (no second network round-trip).
 """
@@ -29,16 +30,18 @@ THREADS = 50
 USER_AGENT = 'fetchlinks-rss/0.1 (+https://github.com/poptart-sommelier/fetchlinks)'
 
 # What we pass between fetch and parse:
-#   (feed_id, feed_url, parsed_feed_or_none, new_etag, new_last_modified,
-#    status_code, error_message_or_none)
+#   (normalized_url, feed_url, parsed_feed_or_none, new_etag,
+#    new_last_modified, status_code, error_message_or_none)
+# The natural key is ``normalized_url`` (not an autoincrement id), so health
+# updates can be written to the data DB without consulting the control DB.
 FetchResult = tuple[
-    int, str, feedparser.FeedParserDict | None, str, str, int, str | None,
+    str, str, feedparser.FeedParserDict | None, str, str, int, str | None,
 ]
 
 
 def _fetch_one(
     session: requests.Session,
-    feed_id: int,
+    normalized_url: str,
     url: str,
     cached_etag: str,
     cached_last_mod: str,
@@ -46,9 +49,10 @@ def _fetch_one(
 ) -> FetchResult:
     """Fetch a single feed using cached ETag/Last-Modified if present.
 
-    Returns ``(feed_id, url, feed_or_none, etag, last_modified, status, error)``.
-    ``feed_or_none`` is None for 304 / error cases (no parsing needed/possible).
-    ``error`` is None on 200/304 and a short label otherwise.
+    Returns ``(normalized_url, url, feed_or_none, etag, last_modified, status,
+    error)``. ``feed_or_none`` is None for 304 / error cases (no parsing
+    needed/possible). ``error`` is None on 200/304 and a short label
+    otherwise.
     """
     headers = {}
     if cached_etag:
@@ -61,7 +65,7 @@ def _fetch_one(
     except requests.RequestException as exc:
         logger.warning('Failed to fetch %s: %s', url, type(exc).__name__)
         # Preserve cached values so we keep retrying with conditional headers.
-        return (feed_id, url, None, cached_etag, cached_last_mod, 0,
+        return (normalized_url, url, None, cached_etag, cached_last_mod, 0,
                 type(exc).__name__)
 
     new_etag = resp.headers.get('ETag', cached_etag)
@@ -69,34 +73,35 @@ def _fetch_one(
 
     if resp.status_code == 304:
         logger.debug('Feed unchanged (304): %s', url)
-        return (feed_id, url, None, new_etag, new_last_mod, 304, None)
+        return (normalized_url, url, None, new_etag, new_last_mod, 304, None)
 
     if resp.status_code != 200:
         logger.warning('Feed %s returned HTTP %s', url, resp.status_code)
-        return (feed_id, url, None, new_etag, new_last_mod, resp.status_code,
-                f'HTTP {resp.status_code}')
+        return (normalized_url, url, None, new_etag, new_last_mod,
+                resp.status_code, f'HTTP {resp.status_code}')
 
     try:
         feed = feedparser.parse(resp.content)
     except Exception as exc:
         logger.error('Failed to parse %s: %s', url, exc)
-        return (feed_id, url, None, new_etag, new_last_mod, 200,
+        return (normalized_url, url, None, new_etag, new_last_mod, 200,
                 f'parse error: {exc}')
 
     if feed.bozo and not feed.entries:
         logger.warning('Feed %s parse error with no entries: %s',
                        url, feed.bozo_exception)
-        return (feed_id, url, None, new_etag, new_last_mod, 200,
+        return (normalized_url, url, None, new_etag, new_last_mod, 200,
                 f'parse error: {feed.bozo_exception}')
 
-    return (feed_id, url, feed, new_etag, new_last_mod, 200, None)
+    return (normalized_url, url, feed, new_etag, new_last_mod, 200, None)
 
 
 def fetch_feeds(feeds, timeout):
     """Fetch every feed in parallel.
 
-    ``feeds`` is an iterable of ``(feed_id, feed_url, etag, last_modified)``
-    tuples (typically from ``db_utils.db_get_active_rss_feeds``).
+    ``feeds`` is an iterable of
+    ``(normalized_url, feed_url, etag, last_modified)`` tuples (typically from
+    ``db_utils.db_get_active_rss_feeds``).
     """
     results: list[FetchResult] = []
     with requests.Session() as session:
@@ -104,9 +109,9 @@ def fetch_feeds(feeds, timeout):
         session.headers['Accept-Encoding'] = 'gzip, deflate'
         with concurrent.futures.ThreadPoolExecutor(max_workers=THREADS) as pool:
             futures = [
-                pool.submit(_fetch_one, session, feed_id, url,
+                pool.submit(_fetch_one, session, normalized_url, url,
                             etag, last_mod, timeout)
-                for (feed_id, url, etag, last_mod) in feeds
+                for (normalized_url, url, etag, last_mod) in feeds
             ]
             for future in concurrent.futures.as_completed(futures):
                 results.append(future.result())
@@ -115,7 +120,7 @@ def fetch_feeds(feeds, timeout):
 
 def parse_posts(fetch_results):
     posts: list[RssPost] = []
-    for _fid, url, feed, _etag, _lm, _status, _err in fetch_results:
+    for _norm, url, feed, _etag, _lm, _status, _err in fetch_results:
         if feed is None:
             continue
         feed_meta = feed.feed if hasattr(feed, 'feed') else {}
@@ -195,13 +200,17 @@ def run(
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
+    control_db_path: Path | None = None,
 ):
     """Fetch every active RSS feed, parse + filter posts, persist health.
 
-    ``rss_source`` is a ``config.RssSource``. Active feeds come from the
-    ``rss_feeds`` DB table; the seed file is *not* consulted here.
+    ``rss_source`` is a ``config.RssSource``. Feed *identity + on/off* lives
+    in the control DB (``control_db_path``; defaults to ``db_path`` for
+    single-host installs); posts and per-feed health are written to the data
+    DB (``db_path``). The seed file is *not* consulted here.
     """
-    active = db_utils.db_get_active_rss_feeds(db_path)
+    control_db_path = control_db_path or db_path
+    active = db_utils.db_get_active_rss_feeds(control_db_path, db_path)
     if not active:
         logger.info('RSS: no active feeds (rss_feeds table is empty or all disabled)')
         return
@@ -210,21 +219,17 @@ def run(
 
     health_updates = [
         {
-            'feed_id': fid,
+            'normalized_url': normalized_url,
             'status': status,
             'etag': etag,
             'last_modified': last_mod,
             'error': err,
             'site_link': pick_site_link(feed),
         }
-        for (fid, _url, feed, etag, last_mod, status, err) in fetch_results
+        for (normalized_url, _url, feed, etag, last_mod, status, err)
+        in fetch_results
     ]
-    auto_disabled = db_utils.db_update_rss_feed_after_fetch(
-        health_updates, db_path, rss_source.auto_disable_after_failures,
-    )
-    if auto_disabled:
-        logger.warning('RSS: auto-disabled %s feed(s) after consecutive failures',
-                       auto_disabled)
+    db_utils.db_update_rss_feed_after_fetch(health_updates, db_path)
 
     parsed_posts = parse_posts(fetch_results)
     recent_posts = ingest_limits.filter_posts_by_age(
@@ -235,7 +240,8 @@ def run(
         recent_posts, excluded_url_or_description_keywords or [], 'RSS')
 
     counts = {200: 0, 304: 0, 'error': 0}
-    for _fid, _u, _f, _e, _l, status, _err in fetch_results:
+    for _norm, _u, _f, _e, _l, status, _err in fetch_results:
+
         if status == 200:
             counts[200] += 1
         elif status == 304:

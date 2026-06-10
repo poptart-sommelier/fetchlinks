@@ -131,6 +131,22 @@ def _ensure_rss_feeds_table(db):
     )
 
 
+def _ensure_rss_feed_health_table(db):
+    db.execute("""
+    CREATE TABLE IF NOT EXISTS rss_feed_health (
+    normalized_url       TEXT PRIMARY KEY,
+    last_fetched_at      TEXT,
+    last_success_at      TEXT,
+    last_status          INTEGER,
+    last_error           TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    etag                 TEXT,
+    last_modified        TEXT,
+    latest_entry_at      TEXT,
+    site_link            TEXT)
+    """)
+
+
 def _ensure_reddit_state_table(db):
     db.execute("""
     CREATE TABLE IF NOT EXISTS reddit_state (
@@ -268,54 +284,80 @@ def db_insert_rss_feeds(feeds, db_location):
         raise RuntimeError(f'Could not insert rss_feeds: {exc}') from exc
 
 
-def db_get_active_rss_feeds(db_location):
+def db_get_active_rss_feeds(db_location, data_db_location=None):
     """Return live (enabled, not tombstoned) feeds for ingestion.
 
-    Each row is ``(feed_id, feed_url, etag, last_modified)``. Cache headers
-    are returned as empty strings when NULL so callers can use them directly
-    in HTTP header construction.
+    Feed *identity + on/off* lives in ``db_location`` (the control DB,
+    ``rss_feeds``); per-feed cache headers live in ``data_db_location`` (the
+    data DB, ``rss_feed_health``, keyed by ``normalized_url``). When
+    ``data_db_location`` is omitted both come from ``db_location`` (single
+    physical file). The two are merged on ``normalized_url`` -- never an
+    autoincrement id, which would not match across two separate DB files.
+
+    Each row is ``(normalized_url, feed_url, etag, last_modified)``. Cache
+    headers are returned as empty strings when NULL so callers can use them
+    directly in HTTP header construction.
     """
+    data_db_location = data_db_location or db_location
     try:
         with sqlite3.connect(db_location) as db:
             _ensure_rss_feeds_table(db)
             cur = db.execute(
-                'SELECT feed_id, feed_url, etag, last_modified '
+                'SELECT feed_url, normalized_url '
                 'FROM rss_feeds '
                 'WHERE enabled = 1 AND deleted_at IS NULL '
-                'ORDER BY feed_id'
+                'ORDER BY normalized_url'
             )
-            return [
-                (row[0], row[1], row[2] or '', row[3] or '')
-                for row in cur.fetchall()
-            ]
+            identity = [(row[0], row[1]) for row in cur.fetchall()]
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not load active rss_feeds: {exc}') from exc
 
+    try:
+        with sqlite3.connect(data_db_location) as db:
+            _ensure_rss_feed_health_table(db)
+            cur = db.execute(
+                'SELECT normalized_url, etag, last_modified FROM rss_feed_health'
+            )
+            cache = {
+                row[0]: (row[1] or '', row[2] or '')
+                for row in cur.fetchall()
+            }
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load rss_feed_health: {exc}') from exc
 
-def db_update_rss_feed_after_fetch(results, db_location, auto_disable_after):
-    """Persist per-feed fetch outcomes.
+    return [
+        (normalized, feed_url, *cache.get(normalized, ('', '')))
+        for (feed_url, normalized) in identity
+    ]
+
+
+def db_update_rss_feed_after_fetch(results, db_location):
+    """Persist per-feed fetch outcomes into ``rss_feed_health``.
 
     ``results`` is an iterable of dicts with keys:
-        feed_id (int), status (int), etag (str), last_modified (str),
-        error (str|None), latest_entry_at (str|None, optional).
+        normalized_url (str), status (int), etag (str), last_modified (str),
+        error (str|None), latest_entry_at (str|None, optional),
+        site_link (str|None, optional).
 
-    Status 200 or 304 counts as success: ``consecutive_failures`` resets to
-    0, ``last_success_at`` is updated, cache headers are persisted. Any
-    other status counts as failure: ``consecutive_failures`` is incremented
-    and ``last_error`` recorded. When ``auto_disable_after`` is positive
-    and the counter reaches that threshold, ``enabled`` flips to 0.
+    Health is ingest-owned and lives in the data DB, keyed by
+    ``normalized_url``. Status 200 or 304 counts as success:
+    ``consecutive_failures`` resets to 0, ``last_success_at`` is updated,
+    cache headers are persisted. Any other status counts as failure:
+    ``consecutive_failures`` is incremented and ``last_error`` recorded.
 
-    Returns the number of feeds auto-disabled on this call.
+    Auto-disable was removed when feed on/off moved to the admin-owned
+    control DB (the ingest job can no longer flip ``enabled``); failing feeds
+    are surfaced for manual action via their health row instead.
     """
     results = list(results)
     if not results:
-        return 0
+        return
     now = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
-    auto_disabled = 0
     try:
         with sqlite3.connect(db_location) as db:
-            _ensure_rss_feeds_table(db)
+            _ensure_rss_feed_health_table(db)
             for r in results:
+                normalized = r['normalized_url']
                 status = r.get('status') or 0
                 success = status in (200, 304)
                 etag = r.get('etag') or None
@@ -326,66 +368,95 @@ def db_update_rss_feed_after_fetch(results, db_location, auto_disable_after):
 
                 if success:
                     db.execute(
-                        'UPDATE rss_feeds SET '
-                        '  last_fetched_at = ?, '
-                        '  last_success_at = ?, '
-                        '  last_status     = ?, '
+                        'INSERT INTO rss_feed_health '
+                        '(normalized_url, last_fetched_at, last_success_at, '
+                        ' last_status, last_error, consecutive_failures, '
+                        ' etag, last_modified, latest_entry_at, site_link) '
+                        'VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?, ?) '
+                        'ON CONFLICT(normalized_url) DO UPDATE SET '
+                        '  last_fetched_at = excluded.last_fetched_at, '
+                        '  last_success_at = excluded.last_success_at, '
+                        '  last_status     = excluded.last_status, '
                         '  last_error      = NULL, '
                         '  consecutive_failures = 0, '
-                        '  etag            = ?, '
-                        '  last_modified   = ?, '
-                        '  latest_entry_at = COALESCE(?, latest_entry_at), '
-                        '  site_link       = COALESCE(?, site_link) '
-                        'WHERE feed_id = ?',
-                        (now, now, status, etag, last_mod,
-                         latest_entry, site_link, r['feed_id']),
+                        '  etag            = excluded.etag, '
+                        '  last_modified   = excluded.last_modified, '
+                        '  latest_entry_at = COALESCE(excluded.latest_entry_at, '
+                        '                             rss_feed_health.latest_entry_at), '
+                        '  site_link       = COALESCE(excluded.site_link, '
+                        '                             rss_feed_health.site_link)',
+                        (normalized, now, now, status, etag, last_mod,
+                         latest_entry, site_link),
                     )
                 else:
                     db.execute(
-                        'UPDATE rss_feeds SET '
-                        '  last_fetched_at = ?, '
-                        '  last_status     = ?, '
-                        '  last_error      = ?, '
-                        '  consecutive_failures = consecutive_failures + 1 '
-                        'WHERE feed_id = ?',
-                        (now, status, error, r['feed_id']),
+                        'INSERT INTO rss_feed_health '
+                        '(normalized_url, last_fetched_at, last_status, '
+                        ' last_error, consecutive_failures) '
+                        'VALUES (?, ?, ?, ?, 1) '
+                        'ON CONFLICT(normalized_url) DO UPDATE SET '
+                        '  last_fetched_at = excluded.last_fetched_at, '
+                        '  last_status     = excluded.last_status, '
+                        '  last_error      = excluded.last_error, '
+                        '  consecutive_failures = '
+                        '      rss_feed_health.consecutive_failures + 1',
+                        (normalized, now, status, error),
                     )
-                    if auto_disable_after and auto_disable_after > 0:
-                        cur = db.execute(
-                            'UPDATE rss_feeds SET enabled = 0 '
-                            'WHERE feed_id = ? '
-                            '  AND enabled = 1 '
-                            '  AND consecutive_failures >= ?',
-                            (r['feed_id'], auto_disable_after),
-                        )
-                        if cur.rowcount:
-                            auto_disabled += cur.rowcount
             db.commit()
-            return auto_disabled
     except sqlite3.Error as exc:
-        raise RuntimeError(f'Could not update rss_feeds health: {exc}') from exc
+        raise RuntimeError(f'Could not update rss_feed_health: {exc}') from exc
 
 
-def db_get_all_rss_feeds(db_location):
+def db_get_all_rss_feeds(db_location, data_db_location=None):
     """Return every feed row, including disabled and tombstoned.
 
-    Used by the exporter and any future admin tooling. Each row is a dict
-    with all canonical columns from ``rss_feeds``.
+    Merges feed *identity* (control DB ``rss_feeds``) with per-feed *health*
+    (data DB ``rss_feed_health``) on ``normalized_url``. When
+    ``data_db_location`` is omitted both come from ``db_location``. Each row
+    is a dict carrying the full set of identity + health columns; feeds with
+    no health row yet get NULL health values (and ``consecutive_failures``
+    of 0). Used by the exporter and admin tooling.
     """
-    cols = ['feed_id', 'feed_url', 'normalized_url', 'enabled', 'added_at',
-            'deleted_at', 'last_fetched_at', 'last_success_at', 'last_status',
-            'last_error', 'consecutive_failures', 'etag', 'last_modified',
-            'latest_entry_at', 'site_link']
+    data_db_location = data_db_location or db_location
+    id_cols = ['feed_id', 'feed_url', 'normalized_url', 'enabled',
+               'added_at', 'deleted_at']
+    health_cols = ['last_fetched_at', 'last_success_at', 'last_status',
+                   'last_error', 'consecutive_failures', 'etag',
+                   'last_modified', 'latest_entry_at', 'site_link']
     try:
         with sqlite3.connect(db_location) as db:
             _ensure_rss_feeds_table(db)
             cur = db.execute(
-                f'SELECT {", ".join(cols)} FROM rss_feeds '
+                f'SELECT {", ".join(id_cols)} FROM rss_feeds '
                 'ORDER BY normalized_url'
             )
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
+            feeds = [dict(zip(id_cols, row)) for row in cur.fetchall()]
     except sqlite3.Error as exc:
         raise RuntimeError(f'Could not load rss_feeds: {exc}') from exc
+
+    try:
+        with sqlite3.connect(data_db_location) as db:
+            _ensure_rss_feed_health_table(db)
+            cur = db.execute(
+                f'SELECT normalized_url, {", ".join(health_cols)} '
+                'FROM rss_feed_health'
+            )
+            health = {
+                row[0]: dict(zip(health_cols, row[1:]))
+                for row in cur.fetchall()
+            }
+    except sqlite3.Error as exc:
+        raise RuntimeError(f'Could not load rss_feed_health: {exc}') from exc
+
+    for feed in feeds:
+        h = health.get(feed['normalized_url'])
+        for col in health_cols:
+            if h is not None:
+                feed[col] = h[col]
+            else:
+                feed[col] = 0 if col == 'consecutive_failures' else None
+    return feeds
+
 
 
 def db_get_reddit_states(db_location):

@@ -205,7 +205,7 @@ class RedditRunTests(unittest.TestCase):
              patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
             reddit_links.run(self.reddit_config, self.db_path)
 
-        get_subreddits.assert_called_once_with(self.reddit_config, self.db_path)
+        get_subreddits.assert_called_once_with(self.reddit_config, self.db_path, None)
         parse_posts.assert_called_once()
         db_insert.assert_not_called()
         set_states.assert_called_once_with(state_updates, self.db_path)
