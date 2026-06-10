@@ -12,7 +12,8 @@ import type {
   BlueskyFollowsSnapshot,
 } from "../models/bluesky-follows";
 
-type DbConfig = Pick<AppConfig, "fetchlinksDbPath">;
+type DbConfig = Pick<AppConfig, "fetchlinksDbPath"> &
+  Partial<Pick<AppConfig, "controlDbPath">>;
 
 type Env = Partial<Record<string, string | undefined>>;
 
@@ -33,51 +34,29 @@ const SELECT_COLUMNS = `
   f.display_name AS displayName,
   f.synced_at    AS syncedAt,
   (
-    SELECT MAX(p.date_created) FROM posts p
+    SELECT MAX(p.date_created) FROM data.posts p
     WHERE p.source_type = 'bluesky'
       AND LOWER(p.source) = '${BLUESKY_PROFILE_PREFIX}' || LOWER(f.handle)
   )              AS latestPostAt,
   (
-    SELECT p.source FROM posts p
+    SELECT p.source FROM data.posts p
     WHERE p.source_type = 'bluesky'
       AND LOWER(p.source) = '${BLUESKY_PROFILE_PREFIX}' || LOWER(f.handle)
     LIMIT 1
   )              AS postSource
 `;
 
-// Idempotent guard so the web admin can read the snapshot even if the
-// ingest bootstrap hasn't created the table yet. Mirrors
-// table_bluesky_follows_configure in ingest/db_setup.py.
-function ensureBlueskyFollowsSchema(database: WritableFetchlinksDatabase): void {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS bluesky_follows (
-      did          TEXT PRIMARY KEY,
-      handle       TEXT NOT NULL,
-      display_name TEXT,
-      synced_at    TEXT NOT NULL
-    )
-  `);
-  database.exec(
-    "CREATE INDEX IF NOT EXISTS idx_bluesky_follows_handle ON bluesky_follows(handle)",
-  );
-}
-
 export function openWritableBlueskyDatabase(
   config: DbConfig,
 ): WritableFetchlinksDatabase {
-  const database = openWritableFetchlinksDatabase(config);
-  ensureBlueskyFollowsSchema(database);
-  return database;
+  return openWritableFetchlinksDatabase(config);
 }
 
 export function withWritableBlueskyDatabase<T>(
   config: DbConfig,
   callback: (database: WritableFetchlinksDatabase) => T,
 ): T {
-  return withWritableFetchlinksDatabase(config, (database) => {
-    ensureBlueskyFollowsSchema(database);
-    return callback(database);
-  });
+  return withWritableFetchlinksDatabase(config, callback);
 }
 
 export function openConfiguredWritableBlueskyDatabase(
@@ -100,7 +79,7 @@ function rowToFollow(row: BlueskyFollowRow): BlueskyFollow {
 export function getBlueskyFollows(database: DatabaseSync): BlueskyFollowsSnapshot {
   const rows = database
     .prepare(
-      `SELECT ${SELECT_COLUMNS} FROM bluesky_follows f ORDER BY LOWER(f.handle) ASC`,
+      `SELECT ${SELECT_COLUMNS} FROM data.bluesky_follows f ORDER BY LOWER(f.handle) ASC`,
     )
     .all() as BlueskyFollowRow[];
   const follows = rows.map(rowToFollow);

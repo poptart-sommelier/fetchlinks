@@ -50,6 +50,25 @@ function createFeedsFixture(): Fixture {
       (1, 'https://a.example/feed', 'https://a.example/feed', 1, '2026-01-01 00:00:00', NULL, NULL, 0, 'https://a.example/'),
       (2, 'https://b.example/feed', 'https://b.example/feed', 0, '2026-01-02 00:00:00', NULL, 'HTTP 500', 10, NULL),
       (3, 'https://c.example/feed', 'https://c.example/feed', 0, '2026-01-03 00:00:00', '2026-02-01 00:00:00', NULL, 0, NULL);
+
+    CREATE TABLE rss_feed_health (
+      normalized_url       TEXT PRIMARY KEY,
+      last_fetched_at      TEXT,
+      last_success_at      TEXT,
+      last_status          INTEGER,
+      last_error           TEXT,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      etag                 TEXT,
+      last_modified        TEXT,
+      latest_entry_at      TEXT,
+      site_link            TEXT
+    );
+
+    INSERT INTO rss_feed_health
+      (normalized_url, last_error, consecutive_failures, site_link)
+    VALUES
+      ('https://a.example/feed', NULL, 0, 'https://a.example/'),
+      ('https://b.example/feed', 'HTTP 500', 10, NULL);
   `);
   database.close();
   return {
@@ -180,6 +199,26 @@ describe("countRssFeedsByStatus", () => {
         (2, 'https://fails.example/feed',  'https://fails.example/feed',  1, 'x', 200, 3),
         (3, 'https://http500.example/feed','https://http500.example/feed',1, 'x', 500, 0),
         (4, 'https://disabled.example/feed','https://disabled.example/feed',0,'x',500, 5);
+
+      CREATE TABLE rss_feed_health (
+        normalized_url       TEXT PRIMARY KEY,
+        last_fetched_at      TEXT,
+        last_success_at      TEXT,
+        last_status          INTEGER,
+        last_error           TEXT,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        etag                 TEXT,
+        last_modified        TEXT,
+        latest_entry_at      TEXT,
+        site_link            TEXT
+      );
+      INSERT INTO rss_feed_health
+        (normalized_url, last_status, consecutive_failures)
+      VALUES
+        ('https://ok.example/feed',      200, 0),
+        ('https://fails.example/feed',   200, 3),
+        ('https://http500.example/feed', 500, 0),
+        ('https://disabled.example/feed',500, 5);
     `);
     database.close();
     try {
@@ -361,6 +400,138 @@ describe("openWritableFetchlinksDatabase", () => {
         );
       } finally {
         database.close();
+      }
+    } finally {
+      fixture.cleanup();
+    }
+  });
+});
+
+describe("two-file mode (separate control.db and data.db)", () => {
+  type TwoFileFixture = {
+    controlPath: string;
+    dataPath: string;
+    cleanup: () => void;
+  };
+
+  function createTwoFileFixture(): TwoFileFixture {
+    const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-split-"));
+    const controlPath = path.join(directory, "control.db");
+    const dataPath = path.join(directory, "data.db");
+
+    const control = new DatabaseSync(controlPath);
+    control.exec(`
+      CREATE TABLE rss_feeds (
+        feed_id        INTEGER PRIMARY KEY,
+        feed_url       TEXT NOT NULL,
+        normalized_url TEXT NOT NULL UNIQUE,
+        enabled        INTEGER NOT NULL DEFAULT 1,
+        added_at       TEXT NOT NULL,
+        deleted_at     TEXT
+      );
+      INSERT INTO rss_feeds (feed_id, feed_url, normalized_url, enabled, added_at)
+      VALUES
+        (1, 'https://ok.example/feed',    'https://ok.example/feed',    1, 'x'),
+        (2, 'https://fails.example/feed', 'https://fails.example/feed', 1, 'x');
+    `);
+    control.close();
+
+    const data = new DatabaseSync(dataPath);
+    data.exec(`
+      CREATE TABLE rss_feed_health (
+        normalized_url       TEXT PRIMARY KEY,
+        last_fetched_at      TEXT,
+        last_success_at      TEXT,
+        last_status          INTEGER,
+        last_error           TEXT,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        etag                 TEXT,
+        last_modified        TEXT,
+        latest_entry_at      TEXT,
+        site_link            TEXT
+      );
+      INSERT INTO rss_feed_health
+        (normalized_url, last_status, last_error, consecutive_failures, site_link)
+      VALUES
+        ('https://ok.example/feed',    200, NULL,       0, 'https://ok.example/'),
+        ('https://fails.example/feed', 200, 'timeout',  4, NULL);
+    `);
+    data.close();
+
+    return {
+      controlPath,
+      dataPath,
+      cleanup: () => rmSync(directory, { force: true, recursive: true }),
+    };
+  }
+
+  it("merges control identity with attached read-only data health", () => {
+    const fixture = createTwoFileFixture();
+    try {
+      const feeds = withWritableFetchlinksDatabase(
+        { fetchlinksDbPath: fixture.dataPath, controlDbPath: fixture.controlPath },
+        (db) => listRssFeeds(db),
+      );
+      const byUrl = Object.fromEntries(
+        feeds.map((f) => [
+          f.feedUrl,
+          { siteLink: f.siteLink, consecutiveFailures: f.consecutiveFailures },
+        ]),
+      );
+      expect(byUrl).toEqual({
+        "https://ok.example/feed": {
+          siteLink: "https://ok.example/",
+          consecutiveFailures: 0,
+        },
+        "https://fails.example/feed": {
+          siteLink: null,
+          consecutiveFailures: 4,
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("counts attached health failures as errors", () => {
+    const fixture = createTwoFileFixture();
+    try {
+      const counts = withWritableFetchlinksDatabase(
+        { fetchlinksDbPath: fixture.dataPath, controlDbPath: fixture.controlPath },
+        (db) => countRssFeedsByStatus(db),
+      );
+      expect(counts).toEqual({
+        active: 2,
+        disabled: 0,
+        removed: 0,
+        errors: 1,
+        total: 2,
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("writes admin changes to control.db while data.db stays read-only", () => {
+    const fixture = createTwoFileFixture();
+    try {
+      const result = withWritableFetchlinksDatabase(
+        { fetchlinksDbPath: fixture.dataPath, controlDbPath: fixture.controlPath },
+        (db) => addRssFeed(db, "https://new.example/feed"),
+      );
+      expect(result.status).toBe("added");
+
+      // The new identity row must land in control.db, not data.db.
+      const control = new DatabaseSync(fixture.controlPath);
+      try {
+        const row = control
+          .prepare(
+            "SELECT COUNT(*) AS n FROM rss_feeds WHERE normalized_url = ?",
+          )
+          .get("https://new.example/feed") as { n: number };
+        expect(row.n).toBe(1);
+      } finally {
+        control.close();
       }
     } finally {
       fixture.cleanup();

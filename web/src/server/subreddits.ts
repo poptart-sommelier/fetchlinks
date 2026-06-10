@@ -13,7 +13,8 @@ import type {
   SubredditStatus,
 } from "../models/subreddits";
 
-type DbConfig = Pick<AppConfig, "fetchlinksDbPath">;
+type DbConfig = Pick<AppConfig, "fetchlinksDbPath"> &
+  Partial<Pick<AppConfig, "controlDbPath">>;
 
 type Env = Partial<Record<string, string | undefined>>;
 
@@ -40,12 +41,12 @@ const SELECT_COLUMNS = `
   s.deleted_at      AS deletedAt,
   rs.time_created   AS lastFetchedAt,
   (
-    SELECT MAX(p.date_created) FROM posts p
+    SELECT MAX(p.date_created) FROM data.posts p
     WHERE p.source_type = 'reddit'
       AND LOWER(p.source) = '${REDDIT_URL_PREFIX}' || s.normalized_name
   )                 AS latestPostAt,
   (
-    SELECT p.source FROM posts p
+    SELECT p.source FROM data.posts p
     WHERE p.source_type = 'reddit'
       AND LOWER(p.source) = '${REDDIT_URL_PREFIX}' || s.normalized_name
     LIMIT 1
@@ -53,52 +54,19 @@ const SELECT_COLUMNS = `
 `;
 
 const FROM_CLAUSE =
-  "FROM subreddits s LEFT JOIN reddit_state rs ON rs.subreddit = s.normalized_name";
-
-// Idempotent guard so the web admin can read/write the subreddit list even
-// if the ingest bootstrap hasn't created the table yet. Mirrors
-// table_subreddits_configure in ingest/db_setup.py.
-function ensureSubredditsSchema(database: WritableFetchlinksDatabase): void {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS subreddits (
-      subreddit_id    INTEGER PRIMARY KEY,
-      name            TEXT NOT NULL,
-      normalized_name TEXT NOT NULL UNIQUE,
-      enabled         INTEGER NOT NULL DEFAULT 1,
-      added_at        TEXT NOT NULL,
-      deleted_at      TEXT
-    )
-  `);
-  database.exec(
-    "CREATE INDEX IF NOT EXISTS idx_subreddits_live ON subreddits(enabled, deleted_at)",
-  );
-  // reddit_state and posts are read via LEFT JOIN / subqueries; make sure
-  // reddit_state exists so the JOIN doesn't error on a fresh DB.
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS reddit_state (
-      subreddit TEXT PRIMARY KEY,
-      last_seen_fullname TEXT,
-      time_created TEXT
-    )
-  `);
-}
+  "FROM subreddits s LEFT JOIN data.reddit_state rs ON rs.subreddit = s.normalized_name";
 
 export function openWritableSubredditsDatabase(
   config: DbConfig,
 ): WritableFetchlinksDatabase {
-  const database = openWritableFetchlinksDatabase(config);
-  ensureSubredditsSchema(database);
-  return database;
+  return openWritableFetchlinksDatabase(config);
 }
 
 export function withWritableSubredditsDatabase<T>(
   config: DbConfig,
   callback: (database: WritableFetchlinksDatabase) => T,
 ): T {
-  return withWritableFetchlinksDatabase(config, (database) => {
-    ensureSubredditsSchema(database);
-    return callback(database);
-  });
+  return withWritableFetchlinksDatabase(config, callback);
 }
 
 export function openConfiguredWritableSubredditsDatabase(
