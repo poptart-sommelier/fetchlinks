@@ -30,8 +30,13 @@ To use a non-default config file, pass `--config /path/to/fetchlinks.toml`.
 
 - Runtime config: `ingest/data/config/fetchlinks.toml`
   (paths, ingest policy, and per-source `enabled` flags + credential paths).
-- RSS feeds: stored in the SQLite `rss_feeds` table (the live source of truth).
-  Manage with `rss_feed_import.py` (`--input` / `--pruned` / `--seed-if-empty`).
+- RSS feeds: feed identity (URL, `enabled`, `deleted_at`) lives in the SQLite
+  `rss_feeds` table (the live source of truth); per-feed health (cache headers,
+  consecutive failures, last error/status) lives in a separate
+  `rss_feed_health` table keyed by `normalized_url`. In single-host mode both
+  share one file; the two-host split keeps identity in the control DB and
+  health in the data DB (`[paths].control_db`, defaults to `db`).
+  Manage feeds with `rss_feed_import.py` (`--input` / `--pruned` / `--seed-if-empty`).
   A deterministic snapshot of the table is written by `export_rss_feeds.py` to
   `[sources.rss].export_path`; in dev this intentionally updates
   `ingest/data/config/rss_feeds.txt`, the seed file you review and commit.

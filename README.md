@@ -8,8 +8,12 @@ The project is organized as a small monorepo with two runtime apps:
 - `web/` - Next.js app that reads the SQLite database and renders the UI.
 
 The shared boundary between the apps is the SQLite database. The ingest app owns
-creating and updating the database; the web app opens it read-only via the
-`FETCHLINKS_DB` environment variable.
+creating and updating the database; the web app reads it via the
+`FETCHLINKS_DB` environment variable (read-only on public pages, read-write on
+`/admin/*`). Ingest can optionally run on a separate host (a home Raspberry Pi)
+from the web app, in which case the data splits into a VM-owned control DB and a
+Pi-owned data DB; see [OVERVIEW.md](OVERVIEW.md) and
+[deploy/sync/README.md](deploy/sync/README.md).
 
 For project orientation (goal, architecture, cost, layout, security) see
 [OVERVIEW.md](OVERVIEW.md). For deploy and operations see

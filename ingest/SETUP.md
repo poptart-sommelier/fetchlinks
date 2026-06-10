@@ -97,6 +97,11 @@ All non-secret runtime configuration lives in a single TOML file:
 or relative to the TOML file's directory. The schema is:
 
 - `[paths]` — `db`, `log_file`, `log_level` (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`).
+  Optional `control_db` points at the admin-owned catalog DB (`rss_feeds` +
+  `subreddits` identity/flags); when unset it defaults to `db`, so single-host
+  dev and production keep using one physical file. Set it to a separate path
+  only for the two-host (Pi ingest + VM web) split — see
+  `deploy/sync/README.md`.
 - `[ingest]` — `max_post_age_months`, `excluded_url_host_keywords`,
   `excluded_url_or_description_keywords`.
 - `[retention]` — `enabled` (default `true`), optional `max_post_age_months`
@@ -105,8 +110,9 @@ or relative to the TOML file's directory. The schema is:
 - `[sources.rss]` — `enabled`, optional `seed_file` (read only when the
   `rss_feeds` table is empty), optional `export_path` (where
   `export_rss_feeds.py` writes the DB snapshot; in dev this is the seed
-  file), `auto_disable_after_failures` (default `10`; set `0` to disable),
-  `request_timeout_seconds` (default `10`).
+  file), `request_timeout_seconds` (default `10`). The
+  `auto_disable_after_failures` field is still accepted (default `10`) but no
+  longer disables feeds — see the "RSS feeds" subsection below.
 - `[sources.reddit]` — `enabled`, `credential_location`, `subreddits`,
   optional `listing_limit` (default 100) and `max_pages` (default 5).
 - `[sources.bluesky]` — `enabled`, `credential_location`, `timeline_limit`.
@@ -128,10 +134,14 @@ Notes:
 ### RSS feeds
 
 The `rss_feeds` SQLite table is the source of truth for which feeds get
-polled. Each row tracks the URL, an `enabled` flag, a `deleted_at`
-tombstone, and per-feed health (etag / last-modified cache headers,
-consecutive failure count, last error). The ingest job auto-disables a
-feed after `auto_disable_after_failures` consecutive failures.
+polled. Each row tracks the URL, an `enabled` flag, and a `deleted_at`
+tombstone. Per-feed health (etag / last-modified cache headers, consecutive
+failure count, last error, last status) lives in a separate `rss_feed_health`
+table keyed by `normalized_url`; in single-host mode both tables share one
+file and join natively, while the two-host split keeps identity in the
+control DB and health in the data DB. Feeds are **not** auto-disabled on
+failure: the ingest job keeps counting `consecutive_failures` + `last_error`,
+and the web admin surfaces persistently failing feeds for manual removal.
 
 Three workflows feed rows into the table via `rss_feed_import.py`:
 

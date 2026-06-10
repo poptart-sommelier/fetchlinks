@@ -8,7 +8,9 @@ The scaffold targets Node 24.15 or newer with npm 11.12 or newer.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` for local development and set `FETCHLINKS_DB` to the absolute path of the SQLite database written by the fetchlinks ingestion app. The public pages treat this database as read-only; the `/admin/feeds` route opens it read-write to manage the `rss_feeds` table.
+Copy `.env.example` to `.env.local` for local development and set `FETCHLINKS_DB` to the absolute path of the SQLite database written by the fetchlinks ingestion app. The public pages treat this database as read-only; the `/admin/*` routes (`feeds`, `reddit`, `bluesky`, `mastodon`) open it read-write to manage feed/subreddit identity and review per-source health.
+
+For the two-host split (Pi ingest + VM web) the database is split into a VM-owned control DB (feed/subreddit identity + on/off) and a Pi-owned data DB (posts, health, follows). Set `FETCHLINKS_CONTROL_DB` to the control DB and `FETCHLINKS_DB` to the data DB; the admin opens the control DB read-write and attaches the data DB read-only. When `FETCHLINKS_CONTROL_DB` is unset it defaults to `FETCHLINKS_DB`, so single-host dev uses one file. See `deploy/sync/README.md`.
 
 To enable the admin UI, also set `FETCHLINKS_ADMIN_USER` and `FETCHLINKS_ADMIN_PASS`. Requests to `/admin/*` are gated by HTTP Basic auth against those values. If either is unset, the admin route returns HTTP 503.
 
