@@ -3,12 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { loadAppConfig } from "../../../server/config";
+import { getSqlClient } from "../../../server/sql";
 import {
   addSubreddit,
   restoreSubreddit,
   softDeleteSubreddit,
-  withWritableSubredditsDatabase,
 } from "../../../server/subreddits";
 
 const ADMIN_PATH = "/admin/reddit";
@@ -23,10 +22,7 @@ function parseSubredditId(value: FormDataEntryValue | null): number {
 
 export async function addSubredditAction(formData: FormData): Promise<void> {
   const name = String(formData.get("subreddit_name") ?? "");
-  const config = loadAppConfig(process.env);
-  const result = withWritableSubredditsDatabase(config, (db) =>
-    addSubreddit(db, name),
-  );
+  const result = await addSubreddit(getSqlClient(process.env), name);
   revalidatePath(ADMIN_PATH);
 
   const params = new URLSearchParams();
@@ -48,10 +44,7 @@ export async function deleteSubredditAction(
   formData: FormData,
 ): Promise<void> {
   const subredditId = parseSubredditId(formData.get("subreddit_id"));
-  const config = loadAppConfig(process.env);
-  withWritableSubredditsDatabase(config, (db) =>
-    softDeleteSubreddit(db, subredditId),
-  );
+  await softDeleteSubreddit(getSqlClient(process.env), subredditId);
   revalidatePath(ADMIN_PATH);
 }
 
@@ -59,9 +52,6 @@ export async function restoreSubredditAction(
   formData: FormData,
 ): Promise<void> {
   const subredditId = parseSubredditId(formData.get("subreddit_id"));
-  const config = loadAppConfig(process.env);
-  withWritableSubredditsDatabase(config, (db) =>
-    restoreSubreddit(db, subredditId),
-  );
+  await restoreSubreddit(getSqlClient(process.env), subredditId);
   revalidatePath(ADMIN_PATH);
 }

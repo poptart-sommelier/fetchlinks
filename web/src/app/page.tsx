@@ -7,11 +7,8 @@ import type {
   PostUrl,
   SourceType,
 } from "../models/read-models";
-import {
-  getPosts,
-  openConfiguredFetchlinksDatabase,
-  type PostFilters,
-} from "../server/db";
+import { getPosts, type PostFilters } from "../server/db";
+import { getSqlClient } from "../server/sql";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -60,10 +57,10 @@ export default async function Home({ searchParams }: HomeProps = {}) {
   const page = getPageFromSearchParams(resolvedSearchParams);
   const filters = getFiltersFromSearchParams(resolvedSearchParams);
 
-  return <LatestPostsView result={loadLatestPosts({ page, filters })} />;
+  return <LatestPostsView result={await loadLatestPosts({ page, filters })} />;
 }
 
-export function loadLatestPosts({
+export async function loadLatestPosts({
   env = process.env,
   filters = {},
   page = 1,
@@ -71,27 +68,21 @@ export function loadLatestPosts({
   env?: Env;
   filters?: PostFilters;
   page?: number;
-} = {}): LatestPostsResult {
+} = {}): Promise<LatestPostsResult> {
   const activeFilters = normalizeFilters(filters);
 
   try {
-    const database = openConfiguredFetchlinksDatabase(env);
+    const sql = getSqlClient(env);
 
-    try {
-      return {
-        status: "ready",
-        page: getPosts(database, {
-          ...activeFilters,
-          page,
-          pageSize: POSTS_PER_PAGE,
-        }),
-        filters: activeFilters,
-      };
-    } finally {
-      if (database.isOpen) {
-        database.close();
-      }
-    }
+    return {
+      status: "ready",
+      page: await getPosts(sql, {
+        ...activeFilters,
+        page,
+        pageSize: POSTS_PER_PAGE,
+      }),
+      filters: activeFilters,
+    };
   } catch {
     return { status: "error" };
   }

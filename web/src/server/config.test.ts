@@ -1,70 +1,95 @@
 import { describe, expect, it } from "vitest";
 
-import { ConfigError, loadAppConfig, toReadOnlySqliteUri } from "./config";
+import {
+  ConfigError,
+  describeDatabaseUrl,
+  loadAppConfig,
+  parseDatabaseUrl,
+} from "./config";
+
+const VALID =
+  "postgresql://web:secret@ep-example.eu-west-2.aws.neon.tech/fetchlinks?sslmode=require";
 
 describe("loadAppConfig", () => {
-  it("requires FETCHLINKS_DB", () => {
+  it("requires DATABASE_URL", () => {
     expect(() => loadAppConfig({})).toThrowError(ConfigError);
-    expect(() => loadAppConfig({})).toThrowError(/FETCHLINKS_DB is required/);
+    expect(() => loadAppConfig({})).toThrowError(/DATABASE_URL is required/);
   });
 
-  it("rejects an empty FETCHLINKS_DB", () => {
-    expect(() => loadAppConfig({ FETCHLINKS_DB: "   " })).toThrowError(
-      /FETCHLINKS_DB is required/,
+  it("rejects a blank DATABASE_URL", () => {
+    expect(() => loadAppConfig({ DATABASE_URL: "   " })).toThrowError(
+      /DATABASE_URL is required/,
     );
   });
 
-  it("rejects a relative FETCHLINKS_DB", () => {
-    expect(() =>
-      loadAppConfig({ FETCHLINKS_DB: "data/fetchlinks.db" }),
-    ).toThrowError(/FETCHLINKS_DB must be an absolute path/);
-  });
-
-  it("loads the configured database path and read-only SQLite URI", () => {
-    const config = loadAppConfig({
-      FETCHLINKS_DB: "/home/ubuntu/fetchlinks/ingest/db/fetchlinks.db",
-    });
-
-    expect(config).toEqual({
-      fetchlinksDbPath: "/home/ubuntu/fetchlinks/ingest/db/fetchlinks.db",
-      fetchlinksDbReadOnlyUri: "file:///home/ubuntu/fetchlinks/ingest/db/fetchlinks.db?mode=ro",
-      controlDbPath: "/home/ubuntu/fetchlinks/ingest/db/fetchlinks.db",
+  it("returns the connection string unchanged", () => {
+    expect(loadAppConfig({ DATABASE_URL: VALID })).toEqual({
+      databaseUrl: VALID,
     });
   });
 
-  it("defaults the control DB to the data DB when FETCHLINKS_CONTROL_DB is unset", () => {
-    const config = loadAppConfig({
-      FETCHLINKS_DB: "/srv/fetchlinks/data.db",
-    });
-
-    expect(config.controlDbPath).toBe("/srv/fetchlinks/data.db");
-  });
-
-  it("resolves a separate control DB when FETCHLINKS_CONTROL_DB is set", () => {
-    const config = loadAppConfig({
-      FETCHLINKS_DB: "/srv/fetchlinks/data.db",
-      FETCHLINKS_CONTROL_DB: "/srv/fetchlinks/control.db",
-    });
-
-    expect(config.fetchlinksDbPath).toBe("/srv/fetchlinks/data.db");
-    expect(config.controlDbPath).toBe("/srv/fetchlinks/control.db");
-  });
-
-  it("rejects a relative FETCHLINKS_CONTROL_DB", () => {
-    expect(() =>
-      loadAppConfig({
-        FETCHLINKS_DB: "/srv/fetchlinks/data.db",
-        FETCHLINKS_CONTROL_DB: "control.db",
-      }),
-    ).toThrowError(/FETCHLINKS_CONTROL_DB must be an absolute path/);
+  it("trims surrounding whitespace", () => {
+    expect(loadAppConfig({ DATABASE_URL: `  ${VALID}  ` }).databaseUrl).toBe(
+      VALID,
+    );
   });
 });
 
-
-describe("toReadOnlySqliteUri", () => {
-  it("encodes paths for SQLite URI use", () => {
-    expect(toReadOnlySqliteUri("/tmp/fetch links #1.db")).toBe(
-      "file:///tmp/fetch%20links%20%231.db?mode=ro",
+describe("parseDatabaseUrl", () => {
+  it("accepts both PostgreSQL schemes", () => {
+    expect(parseDatabaseUrl("postgres://host/db").protocol).toBe("postgres:");
+    expect(parseDatabaseUrl("postgresql://host/db").protocol).toBe(
+      "postgresql:",
     );
+  });
+
+  it("rejects a value that is not a URL", () => {
+    expect(() => parseDatabaseUrl("not a url")).toThrowError(
+      /must be a valid connection URL/,
+    );
+  });
+
+  // Parses as a URL with a "host:" scheme, so it has to be caught by the
+  // scheme check rather than by URL parsing.
+  it("rejects a bare host:port", () => {
+    expect(() => parseDatabaseUrl("host:5432/fetchlinks")).toThrowError(
+      /postgres:\/\/ or postgresql:\/\//,
+    );
+  });
+
+  // A file path here would mean a SQLite setting was carried forward.
+  it("rejects a non-PostgreSQL scheme", () => {
+    expect(() => parseDatabaseUrl("file:///srv/fetchlinks.db")).toThrowError(
+      /postgres:\/\/ or postgresql:\/\//,
+    );
+    expect(() => parseDatabaseUrl("mysql://host/db")).toThrowError(
+      /postgres:\/\/ or postgresql:\/\//,
+    );
+  });
+
+  it("rejects a URL with no database name", () => {
+    expect(() => parseDatabaseUrl("postgres://host")).toThrowError(
+      /must include a database name/,
+    );
+    expect(() => parseDatabaseUrl("postgres://host/")).toThrowError(
+      /must include a database name/,
+    );
+  });
+
+  it("rejects a URL with no host", () => {
+    expect(() => parseDatabaseUrl("postgres:///fetchlinks")).toThrowError(
+      /must include a host/,
+    );
+  });
+});
+
+describe("describeDatabaseUrl", () => {
+  it("omits the credentials", () => {
+    const described = describeDatabaseUrl(VALID);
+
+    expect(described).toBe(
+      "postgresql://ep-example.eu-west-2.aws.neon.tech/fetchlinks",
+    );
+    expect(described).not.toContain("secret");
   });
 });

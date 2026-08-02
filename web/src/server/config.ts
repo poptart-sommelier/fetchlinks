@@ -1,12 +1,7 @@
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
 type Env = Partial<Record<string, string | undefined>>;
 
 export type AppConfig = {
-  fetchlinksDbPath: string;
-  fetchlinksDbReadOnlyUri: string;
-  controlDbPath: string;
+  databaseUrl: string;
 };
 
 export class ConfigError extends Error {
@@ -16,62 +11,66 @@ export class ConfigError extends Error {
   }
 }
 
+const ALLOWED_PROTOCOLS = new Set(["postgres:", "postgresql:"]);
 
 export function loadAppConfig(env: Env = process.env): AppConfig {
-  const fetchlinksDbPath = readRequiredAbsolutePath(env, "FETCHLINKS_DB");
-  // The control DB holds the admin-edited catalog (rss_feeds + subreddits
-  // identity). It defaults to the data DB so single-host installs keep
-  // using one physical file; set FETCHLINKS_CONTROL_DB to split it out for
-  // a two-host (Pi ingest + VM web) deployment.
-  const controlDbPath =
-    readOptionalAbsolutePath(env, "FETCHLINKS_CONTROL_DB") ?? fetchlinksDbPath;
-
-  return {
-    fetchlinksDbPath,
-    fetchlinksDbReadOnlyUri: toReadOnlySqliteUri(fetchlinksDbPath),
-    controlDbPath,
-  };
+  return { databaseUrl: readDatabaseUrl(env, "DATABASE_URL") };
 }
 
-export function toReadOnlySqliteUri(dbPath: string): string {
-  const trimmedPath = dbPath.trim();
+/**
+ * Parse and validate a PostgreSQL connection string.
+ *
+ * The check is deliberately strict about scheme, host and database name. A
+ * malformed URL that reaches the driver instead surfaces as a connection error
+ * at request time, on a page that has already begun rendering; validating here
+ * turns a misconfigured deployment into an immediate, named failure.
+ */
+export function parseDatabaseUrl(value: string): URL {
+  let url: URL;
 
-  if (trimmedPath.length === 0) {
-    throw new ConfigError("FETCHLINKS_DB must not be empty.");
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ConfigError("DATABASE_URL must be a valid connection URL.");
   }
 
-  const fileUrl = pathToFileURL(trimmedPath);
-  fileUrl.searchParams.set("mode", "ro");
+  if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
+    throw new ConfigError(
+      "DATABASE_URL must use the postgres:// or postgresql:// scheme.",
+    );
+  }
 
-  return fileUrl.href;
+  if (!url.hostname) {
+    throw new ConfigError("DATABASE_URL must include a host.");
+  }
+
+  if (url.pathname.replace(/^\//, "") === "") {
+    throw new ConfigError("DATABASE_URL must include a database name.");
+  }
+
+  return url;
 }
 
-function readRequiredAbsolutePath(env: Env, name: string): string {
+/**
+ * A connection string with the credentials removed, safe for a log line or an
+ * error message. Nothing should ever surface the raw URL.
+ */
+export function describeDatabaseUrl(value: string): string {
+  const url = parseDatabaseUrl(value);
+
+  return `${url.protocol}//${url.hostname}${url.pathname}`;
+}
+
+function readDatabaseUrl(env: Env, name: string): string {
   const value = env[name]?.trim();
 
   if (!value) {
     throw new ConfigError(
-      `${name} is required. Set it to the absolute path of the fetchlinks SQLite database.`,
+      `${name} is required. Set it to the PostgreSQL connection string for the fetchlinks database.`,
     );
   }
 
-  if (!path.isAbsolute(value)) {
-    throw new ConfigError(`${name} must be an absolute path.`);
-  }
-
-  return value;
-}
-
-function readOptionalAbsolutePath(env: Env, name: string): string | undefined {
-  const value = env[name]?.trim();
-
-  if (!value) {
-    return undefined;
-  }
-
-  if (!path.isAbsolute(value)) {
-    throw new ConfigError(`${name} must be an absolute path.`);
-  }
+  parseDatabaseUrl(value);
 
   return value;
 }

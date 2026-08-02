@@ -1,20 +1,38 @@
 # Fetchlinks Web
 
-This is the Next.js TypeScript application for the Fetchlinks web UI. It reads the SQLite database written by the ingest app.
+The Next.js TypeScript application for the Fetchlinks web UI. It reads the
+PostgreSQL database that the publisher writes.
 
 ## Runtime
 
-The scaffold targets Node 24.15 or newer with npm 11.12 or newer.
+Node 24.15 or newer with npm 11.12 or newer.
 
 ## Environment
 
-Copy `.env.example` to `.env.local` for local development and set `FETCHLINKS_DB` to the absolute path of the SQLite database written by the fetchlinks ingestion app. The public pages treat this database as read-only; the `/admin/*` routes (`feeds`, `reddit`, `bluesky`, `mastodon`) open it read-write to manage feed/subreddit identity and review per-source health.
+Copy `.env.example` to `.env.local` and set `DATABASE_URL` to the PostgreSQL
+connection string for the `fetchlinks_web` role. That is the only database
+setting: there is no file path, and the collector's source credentials never
+reach this application.
 
-For the two-host split (Pi ingest + VM web) the database is split into a VM-owned control DB (feed/subreddit identity + on/off) and a Pi-owned data DB (posts, health, follows). Set `FETCHLINKS_CONTROL_DB` to the control DB and `FETCHLINKS_DB` to the data DB; the admin opens the control DB read-write and attaches the data DB read-only. When `FETCHLINKS_CONTROL_DB` is unset it defaults to `FETCHLINKS_DB`, so single-host dev uses one file. See `deploy/sync/README.md`.
+The application connects with `@neondatabase/serverless`, which issues each
+query as an HTTP request rather than holding a connection. That suits Vercel
+functions, where a pooled TCP connection would be established and discarded per
+invocation, but it also means the driver only speaks to a Neon endpoint. Point
+`DATABASE_URL` at your Neon **development** branch for local work; a plain local
+PostgreSQL will not answer it.
 
-To enable the admin UI, also set `FETCHLINKS_ADMIN_USER` and `FETCHLINKS_ADMIN_PASS`. Requests to `/admin/*` are gated by HTTP Basic auth against those values. If either is unset, the admin route returns HTTP 503.
+The schema lives in [`../db/migrations`](../db/migrations) and is applied by the
+publisher, not by this application. See [`../db/README.md`](../db/README.md) for
+the table layout and for which role each connection string should use.
 
-SQLite access uses Node's built-in `node:sqlite` module, so no external SQLite npm package or native build step is required.
+Privileges do the enforcing here, not convention. `fetchlinks_web` may read
+everything and write feed and subreddit identity, but it holds no DELETE on the
+catalog, so the soft delete the admin UI performs is the only delete available
+to it.
+
+To enable the admin UI, also set `FETCHLINKS_ADMIN_USER` and
+`FETCHLINKS_ADMIN_PASS`. Requests to `/admin/*` are gated by HTTP Basic auth
+against those values. If either is unset, the admin routes return HTTP 503.
 
 ## Commands
 
@@ -31,15 +49,42 @@ npm run validate:production
 
 The development server listens on http://localhost:3000 by default.
 
-`npm run validate` runs lint, typecheck, tests, and the production build in order.
+`npm run validate` runs lint, typecheck, tests, and the production build.
 
-`npm run validate:production` runs the same validation sequence, then starts `npm run start` on a local ephemeral port with a temporary SQLite fixture database and fetches the rendered home page.
+### Tests
 
-To check production mode manually against a real database:
+The query modules are tested against a real, disposable PostgreSQL rather than a
+mock, because what they rely on — `ON CONFLICT`, a cross-schema `LEFT JOIN`,
+boolean and `timestamptz` coercion, `to_char` formatting — is behaviour a fake
+would only pretend to have. Set `FETCHLINKS_TEST_DATABASE_URL` and they run;
+leave it unset and they skip, so a checkout with no database still runs the pure
+suites.
+
+These tests connect over TCP with `pg`, so any local PostgreSQL works:
 
 ```bash
-FETCHLINKS_DB=/absolute/path/to/fetchlinks.db npm run build
-FETCHLINKS_DB=/absolute/path/to/fetchlinks.db npm run start -- --hostname 127.0.0.1 --port 3000
+docker run -d --name fetchlinks-pg -e POSTGRES_PASSWORD=fetchlinks -p 5432:5432 postgres:17
+docker exec fetchlinks-pg createdb -U postgres fetchlinks_web_test
+FETCHLINKS_TEST_DATABASE_URL=postgresql://postgres:fetchlinks@localhost:5432/fetchlinks_web_test npm run test
+```
+
+Only the transport differs from production; the SQL under test is identical.
+The Neon driver itself is exercised by the production smoke test.
+
+### Production smoke test
+
+`npm run validate:production` runs the full validation sequence, then serves the
+production build against a real Neon branch and fetches the rendered home page.
+It needs `FETCHLINKS_SMOKE_DATABASE_URL` set to the **development** branch — it
+inserts a uniquely named post, asserts the page renders it, and deletes it
+again. This is the only check that exercises the real driver, the real
+connection string and the real build together.
+
+To run production mode manually:
+
+```bash
+DATABASE_URL='postgresql://...' npm run build
+DATABASE_URL='postgresql://...' npm run start -- --hostname 127.0.0.1 --port 3000
 ```
 
 Historical notes from the Flask-to-Next.js migration live in `docs/`.

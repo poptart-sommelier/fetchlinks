@@ -1,27 +1,54 @@
 #!/usr/bin/env node
 
+/**
+ * Serve the production build against a real PostgreSQL and assert the public
+ * page renders a row inserted moments earlier.
+ *
+ * Requires FETCHLINKS_SMOKE_DATABASE_URL. The application reaches the database
+ * through Neon's HTTP driver, which only speaks to a Neon endpoint, so this has
+ * to point at a Neon branch — the development branch, never production. That
+ * constraint is the value of this check: it is the only one that exercises the
+ * real driver, the real connection string and the real build together.
+ *
+ * The fixture is namespaced with a run id and removed in a finally block, so a
+ * shared development branch is left as it was found.
+ */
+
 import { spawn } from "node:child_process";
-import { access, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
 
+import { Pool } from "pg";
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appDirectory = path.resolve(scriptDirectory, "..");
+const migrationsDirectory = path.resolve(appDirectory, "..", "db", "migrations");
+
+const databaseUrl = process.env.FETCHLINKS_SMOKE_DATABASE_URL?.trim();
+
+if (!databaseUrl) {
+  throw new Error(
+    "FETCHLINKS_SMOKE_DATABASE_URL is required. Set it to the Neon development " +
+      "branch connection string (never the production branch).",
+  );
+}
 
 await ensureBuildExists();
 
-const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "fetchlinks-production-"));
-const databasePath = path.join(temporaryDirectory, "fetchlinks.db");
+const runId = randomUUID();
+const description = `Production smoke post ${runId}`;
+const pool = new Pool({ connectionString: databaseUrl, max: 2 });
 let productionServer;
 
 try {
-  createFixtureDatabase(databasePath);
+  await applyMigrations(pool);
+  await seedFixture(pool, runId, description);
 
   const port = await getAvailablePort();
-  const pageUrl = `http://127.0.0.1:${port}/`;
+  const pageUrl = `http://127.0.0.1:${port}/?q=${runId}`;
   const command = process.platform === "win32" ? "npm.cmd" : "npm";
   const outputChunks = [];
 
@@ -31,7 +58,7 @@ try {
     {
       cwd: appDirectory,
       detached: process.platform !== "win32",
-      env: { ...process.env, FETCHLINKS_DB: databasePath },
+      env: { ...process.env, DATABASE_URL: databaseUrl },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -46,10 +73,9 @@ try {
 
   const html = await waitForPage(pageUrl, productionServer, outputChunks);
 
-  assertIncludes(html, "Production smoke post");
-  assertIncludes(html, "Production Source");
-  assertIncludes(html, ">link 1</a>");
+  assertIncludes(html, description);
   assertIncludes(html, "post-source-action");
+  assertIncludes(html, "example.com");
 
   console.log(`Production smoke test passed at ${pageUrl}`);
 } finally {
@@ -57,87 +83,56 @@ try {
     await stopServer(productionServer);
   }
 
-  await rm(temporaryDirectory, { force: true, recursive: true });
+  await removeFixture(pool, runId).catch((error) => {
+    console.error(`Failed to remove the smoke fixture for ${runId}:`, error);
+  });
+  await pool.end();
 }
 
 async function ensureBuildExists() {
   try {
     await access(path.join(appDirectory, ".next", "BUILD_ID"));
   } catch {
-    throw new Error("Production smoke test requires a Next.js build. Run npm run build first.");
+    throw new Error(
+      "Production smoke test requires a Next.js build. Run npm run build first.",
+    );
   }
 }
 
-function createFixtureDatabase(dbPath) {
-  const database = new DatabaseSync(dbPath);
-
-  try {
-    database.exec(`
-      CREATE TABLE posts (
-        idx INTEGER PRIMARY KEY,
-        source TEXT NOT NULL,
-        author TEXT,
-        description TEXT,
-        direct_link TEXT,
-        date_created TEXT NOT NULL,
-        unique_id_string TEXT NOT NULL
-      );
-
-      CREATE TABLE post_urls (
-        idx INTEGER PRIMARY KEY,
-        post_id INTEGER NOT NULL,
-        position INTEGER NOT NULL,
-        url TEXT NOT NULL,
-        url_hash TEXT NOT NULL,
-        unshortened_url TEXT,
-        FOREIGN KEY (post_id) REFERENCES posts(idx)
-      );
-    `);
-
-    database
-      .prepare(
-        `INSERT INTO posts (
-          idx,
-          source,
-          author,
-          description,
-          direct_link,
-          date_created,
-          unique_id_string
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        1,
-        "https://example.com/source",
-        "Production Source",
-        "Production smoke post",
-        "https://example.com/source-post",
-        "2026-04-28T12:00:00Z",
-        "production-smoke-post",
-      );
-
-    database
-      .prepare(
-        `INSERT INTO post_urls (
-          idx,
-          post_id,
-          position,
-          url,
-          url_hash,
-          unshortened_url
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        1,
-        1,
-        0,
-        "https://example.com/article",
-        "production-smoke-url",
-        null,
-      );
-  } finally {
-    database.close();
+async function applyMigrations(pool) {
+  for (const name of ["0001_schemas_and_catalog.sql", "0002_content.sql"]) {
+    await pool.query(
+      await readFile(path.join(migrationsDirectory, name), "utf8"),
+    );
   }
+}
+
+async function seedFixture(pool, runId, description) {
+  const { rows } = await pool.query(
+    `INSERT INTO content.posts
+       (unique_id, source, source_type, author, description, direct_link, posted_at)
+     VALUES ($1, $2, 'rss', 'Production Source', $3, $4, now())
+     RETURNING post_id`,
+    [
+      `smoke-${runId}`,
+      "https://example.com/source",
+      description,
+      "https://example.com/source-post",
+    ],
+  );
+
+  await pool.query(
+    `INSERT INTO content.post_urls (post_id, position, url, url_hash)
+     VALUES ($1, 0, $2, $3)`,
+    [rows[0].post_id, "https://example.com/article", `smoke-url-${runId}`],
+  );
+}
+
+async function removeFixture(pool, runId) {
+  // post_urls cascades on delete.
+  await pool.query("DELETE FROM content.posts WHERE unique_id = $1", [
+    `smoke-${runId}`,
+  ]);
 }
 
 async function getAvailablePort() {
@@ -150,7 +145,11 @@ async function getAvailablePort() {
 
       portServer.close(() => {
         if (!address || typeof address === "string") {
-          reject(new Error("Could not reserve a local port for the production smoke test."));
+          reject(
+            new Error(
+              "Could not reserve a local port for the production smoke test.",
+            ),
+          );
           return;
         }
 
@@ -177,7 +176,9 @@ async function waitForPage(pageUrl, childProcess, outputChunks) {
     }
 
     try {
-      const response = await fetch(pageUrl, { signal: AbortSignal.timeout(1000) });
+      const response = await fetch(pageUrl, {
+        signal: AbortSignal.timeout(1000),
+      });
 
       if (response.ok) {
         return await response.text();
@@ -198,7 +199,9 @@ async function waitForPage(pageUrl, childProcess, outputChunks) {
 
 function assertIncludes(value, expected) {
   if (!value.includes(expected)) {
-    throw new Error(`Production smoke response did not include ${JSON.stringify(expected)}.`);
+    throw new Error(
+      `Production smoke response did not include ${JSON.stringify(expected)}.`,
+    );
   }
 }
 
@@ -233,7 +236,12 @@ function signalServer(childProcess, signal) {
 
     process.kill(-childProcess.pid, signal);
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ESRCH") {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ESRCH"
+    ) {
       return;
     }
 

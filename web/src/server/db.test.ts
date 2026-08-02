@@ -1,412 +1,397 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 
-import {
-  getPosts,
-  getPostCount,
-  openConfiguredFetchlinksDatabase,
-  openFetchlinksDatabase,
-  withFetchlinksDatabase,
-  type FetchlinksDatabase,
-} from "./db";
+import { getPostCount, getPosts } from "./db";
+import { describePostgres, usePostgres } from "./test-support/postgres";
 
-type Fixture = {
-  dbPath: string;
-  cleanup: () => void;
+type SeedPost = {
+  uniqueId: string;
+  source: string;
+  sourceType: string;
+  author?: string;
+  description?: string;
+  directLink?: string;
+  postedAt: string;
+  urls?: string[];
 };
 
-describe("openFetchlinksDatabase", () => {
-  it("opens the configured SQLite database in read-only mode", () => {
-    const fixture = createFixtureDatabase();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
+describePostgres("posts read model", () => {
+  const pg = usePostgres();
 
-    try {
-      expect(database.isOpen).toBe(true);
-      expect(getPostCount(database)).toBe(2);
-      expect(() => insertPost(database)).toThrow();
-    } finally {
-      database.close();
-      fixture.cleanup();
+  async function seed(posts: SeedPost[]): Promise<void> {
+    for (const post of posts) {
+      const [row] = (await pg.exec(
+        `INSERT INTO content.posts
+           (unique_id, source, source_type, author, description, direct_link, posted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING post_id`,
+        [
+          post.uniqueId,
+          post.source,
+          post.sourceType,
+          post.author ?? "",
+          post.description ?? "",
+          post.directLink ?? "",
+          post.postedAt,
+        ],
+      )) as { post_id: string }[];
+
+      const urls = post.urls ?? [];
+      for (const [index, url] of urls.entries()) {
+        await pg.exec(
+          `INSERT INTO content.post_urls (post_id, position, url, url_hash)
+           VALUES ($1, $2, $3, $4)`,
+          [row.post_id, index, url, `${post.uniqueId}-${index}`],
+        );
+      }
     }
+  }
+
+  const FOUR_POSTS: SeedPost[] = [
+    {
+      uniqueId: "rss-1",
+      source: "https://example.com/feed",
+      sourceType: "rss",
+      author: "Ada",
+      description: "First article",
+      postedAt: "2026-01-01T09:00:00Z",
+      urls: ["https://example.com/one"],
+    },
+    {
+      uniqueId: "reddit-2",
+      source: "https://www.reddit.com/r/programming",
+      sourceType: "reddit",
+      author: "grace",
+      description: "A discussion",
+      postedAt: "2026-01-04T09:00:00Z",
+    },
+    {
+      uniqueId: "bluesky-3",
+      source: "https://bsky.app/profile/someone.bsky.social",
+      sourceType: "bluesky",
+      author: "someone",
+      description: "A skeet",
+      postedAt: "2026-01-02T09:00:00Z",
+    },
+    {
+      uniqueId: "rss-4",
+      source: "https://example.org/feed",
+      sourceType: "rss",
+      description: "Another article",
+      postedAt: "2026-01-03T09:00:00Z",
+    },
+  ];
+
+  it("counts every stored post", async () => {
+    await seed(FOUR_POSTS);
+
+    await expect(getPostCount(pg.sql)).resolves.toBe(4);
   });
 
-  it("fails when a read-only database path does not exist", () => {
-    const fixture = createTempPath();
-
-    try {
-      expect(() =>
-        openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath }),
-      ).toThrow();
-    } finally {
-      fixture.cleanup();
-    }
+  it("reports zero on an empty database", async () => {
+    await expect(getPostCount(pg.sql)).resolves.toBe(0);
   });
-});
 
-describe("openConfiguredFetchlinksDatabase", () => {
-  it("loads configuration from the provided environment", () => {
-    const fixture = createFixtureDatabase();
-    const database = openConfiguredFetchlinksDatabase({
-      FETCHLINKS_DB: fixture.dbPath,
+  it("returns posts newest first with pagination metadata", async () => {
+    await seed(FOUR_POSTS);
+
+    const page = await getPosts(pg.sql, { page: 1, pageSize: 2 });
+
+    expect(page).toMatchObject({
+      page: 1,
+      pageSize: 2,
+      totalPosts: 4,
+      totalPages: 2,
+      hasPreviousPage: false,
+      hasNextPage: true,
+    });
+    expect(page.posts.map((post) => post.uniqueId)).toEqual([
+      "reddit-2",
+      "rss-4",
+    ]);
+  });
+
+  it("returns later pages using the requested page size", async () => {
+    await seed(FOUR_POSTS);
+
+    const page = await getPosts(pg.sql, { page: 2, pageSize: 2 });
+
+    expect(page).toMatchObject({
+      page: 2,
+      totalPages: 2,
+      hasPreviousPage: true,
+      hasNextPage: false,
+    });
+    expect(page.posts.map((post) => post.uniqueId)).toEqual([
+      "bluesky-3",
+      "rss-1",
+    ]);
+  });
+
+  it("returns an empty page past the end without reporting a next page", async () => {
+    await seed(FOUR_POSTS);
+
+    const page = await getPosts(pg.sql, { page: 9, pageSize: 2 });
+
+    expect(page.posts).toEqual([]);
+    expect(page.hasNextPage).toBe(false);
+    expect(page.hasPreviousPage).toBe(true);
+  });
+
+  // The old SQLite layer stored "YYYY-MM-DD HH:MM:SS" with no zone, which the
+  // browser then read as local time. Timestamps must come back explicitly UTC.
+  it("renders timestamps as ISO-8601 UTC", async () => {
+    await seed([
+      {
+        uniqueId: "tz-1",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-03-04T05:06:07+02:00",
+      },
+    ]);
+
+    const page = await getPosts(pg.sql);
+
+    expect(page.posts[0]?.dateCreated).toBe("2026-03-04T03:06:07Z");
+    expect(Number.isNaN(new Date(page.posts[0]!.dateCreated).valueOf())).toBe(
+      false,
+    );
+  });
+
+  it("attaches each post's urls in position order", async () => {
+    await seed([
+      {
+        uniqueId: "many-urls",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-01-01T00:00:00Z",
+        urls: ["https://a.example", "https://b.example", "https://c.example"],
+      },
+    ]);
+
+    const page = await getPosts(pg.sql);
+
+    expect(page.posts[0]?.urls.map((url) => url.originalUrl)).toEqual([
+      "https://a.example",
+      "https://b.example",
+      "https://c.example",
+    ]);
+    expect(page.posts[0]?.urls.map((url) => url.position)).toEqual([0, 1, 2]);
+  });
+
+  it("prefers the unshortened url when one has been resolved", async () => {
+    await seed([
+      {
+        uniqueId: "shortened",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-01-01T00:00:00Z",
+        urls: ["https://t.co/abc"],
+      },
+    ]);
+    await pg.exec(
+      "UPDATE content.post_urls SET unshortened_url = $1 WHERE url = $2",
+      ["https://example.com/full-article", "https://t.co/abc"],
+    );
+
+    const page = await getPosts(pg.sql);
+
+    expect(page.posts[0]?.urls[0]?.href).toBe(
+      "https://example.com/full-article",
+    );
+    expect(page.posts[0]?.urls[0]?.originalUrl).toBe("https://t.co/abc");
+  });
+
+  it("does not leak urls between posts", async () => {
+    await seed([
+      {
+        uniqueId: "a",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-01-02T00:00:00Z",
+        urls: ["https://a.example"],
+      },
+      {
+        uniqueId: "b",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-01-01T00:00:00Z",
+        urls: ["https://b.example"],
+      },
+    ]);
+
+    const page = await getPosts(pg.sql);
+
+    expect(page.posts.map((post) => post.urls.map((url) => url.href))).toEqual([
+      ["https://a.example"],
+      ["https://b.example"],
+    ]);
+  });
+
+  it("filters by source type", async () => {
+    await seed(FOUR_POSTS);
+
+    const page = await getPosts(pg.sql, { sourceType: "rss" });
+
+    expect(page.totalPosts).toBe(2);
+    expect(page.posts.map((post) => post.uniqueId)).toEqual(["rss-4", "rss-1"]);
+  });
+
+  it("ignores an unrecognised source type instead of returning nothing", async () => {
+    await seed(FOUR_POSTS);
+
+    const page = await getPosts(pg.sql, { sourceType: "myspace" });
+
+    expect(page.totalPosts).toBe(4);
+  });
+
+  it("filters by exact source and author", async () => {
+    await seed(FOUR_POSTS);
+
+    await expect(
+      getPosts(pg.sql, { source: "https://example.org/feed" }),
+    ).resolves.toMatchObject({ totalPosts: 1 });
+    await expect(getPosts(pg.sql, { author: "grace" })).resolves.toMatchObject({
+      totalPosts: 1,
+    });
+  });
+
+  it("combines filters with AND", async () => {
+    await seed(FOUR_POSTS);
+
+    const page = await getPosts(pg.sql, {
+      sourceType: "rss",
+      author: "Ada",
     });
 
-    try {
-      expect(getPostCount(database)).toBe(2);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("withFetchlinksDatabase", () => {
-  it("closes the database after running the callback", () => {
-    const fixture = createFixtureDatabase();
-    let callbackDatabase: FetchlinksDatabase | undefined;
-
-    try {
-      const count = withFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (database) => {
-          callbackDatabase = database;
-          return getPostCount(database);
-        },
-      );
-
-      expect(count).toBe(2);
-      expect(callbackDatabase?.isOpen).toBe(false);
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("getPosts", () => {
-  it("returns posts newest first with pagination metadata", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      const page = getPosts(database, { page: 1, pageSize: 2 });
-
-      expect(page).toMatchObject({
-        page: 1,
-        pageSize: 2,
-        totalPosts: 4,
-        totalPages: 2,
-        hasPreviousPage: false,
-        hasNextPage: true,
-      });
-      expect(page.posts.map((post) => post.uniqueId)).toEqual([
-        "reddit-2",
-        "rss-4",
-      ]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
+    expect(page.posts.map((post) => post.uniqueId)).toEqual(["rss-1"]);
   });
 
-  it("returns later pages using the requested page size", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      const page = getPosts(database, { page: 2, pageSize: 2 });
-
-      expect(page).toMatchObject({
-        page: 2,
-        pageSize: 2,
-        totalPosts: 4,
-        totalPages: 2,
-        hasPreviousPage: true,
-        hasNextPage: false,
-      });
-      expect(page.posts.map((post) => post.uniqueId)).toEqual([
-        "mastodon-3",
-        "rss-1",
-      ]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-
-  it("groups normalized URLs by post and prefers unshortened hrefs", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      const page = getPosts(database, { page: 1, pageSize: 1 });
-      const [post] = page.posts;
-
-      expect(post?.uniqueId).toBe("reddit-2");
-      expect(post?.urls).toEqual([
-        {
-          id: 3,
-          postId: 2,
-          position: 0,
-          originalUrl: "https://example.com/direct-b",
-          urlHash: "hash-b0",
-          unshortenedUrl: null,
-          href: "https://example.com/direct-b",
-        },
-        {
-          id: 2,
-          postId: 2,
-          position: 1,
-          originalUrl: "https://short.example/b",
-          urlHash: "hash-b1",
-          unshortenedUrl: "https://example.com/unshortened-b",
-          href: "https://example.com/unshortened-b",
-        },
-      ]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-
-  it("filters posts by source", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      const page = getPosts(database, { source: "rss", page: 1, pageSize: 10 });
-
-      expect(page).toMatchObject({ totalPosts: 2, totalPages: 1 });
-      expect(page.posts.map((post) => post.uniqueId)).toEqual(["rss-4", "rss-1"]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-
-  it("filters posts by extracted URL domain using normalized hrefs", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      const byType = getPosts(database, {
+  it("searches description, source, author, direct link and urls", async () => {
+    await seed([
+      {
+        uniqueId: "in-description",
+        source: "https://example.com/feed",
         sourceType: "rss",
-        page: 1,
-        pageSize: 10,
-      });
-      const byAuthor = getPosts(database, {
-        author: "Linus",
-        page: 1,
-        pageSize: 10,
-      });
-
-      expect(byType.posts.map((post) => post.uniqueId)).toEqual([
-        "rss-4",
-        "rss-1",
-      ]);
-      expect(byAuthor.posts.map((post) => post.uniqueId)).toEqual(["rss-4"]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-
-  it("searches post fields and extracted URLs", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      const urlMatch = getPosts(database, { q: "unshortened-B" });
-      const authorMatch = getPosts(database, { q: "linus" });
-
-      expect(urlMatch.posts.map((post) => post.uniqueId)).toEqual(["reddit-2"]);
-      expect(authorMatch.posts.map((post) => post.uniqueId)).toEqual(["rss-4"]);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
-  });
-
-  it("combines source, domain, and search filters", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
-
-    try {
-      const page = getPosts(database, {
+        description: "About NEEDLE things",
+        postedAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        uniqueId: "in-author",
+        source: "https://example.com/feed",
         sourceType: "rss",
-        author: "Linus",
-        q: "tie-break",
-      });
+        author: "needle",
+        postedAt: "2026-01-04T00:00:00Z",
+      },
+      {
+        uniqueId: "in-direct-link",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        directLink: "https://example.com/needle",
+        postedAt: "2026-01-03T00:00:00Z",
+      },
+      {
+        uniqueId: "in-url",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-01-02T00:00:00Z",
+        urls: ["https://elsewhere.example/needle"],
+      },
+      {
+        uniqueId: "unrelated",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        description: "Nothing to see",
+        postedAt: "2026-01-01T00:00:00Z",
+      },
+    ]);
 
-      expect(page.posts.map((post) => post.uniqueId)).toEqual(["rss-4"]);
-      expect(page.totalPosts).toBe(1);
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
+    const page = await getPosts(pg.sql, { q: "needle" });
+
+    expect(page.posts.map((post) => post.uniqueId).sort()).toEqual([
+      "in-author",
+      "in-description",
+      "in-direct-link",
+      "in-url",
+    ]);
   });
 
-  it("rejects invalid pagination options", () => {
-    const fixture = createPostsQueryFixture();
-    const database = openFetchlinksDatabase({ fetchlinksDbPath: fixture.dbPath });
+  it("matches an unshortened url as well as the original", async () => {
+    await seed([
+      {
+        uniqueId: "shortened",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-01-01T00:00:00Z",
+        urls: ["https://t.co/xyz"],
+      },
+    ]);
+    await pg.exec(
+      "UPDATE content.post_urls SET unshortened_url = $1 WHERE url = $2",
+      ["https://example.com/needle", "https://t.co/xyz"],
+    );
 
-    try {
-      expect(() => getPosts(database, { page: 0 })).toThrowError(
-        /page must be a positive integer/,
-      );
-      expect(() => getPosts(database, { pageSize: 1.5 })).toThrowError(
-        /pageSize must be a positive integer/,
-      );
-    } finally {
-      database.close();
-      fixture.cleanup();
-    }
+    await expect(getPosts(pg.sql, { q: "needle" })).resolves.toMatchObject({
+      totalPosts: 1,
+    });
+  });
+
+  it("treats LIKE wildcards in the search term as literal characters", async () => {
+    await seed([
+      {
+        uniqueId: "literal-percent",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        description: "Now 100% faster",
+        postedAt: "2026-01-02T00:00:00Z",
+      },
+      {
+        uniqueId: "no-percent",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        description: "Just as fast",
+        postedAt: "2026-01-01T00:00:00Z",
+      },
+    ]);
+
+    const page = await getPosts(pg.sql, { q: "100%" });
+
+    expect(page.posts.map((post) => post.uniqueId)).toEqual([
+      "literal-percent",
+    ]);
+  });
+
+  it("searches without regard to case", async () => {
+    await seed([
+      {
+        uniqueId: "mixed-case",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        description: "A Story About Postgres",
+        postedAt: "2026-01-01T00:00:00Z",
+      },
+    ]);
+
+    await expect(getPosts(pg.sql, { q: "POSTGRES" })).resolves.toMatchObject({
+      totalPosts: 1,
+    });
+  });
+
+  it("counts only the filtered rows", async () => {
+    await seed(FOUR_POSTS);
+
+    const page = await getPosts(pg.sql, { sourceType: "rss", pageSize: 1 });
+
+    expect(page.totalPosts).toBe(2);
+    expect(page.totalPages).toBe(2);
+  });
+
+  it("rejects a non-positive page or page size", async () => {
+    await expect(getPosts(pg.sql, { page: 0 })).rejects.toThrowError(RangeError);
+    await expect(getPosts(pg.sql, { pageSize: -1 })).rejects.toThrowError(
+      RangeError,
+    );
+    await expect(getPosts(pg.sql, { page: 1.5 })).rejects.toThrowError(
+      RangeError,
+    );
   });
 });
-
-function createFixtureDatabase(): Fixture {
-  return createDatabaseWithSql(`
-    CREATE TABLE posts (
-      idx INTEGER PRIMARY KEY,
-      source TEXT NOT NULL,
-      source_type TEXT,
-      author TEXT,
-      description TEXT,
-      direct_link TEXT,
-      date_created TEXT NOT NULL,
-      unique_id_string TEXT NOT NULL
-    );
-
-    CREATE TABLE post_urls (
-      idx INTEGER PRIMARY KEY,
-      post_id INTEGER NOT NULL,
-      position INTEGER NOT NULL,
-      url TEXT NOT NULL,
-      url_hash TEXT NOT NULL,
-      unshortened_url TEXT,
-      FOREIGN KEY (post_id) REFERENCES posts(idx)
-    );
-
-    INSERT INTO posts (
-      idx,
-      source,
-      source_type,
-      author,
-      description,
-      direct_link,
-      date_created,
-      unique_id_string
-    ) VALUES
-      (1, 'rss', 'rss', 'Ada', 'First post', 'https://example.com/first', '2026-04-27T10:00:00Z', 'rss-1'),
-      (2, 'reddit', 'reddit', 'Grace', 'Second post', 'https://example.com/second', '2026-04-28T10:00:00Z', 'reddit-2');
-
-    INSERT INTO post_urls (
-      idx,
-      post_id,
-      position,
-      url,
-      url_hash,
-      unshortened_url
-    ) VALUES
-      (1, 1, 0, 'https://short.example/a', 'hash-a', 'https://example.com/a'),
-      (2, 2, 0, 'https://example.com/b', 'hash-b', NULL);
-  `);
-}
-
-function createPostsQueryFixture(): Fixture {
-  return createDatabaseWithSql(`
-    CREATE TABLE posts (
-      idx INTEGER PRIMARY KEY,
-      source TEXT NOT NULL,
-      source_type TEXT,
-      author TEXT,
-      description TEXT,
-      direct_link TEXT,
-      date_created TEXT NOT NULL,
-      unique_id_string TEXT NOT NULL
-    );
-
-    CREATE TABLE post_urls (
-      idx INTEGER PRIMARY KEY,
-      post_id INTEGER NOT NULL,
-      position INTEGER NOT NULL,
-      url TEXT NOT NULL,
-      url_hash TEXT NOT NULL,
-      unshortened_url TEXT,
-      FOREIGN KEY (post_id) REFERENCES posts(idx)
-    );
-
-    INSERT INTO posts (
-      idx,
-      source,
-      source_type,
-      author,
-      description,
-      direct_link,
-      date_created,
-      unique_id_string
-    ) VALUES
-      (1, 'rss', 'rss', 'Ada', 'Oldest post', 'https://example.com/first', '2026-04-25T10:00:00Z', 'rss-1'),
-      (2, 'reddit', 'reddit', 'Grace', 'Newest post', 'https://example.com/second', '2026-04-28T10:00:00Z', 'reddit-2'),
-      (3, 'mastodon', 'mastodon', NULL, NULL, NULL, '2026-04-26T10:00:00Z', 'mastodon-3'),
-      (4, 'rss', 'rss', 'Linus', 'Tie-break post', 'https://example.com/fourth', '2026-04-26T10:00:00Z', 'rss-4');
-
-    INSERT INTO post_urls (
-      idx,
-      post_id,
-      position,
-      url,
-      url_hash,
-      unshortened_url
-    ) VALUES
-      (1, 1, 0, 'https://short.example/a', 'hash-a', 'https://example.com/a'),
-      (2, 2, 1, 'https://short.example/b', 'hash-b1', 'https://example.com/unshortened-b'),
-      (3, 2, 0, 'https://example.com/direct-b', 'hash-b0', NULL),
-      (4, 4, 0, 'https://docs.example.org/d', 'hash-d', NULL);
-  `);
-}
-
-function createDatabaseWithSql(sql: string): Fixture {
-  const fixture = createTempPath();
-  const database = new DatabaseSync(fixture.dbPath);
-
-  database.exec(sql);
-
-  database.close();
-
-  return fixture;
-}
-
-function createTempPath(): Fixture {
-  const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-web-"));
-
-  return {
-    dbPath: path.join(directory, "fetchlinks.db"),
-    cleanup: () => rmSync(directory, { force: true, recursive: true }),
-  };
-}
-
-function insertPost(database: FetchlinksDatabase): void {
-  database.exec(`
-    INSERT INTO posts (
-      idx,
-      source,
-      source_type,
-      author,
-      description,
-      direct_link,
-      date_created,
-      unique_id_string
-    ) VALUES (
-      3,
-      'rss',
-      'rss',
-      'Read Only',
-      'This should fail',
-      'https://example.com/readonly',
-      '2026-04-29T10:00:00Z',
-      'rss-3'
-    );
-  `);
-}

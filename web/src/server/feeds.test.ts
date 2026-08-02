@@ -1,7 +1,3 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -9,532 +5,341 @@ import {
   countRssFeedsByStatus,
   listRssFeeds,
   normalizeFeedUrl,
-  openWritableFetchlinksDatabase,
   restoreRssFeed,
   softDeleteRssFeed,
-  withWritableFetchlinksDatabase,
 } from "./feeds";
-
-type Fixture = {
-  dbPath: string;
-  cleanup: () => void;
-};
-
-function createFeedsFixture(): Fixture {
-  const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-feeds-"));
-  const dbPath = path.join(directory, "fetchlinks.db");
-  const database = new DatabaseSync(dbPath);
-  database.exec(`
-    CREATE TABLE rss_feeds (
-      feed_id              INTEGER PRIMARY KEY,
-      feed_url             TEXT NOT NULL,
-      normalized_url       TEXT NOT NULL UNIQUE,
-      enabled              INTEGER NOT NULL DEFAULT 1,
-      added_at             TEXT NOT NULL,
-      deleted_at           TEXT,
-      last_fetched_at      TEXT,
-      last_success_at      TEXT,
-      last_status          INTEGER,
-      last_error           TEXT,
-      consecutive_failures INTEGER NOT NULL DEFAULT 0,
-      etag                 TEXT,
-      last_modified        TEXT,
-      latest_entry_at      TEXT,
-      site_link            TEXT
-    );
-
-    INSERT INTO rss_feeds
-      (feed_id, feed_url, normalized_url, enabled, added_at, deleted_at,
-       last_error, consecutive_failures, site_link)
-    VALUES
-      (1, 'https://a.example/feed', 'https://a.example/feed', 1, '2026-01-01 00:00:00', NULL, NULL, 0, 'https://a.example/'),
-      (2, 'https://b.example/feed', 'https://b.example/feed', 0, '2026-01-02 00:00:00', NULL, 'HTTP 500', 10, NULL),
-      (3, 'https://c.example/feed', 'https://c.example/feed', 0, '2026-01-03 00:00:00', '2026-02-01 00:00:00', NULL, 0, NULL);
-
-    CREATE TABLE rss_feed_health (
-      normalized_url       TEXT PRIMARY KEY,
-      last_fetched_at      TEXT,
-      last_success_at      TEXT,
-      last_status          INTEGER,
-      last_error           TEXT,
-      consecutive_failures INTEGER NOT NULL DEFAULT 0,
-      etag                 TEXT,
-      last_modified        TEXT,
-      latest_entry_at      TEXT,
-      site_link            TEXT
-    );
-
-    INSERT INTO rss_feed_health
-      (normalized_url, last_error, consecutive_failures, site_link)
-    VALUES
-      ('https://a.example/feed', NULL, 0, 'https://a.example/'),
-      ('https://b.example/feed', 'HTTP 500', 10, NULL);
-  `);
-  database.close();
-  return {
-    dbPath,
-    cleanup: () => rmSync(directory, { force: true, recursive: true }),
-  };
-}
-
-describe("listRssFeeds", () => {
-  it("returns all feeds with computed status by default", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const feeds = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listRssFeeds(db),
-      );
-      const byUrl = Object.fromEntries(feeds.map((f) => [f.feedUrl, f.status]));
-      expect(byUrl).toEqual({
-        "https://a.example/feed": "active",
-        "https://b.example/feed": "disabled",
-        "https://c.example/feed": "removed",
-      });
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("filters by status", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const active = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listRssFeeds(db, { status: "active" }),
-      );
-      expect(active.map((f) => f.feedUrl)).toEqual(["https://a.example/feed"]);
-
-      const removed = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listRssFeeds(db, { status: "removed" }),
-      );
-      expect(removed.map((f) => f.feedUrl)).toEqual(["https://c.example/feed"]);
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("filters by search substring against feed_url and normalized_url", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const matches = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listRssFeeds(db, { q: "B.EXAMPLE" }),
-      );
-      expect(matches.map((f) => f.feedUrl)).toEqual(["https://b.example/feed"]);
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("surfaces siteLink (or null) from the rss_feeds row", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const feeds = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listRssFeeds(db),
-      );
-      const byUrl = Object.fromEntries(
-        feeds.map((f) => [f.feedUrl, f.siteLink]),
-      );
-      expect(byUrl).toEqual({
-        "https://a.example/feed": "https://a.example/",
-        "https://b.example/feed": null,
-        "https://c.example/feed": null,
-      });
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("countRssFeedsByStatus", () => {
-  it("returns counts across the three buckets", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const counts = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => countRssFeedsByStatus(db),
-      );
-      expect(counts).toEqual({
-        active: 1,
-        disabled: 1,
-        removed: 1,
-        errors: 0,
-        total: 3,
-      });
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("counts active feeds with failures or HTTP errors as errors", () => {
-    const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-feeds-err-"));
-    const dbPath = path.join(directory, "fetchlinks.db");
-    const database = new DatabaseSync(dbPath);
-    database.exec(`
-      CREATE TABLE rss_feeds (
-        feed_id              INTEGER PRIMARY KEY,
-        feed_url             TEXT NOT NULL,
-        normalized_url       TEXT NOT NULL UNIQUE,
-        enabled              INTEGER NOT NULL DEFAULT 1,
-        added_at             TEXT NOT NULL,
-        deleted_at           TEXT,
-        last_fetched_at      TEXT,
-        last_success_at      TEXT,
-        last_status          INTEGER,
-        last_error           TEXT,
-        consecutive_failures INTEGER NOT NULL DEFAULT 0,
-        etag                 TEXT,
-        last_modified        TEXT,
-        latest_entry_at      TEXT,
-        site_link            TEXT
-      );
-      INSERT INTO rss_feeds
-        (feed_id, feed_url, normalized_url, enabled, added_at,
-         last_status, consecutive_failures)
-      VALUES
-        (1, 'https://ok.example/feed',     'https://ok.example/feed',     1, 'x', 200, 0),
-        (2, 'https://fails.example/feed',  'https://fails.example/feed',  1, 'x', 200, 3),
-        (3, 'https://http500.example/feed','https://http500.example/feed',1, 'x', 500, 0),
-        (4, 'https://disabled.example/feed','https://disabled.example/feed',0,'x',500, 5);
-
-      CREATE TABLE rss_feed_health (
-        normalized_url       TEXT PRIMARY KEY,
-        last_fetched_at      TEXT,
-        last_success_at      TEXT,
-        last_status          INTEGER,
-        last_error           TEXT,
-        consecutive_failures INTEGER NOT NULL DEFAULT 0,
-        etag                 TEXT,
-        last_modified        TEXT,
-        latest_entry_at      TEXT,
-        site_link            TEXT
-      );
-      INSERT INTO rss_feed_health
-        (normalized_url, last_status, consecutive_failures)
-      VALUES
-        ('https://ok.example/feed',      200, 0),
-        ('https://fails.example/feed',   200, 3),
-        ('https://http500.example/feed', 500, 0),
-        ('https://disabled.example/feed',500, 5);
-    `);
-    database.close();
-    try {
-      const counts = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: dbPath },
-        (db) => countRssFeedsByStatus(db),
-      );
-      expect(counts).toEqual({
-        active: 3,
-        disabled: 1,
-        removed: 0,
-        errors: 2,
-        total: 4,
-      });
-
-      const onlyErrors = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: dbPath },
-        (db) => listRssFeeds(db, { errors: true }),
-      );
-      expect(onlyErrors.map((f) => f.feedUrl).sort()).toEqual([
-        "https://fails.example/feed",
-        "https://http500.example/feed",
-      ]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  });
-});
+import { describePostgres, usePostgres } from "./test-support/postgres";
 
 describe("normalizeFeedUrl", () => {
-  it("rejects non-http(s) and unparseable URLs", () => {
-    expect(normalizeFeedUrl("")).toBe("");
-    expect(normalizeFeedUrl("ftp://example/")).toBe("");
-    expect(normalizeFeedUrl("not a url")).toBe("");
-  });
-
-  it("lowercases the hostname and drops the fragment", () => {
-    expect(normalizeFeedUrl("HTTPS://Example.Com/Feed#anchor")).toBe(
+  it("lowercases the host", () => {
+    expect(normalizeFeedUrl("https://EXAMPLE.com/Feed")).toBe(
       "https://example.com/Feed",
     );
   });
-});
 
-describe("addRssFeed", () => {
-  it("inserts a new feed and returns the inserted row", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const result = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addRssFeed(db, "https://new.example/feed"),
-      );
-      expect(result.status).toBe("added");
-      if (result.status === "added") {
-        expect(result.feed.feedUrl).toBe("https://new.example/feed");
-        expect(result.feed.status).toBe("active");
-      }
-    } finally {
-      fixture.cleanup();
-    }
+  // Two feeds on one host differ only by path, so the path must survive intact.
+  it("preserves path and query case", () => {
+    expect(normalizeFeedUrl("https://example.com/Feed?Tag=A")).toBe(
+      "https://example.com/Feed?Tag=A",
+    );
   });
 
-  it("returns 'exists' when the normalized URL is already present", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const result = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addRssFeed(db, "HTTPS://A.example/feed"),
-      );
-      expect(result.status).toBe("exists");
-      if (result.status === "exists") {
-        expect(result.feed.feedUrl).toBe("https://a.example/feed");
-      }
-    } finally {
-      fixture.cleanup();
-    }
+  it("drops the fragment", () => {
+    expect(normalizeFeedUrl("https://example.com/feed#recent")).toBe(
+      "https://example.com/feed",
+    );
   });
 
-  it("returns 'invalid' for empty or non-URL input", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const empty = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addRssFeed(db, "   "),
-      );
-      expect(empty.status).toBe("invalid");
-
-      const bad = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addRssFeed(db, "ftp://example/"),
-      );
-      expect(bad.status).toBe("invalid");
-    } finally {
-      fixture.cleanup();
-    }
+  it("rejects anything that is not absolute http(s)", () => {
+    expect(normalizeFeedUrl("")).toBe("");
+    expect(normalizeFeedUrl("   ")).toBe("");
+    expect(normalizeFeedUrl("example.com/feed")).toBe("");
+    expect(normalizeFeedUrl("ftp://example.com/feed")).toBe("");
+    expect(normalizeFeedUrl("javascript:alert(1)")).toBe("");
   });
 });
 
-describe("softDeleteRssFeed", () => {
-  it("tombstones a live row", () => {
-    const fixture = createFeedsFixture();
-    try {
-      withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => {
-          expect(softDeleteRssFeed(db, 1)).toBe(true);
-          const [feed] = listRssFeeds(db, { q: "a.example" });
-          expect(feed.status).toBe("removed");
-          expect(feed.deletedAt).toBeTruthy();
-        },
-      );
-    } finally {
-      fixture.cleanup();
-    }
-  });
+describePostgres("rss feed catalog", () => {
+  const pg = usePostgres();
 
-  it("is a no-op when the row is already tombstoned", () => {
-    const fixture = createFeedsFixture();
-    try {
-      withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => {
-          expect(softDeleteRssFeed(db, 3)).toBe(false);
-        },
-      );
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("restoreRssFeed", () => {
-  it("restores a tombstoned row and re-enables it", () => {
-    const fixture = createFeedsFixture();
-    try {
-      withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => {
-          expect(restoreRssFeed(db, 3)).toBe(true);
-          const [feed] = listRssFeeds(db, { q: "c.example" });
-          expect(feed.status).toBe("active");
-          expect(feed.deletedAt).toBeNull();
-        },
-      );
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("does nothing for a live row", () => {
-    const fixture = createFeedsFixture();
-    try {
-      withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => {
-          expect(restoreRssFeed(db, 1)).toBe(false);
-        },
-      );
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("openWritableFetchlinksDatabase", () => {
-  it("opens the DB read-write so admin actions can mutate", () => {
-    const fixture = createFeedsFixture();
-    try {
-      const database = openWritableFetchlinksDatabase({
-        fetchlinksDbPath: fixture.dbPath,
-      });
-      try {
-        expect(database.isOpen).toBe(true);
-        database.exec(
-          `INSERT INTO rss_feeds (feed_url, normalized_url, enabled, added_at)
-           VALUES ('https://d.example/feed', 'https://d.example/feed', 1, '2026-03-01 00:00:00')`,
-        );
-        expect(listRssFeeds(database).map((f) => f.feedUrl)).toContain(
-          "https://d.example/feed",
-        );
-      } finally {
-        database.close();
-      }
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("two-file mode (separate control.db and data.db)", () => {
-  type TwoFileFixture = {
-    controlPath: string;
-    dataPath: string;
-    cleanup: () => void;
-  };
-
-  function createTwoFileFixture(): TwoFileFixture {
-    const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-split-"));
-    const controlPath = path.join(directory, "control.db");
-    const dataPath = path.join(directory, "data.db");
-
-    const control = new DatabaseSync(controlPath);
-    control.exec(`
-      CREATE TABLE rss_feeds (
-        feed_id        INTEGER PRIMARY KEY,
-        feed_url       TEXT NOT NULL,
-        normalized_url TEXT NOT NULL UNIQUE,
-        enabled        INTEGER NOT NULL DEFAULT 1,
-        added_at       TEXT NOT NULL,
-        deleted_at     TEXT
-      );
-      INSERT INTO rss_feeds (feed_id, feed_url, normalized_url, enabled, added_at)
-      VALUES
-        (1, 'https://ok.example/feed',    'https://ok.example/feed',    1, 'x'),
-        (2, 'https://fails.example/feed', 'https://fails.example/feed', 1, 'x');
-    `);
-    control.close();
-
-    const data = new DatabaseSync(dataPath);
-    data.exec(`
-      CREATE TABLE rss_feed_health (
-        normalized_url       TEXT PRIMARY KEY,
-        last_fetched_at      TEXT,
-        last_success_at      TEXT,
-        last_status          INTEGER,
-        last_error           TEXT,
-        consecutive_failures INTEGER NOT NULL DEFAULT 0,
-        etag                 TEXT,
-        last_modified        TEXT,
-        latest_entry_at      TEXT,
-        site_link            TEXT
-      );
-      INSERT INTO rss_feed_health
-        (normalized_url, last_status, last_error, consecutive_failures, site_link)
-      VALUES
-        ('https://ok.example/feed',    200, NULL,       0, 'https://ok.example/'),
-        ('https://fails.example/feed', 200, 'timeout',  4, NULL);
-    `);
-    data.close();
-
-    return {
-      controlPath,
-      dataPath,
-      cleanup: () => rmSync(directory, { force: true, recursive: true }),
-    };
+  async function addHealth(
+    normalizedUrl: string,
+    health: {
+      lastFetchedAt?: string;
+      lastSuccessAt?: string;
+      lastStatus?: number;
+      lastError?: string;
+      consecutiveFailures?: number;
+      etag?: string;
+      lastModified?: string;
+      latestEntryAt?: string;
+      siteLink?: string;
+    } = {},
+  ): Promise<void> {
+    await pg.exec(
+      `INSERT INTO content.rss_feed_health
+         (normalized_url, last_fetched_at, last_success_at, last_status,
+          last_error, consecutive_failures, etag, last_modified,
+          latest_entry_at, site_link)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        normalizedUrl,
+        health.lastFetchedAt ?? null,
+        health.lastSuccessAt ?? null,
+        health.lastStatus ?? null,
+        health.lastError ?? null,
+        health.consecutiveFailures ?? 0,
+        health.etag ?? null,
+        health.lastModified ?? null,
+        health.latestEntryAt ?? null,
+        health.siteLink ?? null,
+      ],
+    );
   }
 
-  it("merges control identity with attached read-only data health", () => {
-    const fixture = createTwoFileFixture();
-    try {
-      const feeds = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dataPath, controlDbPath: fixture.controlPath },
-        (db) => listRssFeeds(db),
-      );
-      const byUrl = Object.fromEntries(
-        feeds.map((f) => [
-          f.feedUrl,
-          { siteLink: f.siteLink, consecutiveFailures: f.consecutiveFailures },
-        ]),
-      );
-      expect(byUrl).toEqual({
-        "https://ok.example/feed": {
-          siteLink: "https://ok.example/",
-          consecutiveFailures: 0,
-        },
-        "https://fails.example/feed": {
-          siteLink: null,
-          consecutiveFailures: 4,
-        },
-      });
-    } finally {
-      fixture.cleanup();
-    }
+  it("adds a feed and reports it as active", async () => {
+    const result = await addRssFeed(pg.sql, "https://example.com/feed");
+
+    expect(result.status).toBe("added");
+    if (result.status !== "added") return;
+    expect(result.feed).toMatchObject({
+      feedUrl: "https://example.com/feed",
+      normalizedUrl: "https://example.com/feed",
+      enabled: true,
+      deletedAt: null,
+      status: "active",
+      consecutiveFailures: 0,
+    });
   });
 
-  it("counts attached health failures as errors", () => {
-    const fixture = createTwoFileFixture();
-    try {
-      const counts = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dataPath, controlDbPath: fixture.controlPath },
-        (db) => countRssFeedsByStatus(db),
-      );
-      expect(counts).toEqual({
-        active: 2,
-        disabled: 0,
-        removed: 0,
-        errors: 1,
-        total: 2,
-      });
-    } finally {
-      fixture.cleanup();
-    }
+  it("stores the raw url alongside the normalized one", async () => {
+    const result = await addRssFeed(pg.sql, "  https://EXAMPLE.com/Feed  ");
+
+    expect(result.status).toBe("added");
+    if (result.status !== "added") return;
+    expect(result.feed.feedUrl).toBe("https://EXAMPLE.com/Feed");
+    expect(result.feed.normalizedUrl).toBe("https://example.com/Feed");
   });
 
-  it("writes admin changes to control.db while data.db stays read-only", () => {
-    const fixture = createTwoFileFixture();
-    try {
-      const result = withWritableFetchlinksDatabase(
-        { fetchlinksDbPath: fixture.dataPath, controlDbPath: fixture.controlPath },
-        (db) => addRssFeed(db, "https://new.example/feed"),
-      );
-      expect(result.status).toBe("added");
+  it("reports an existing feed rather than inserting a duplicate", async () => {
+    await addRssFeed(pg.sql, "https://example.com/feed");
+    const again = await addRssFeed(pg.sql, "https://EXAMPLE.com/feed");
 
-      // The new identity row must land in control.db, not data.db.
-      const control = new DatabaseSync(fixture.controlPath);
-      try {
-        const row = control
-          .prepare(
-            "SELECT COUNT(*) AS n FROM rss_feeds WHERE normalized_url = ?",
-          )
-          .get("https://new.example/feed") as { n: number };
-        expect(row.n).toBe(1);
-      } finally {
-        control.close();
-      }
-    } finally {
-      fixture.cleanup();
+    expect(again.status).toBe("exists");
+    await expect(countRssFeedsByStatus(pg.sql)).resolves.toMatchObject({
+      total: 1,
+    });
+  });
+
+  it("rejects an invalid url without touching the catalog", async () => {
+    await expect(addRssFeed(pg.sql, "not a url")).resolves.toMatchObject({
+      status: "invalid",
+    });
+    await expect(addRssFeed(pg.sql, "  ")).resolves.toMatchObject({
+      status: "invalid",
+      reason: "URL is required.",
+    });
+    await expect(countRssFeedsByStatus(pg.sql)).resolves.toMatchObject({
+      total: 0,
+    });
+  });
+
+  it("records the supplied timestamp as UTC", async () => {
+    const result = await addRssFeed(
+      pg.sql,
+      "https://example.com/feed",
+      new Date("2026-05-06T07:08:09Z"),
+    );
+
+    expect(result.status).toBe("added");
+    if (result.status !== "added") return;
+    expect(result.feed.addedAt).toBe("2026-05-06T07:08:09Z");
+  });
+
+  it("joins health on the normalized url", async () => {
+    await addRssFeed(pg.sql, "https://example.com/feed");
+    await addHealth("https://example.com/feed", {
+      lastFetchedAt: "2026-02-01T10:00:00Z",
+      lastSuccessAt: "2026-02-01T10:00:00Z",
+      lastStatus: 200,
+      consecutiveFailures: 0,
+      etag: 'W/"abc"',
+      lastModified: "Wed, 01 Feb 2026 10:00:00 GMT",
+      latestEntryAt: "2026-01-31T23:00:00Z",
+      siteLink: "https://example.com",
+    });
+
+    const [feed] = await listRssFeeds(pg.sql);
+
+    expect(feed).toMatchObject({
+      lastFetchedAt: "2026-02-01T10:00:00Z",
+      lastStatus: 200,
+      etag: 'W/"abc"',
+      // An HTTP header echoed back verbatim, so it stays text and is not
+      // reformatted as a timestamp.
+      lastModified: "Wed, 01 Feb 2026 10:00:00 GMT",
+      latestEntryAt: "2026-01-31T23:00:00Z",
+      siteLink: "https://example.com",
+    });
+  });
+
+  it("returns a feed with no health row yet", async () => {
+    await addRssFeed(pg.sql, "https://example.com/feed");
+
+    const [feed] = await listRssFeeds(pg.sql);
+
+    expect(feed).toMatchObject({
+      lastFetchedAt: null,
+      lastStatus: null,
+      lastError: null,
+      consecutiveFailures: 0,
+    });
+  });
+
+  // Health is keyed by url, not by the catalog's row id, precisely so it
+  // outlives a remove/re-add cycle.
+  it("keeps health across a remove and re-add", async () => {
+    const added = await addRssFeed(pg.sql, "https://example.com/feed");
+    if (added.status !== "added") throw new Error("expected added");
+    await addHealth("https://example.com/feed", { consecutiveFailures: 3 });
+
+    await softDeleteRssFeed(pg.sql, added.feed.id);
+    await restoreRssFeed(pg.sql, added.feed.id);
+
+    const [feed] = await listRssFeeds(pg.sql);
+    expect(feed?.consecutiveFailures).toBe(3);
+    expect(feed?.status).toBe("active");
+  });
+
+  it("soft deletes rather than removing the row", async () => {
+    const added = await addRssFeed(pg.sql, "https://example.com/feed");
+    if (added.status !== "added") throw new Error("expected added");
+
+    await expect(softDeleteRssFeed(pg.sql, added.feed.id)).resolves.toBe(true);
+
+    const [feed] = await listRssFeeds(pg.sql);
+    expect(feed).toMatchObject({ status: "removed", enabled: false });
+    expect(feed?.deletedAt).not.toBeNull();
+  });
+
+  it("does not soft delete an already removed feed twice", async () => {
+    const added = await addRssFeed(pg.sql, "https://example.com/feed");
+    if (added.status !== "added") throw new Error("expected added");
+
+    await softDeleteRssFeed(pg.sql, added.feed.id);
+
+    await expect(softDeleteRssFeed(pg.sql, added.feed.id)).resolves.toBe(false);
+  });
+
+  it("restores only a removed feed", async () => {
+    const added = await addRssFeed(pg.sql, "https://example.com/feed");
+    if (added.status !== "added") throw new Error("expected added");
+
+    await expect(restoreRssFeed(pg.sql, added.feed.id)).resolves.toBe(false);
+
+    await softDeleteRssFeed(pg.sql, added.feed.id);
+
+    await expect(restoreRssFeed(pg.sql, added.feed.id)).resolves.toBe(true);
+    const [feed] = await listRssFeeds(pg.sql);
+    expect(feed).toMatchObject({ status: "active", enabled: true, deletedAt: null });
+  });
+
+  it("reports false for an unknown feed id", async () => {
+    await expect(softDeleteRssFeed(pg.sql, 4242)).resolves.toBe(false);
+    await expect(restoreRssFeed(pg.sql, 4242)).resolves.toBe(false);
+  });
+
+  it("filters by status", async () => {
+    const active = await addRssFeed(pg.sql, "https://active.example/feed");
+    const removed = await addRssFeed(pg.sql, "https://removed.example/feed");
+    const disabled = await addRssFeed(pg.sql, "https://disabled.example/feed");
+    if (removed.status !== "added" || disabled.status !== "added") {
+      throw new Error("expected added");
     }
+    await softDeleteRssFeed(pg.sql, removed.feed.id);
+    await pg.exec("UPDATE catalog.rss_feeds SET enabled = false WHERE feed_id = $1", [
+      disabled.feed.id,
+    ]);
+
+    await expect(
+      listRssFeeds(pg.sql, { status: "active" }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      listRssFeeds(pg.sql, { status: "disabled" }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      listRssFeeds(pg.sql, { status: "removed" }),
+    ).resolves.toHaveLength(1);
+    await expect(listRssFeeds(pg.sql, { status: "all" })).resolves.toHaveLength(
+      3,
+    );
+    expect(active.status).toBe("added");
+  });
+
+  it("filters to feeds that are failing", async () => {
+    await addRssFeed(pg.sql, "https://healthy.example/feed");
+    await addRssFeed(pg.sql, "https://failing.example/feed");
+    await addRssFeed(pg.sql, "https://notfound.example/feed");
+    await addHealth("https://healthy.example/feed", { lastStatus: 200 });
+    await addHealth("https://failing.example/feed", { consecutiveFailures: 2 });
+    await addHealth("https://notfound.example/feed", { lastStatus: 404 });
+
+    const failing = await listRssFeeds(pg.sql, { errors: true });
+
+    expect(failing.map((feed) => feed.normalizedUrl).sort()).toEqual([
+      "https://failing.example/feed",
+      "https://notfound.example/feed",
+    ]);
+  });
+
+  it("excludes removed feeds from the error filter", async () => {
+    const feed = await addRssFeed(pg.sql, "https://failing.example/feed");
+    if (feed.status !== "added") throw new Error("expected added");
+    await addHealth("https://failing.example/feed", { consecutiveFailures: 5 });
+    await softDeleteRssFeed(pg.sql, feed.feed.id);
+
+    await expect(listRssFeeds(pg.sql, { errors: true })).resolves.toEqual([]);
+  });
+
+  it("searches feed urls without regard to case", async () => {
+    await addRssFeed(pg.sql, "https://example.com/Tech");
+    await addRssFeed(pg.sql, "https://other.example/news");
+
+    const results = await listRssFeeds(pg.sql, { q: "TECH" });
+
+    expect(results.map((feed) => feed.normalizedUrl)).toEqual([
+      "https://example.com/Tech",
+    ]);
+  });
+
+  it("treats wildcards in a feed search as literal characters", async () => {
+    await addRssFeed(pg.sql, "https://example.com/a_b");
+    await addRssFeed(pg.sql, "https://example.com/axb");
+
+    const results = await listRssFeeds(pg.sql, { q: "a_b" });
+
+    expect(results.map((feed) => feed.normalizedUrl)).toEqual([
+      "https://example.com/a_b",
+    ]);
+  });
+
+  it("orders active feeds before disabled and removed ones", async () => {
+    await addRssFeed(pg.sql, "https://zzz.example/feed");
+    const removed = await addRssFeed(pg.sql, "https://aaa.example/feed");
+    if (removed.status !== "added") throw new Error("expected added");
+    await softDeleteRssFeed(pg.sql, removed.feed.id);
+
+    const feeds = await listRssFeeds(pg.sql);
+
+    expect(feeds.map((feed) => feed.status)).toEqual(["active", "removed"]);
+  });
+
+  it("counts each status independently", async () => {
+    await addRssFeed(pg.sql, "https://active.example/feed");
+    const removed = await addRssFeed(pg.sql, "https://removed.example/feed");
+    const failing = await addRssFeed(pg.sql, "https://failing.example/feed");
+    if (removed.status !== "added" || failing.status !== "added") {
+      throw new Error("expected added");
+    }
+    await softDeleteRssFeed(pg.sql, removed.feed.id);
+    await addHealth("https://failing.example/feed", { consecutiveFailures: 1 });
+
+    await expect(countRssFeedsByStatus(pg.sql)).resolves.toEqual({
+      active: 2,
+      disabled: 0,
+      removed: 1,
+      errors: 1,
+      total: 3,
+    });
+  });
+
+  it("returns zeroes rather than nulls for an empty catalog", async () => {
+    await expect(countRssFeedsByStatus(pg.sql)).resolves.toEqual({
+      active: 0,
+      disabled: 0,
+      removed: 0,
+      errors: 0,
+      total: 0,
+    });
   });
 });

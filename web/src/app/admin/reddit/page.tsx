@@ -8,10 +8,9 @@ import type { Subreddit, SubredditStatus } from "../../../models/subreddits";
 import {
   countSubredditsByStatus,
   listSubreddits,
-  withWritableSubredditsDatabase,
   type SubredditCounts,
 } from "../../../server/subreddits";
-import { loadAppConfig } from "../../../server/config";
+import { getSqlClient } from "../../../server/sql";
 import {
   addSubredditAction,
   deleteSubredditAction,
@@ -54,25 +53,25 @@ export default async function AdminRedditPage({
   const filters = parseFilters(resolved);
   const addFeedback = parseAddFeedback(resolved);
   const confirmRemoveId = parseConfirmRemoveId(resolved);
-  const result = loadSubreddits(filters, addFeedback, confirmRemoveId);
+  const result = await loadSubreddits(filters, addFeedback, confirmRemoveId);
   return <AdminRedditView result={result} />;
 }
 
-function loadSubreddits(
+async function loadSubreddits(
   filters: ActiveFilters,
   addFeedback: AddFeedback | null,
   confirmRemoveId: number | null,
-): LoadResult {
+): Promise<LoadResult> {
   try {
-    const config = loadAppConfig(process.env);
-    return withWritableSubredditsDatabase(config, (db) => ({
+    const sql = getSqlClient(process.env);
+    return {
       status: "ready" as const,
-      subreddits: listSubreddits(db, filters),
-      counts: countSubredditsByStatus(db),
+      subreddits: await listSubreddits(sql, filters),
+      counts: await countSubredditsByStatus(sql),
       filters,
       addFeedback,
       confirmRemoveId,
-    }));
+    };
   } catch {
     return { status: "error" };
   }

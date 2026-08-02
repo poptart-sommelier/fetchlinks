@@ -1,21 +1,8 @@
-import { DatabaseSync } from "node:sqlite";
-
 import type { PostPage, PostUrl, SourceType } from "../models/read-models";
-import { loadAppConfig, type AppConfig } from "./config";
-
-type DbConfig = Pick<AppConfig, "fetchlinksDbPath">;
-
-type Env = Partial<Record<string, string | undefined>>;
+import { escapeLikeValue, SqlParams, utcIso, type SqlClient } from "./sql";
 
 type CountRow = {
   count: number;
-};
-
-type SqlParameter = number | string;
-
-type PostFilterQuery = {
-  clauses: string[];
-  params: SqlParameter[];
 };
 
 type NormalizedPostFilters = {
@@ -23,6 +10,11 @@ type NormalizedPostFilters = {
   sourceType?: SourceType;
   author?: string;
   q?: string;
+};
+
+type PostFilterQuery = {
+  clauses: string[];
+  params: SqlParams;
 };
 
 type PostRow = {
@@ -60,48 +52,34 @@ export type GetPostsOptions = PostFilters & {
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 50;
 
-export type FetchlinksDatabase = DatabaseSync;
+// `post_id` is a bigint, which both drivers hand back as a string to avoid
+// losing precision past 2^53. The read models are numbers and the ids are
+// nowhere near that range, so narrow in SQL: PostgreSQL raises "integer out of
+// range" if that assumption is ever wrong, which is better than a silently
+// truncated id.
+const POST_COLUMNS = `
+  posts.post_id::int AS id,
+  posts.source,
+  posts.source_type   AS "sourceType",
+  posts.author,
+  posts.description,
+  posts.direct_link   AS "directLink",
+  ${utcIso("posts.posted_at")} AS "dateCreated",
+  posts.unique_id     AS "uniqueId"
+`;
 
-export function openFetchlinksDatabase(config: DbConfig): FetchlinksDatabase {
-  return new DatabaseSync(config.fetchlinksDbPath, {
-    readOnly: true,
-    timeout: 5000,
-  });
+export async function getPostCount(sql: SqlClient): Promise<number> {
+  const rows = await sql.query<CountRow>(
+    "SELECT COUNT(*)::int AS count FROM content.posts",
+  );
+
+  return rows[0]?.count ?? 0;
 }
 
-export function openConfiguredFetchlinksDatabase(
-  env: Env = process.env,
-): FetchlinksDatabase {
-  return openFetchlinksDatabase(loadAppConfig(env));
-}
-
-export function withFetchlinksDatabase<T>(
-  config: DbConfig,
-  callback: (database: FetchlinksDatabase) => T,
-): T {
-  const database = openFetchlinksDatabase(config);
-
-  try {
-    return callback(database);
-  } finally {
-    if (database.isOpen) {
-      database.close();
-    }
-  }
-}
-
-export function getPostCount(database: FetchlinksDatabase): number {
-  const row = database.prepare("SELECT COUNT(*) AS count FROM posts").get() as
-    | CountRow
-    | undefined;
-
-  return row?.count ?? 0;
-}
-
-export function getPosts(
-  database: FetchlinksDatabase,
+export async function getPosts(
+  sql: SqlClient,
   options: GetPostsOptions = {},
-): PostPage {
+): Promise<PostPage> {
   const page = normalizePositiveInteger(options.page, DEFAULT_PAGE, "page");
   const pageSize = normalizePositiveInteger(
     options.pageSize,
@@ -111,27 +89,22 @@ export function getPosts(
   const filters = normalizePostFilters(options);
   const filterQuery = buildPostFilterQuery(filters);
   const whereSql = toWhereSql(filterQuery.clauses);
-  const totalPosts = getFilteredPostCount(database, filterQuery);
+  const totalPosts = await getFilteredPostCount(sql, filterQuery, whereSql);
   const totalPages = Math.ceil(totalPosts / pageSize);
-  const postRows = database
-    .prepare(`
-      SELECT
-        idx AS id,
-        source,
-        source_type AS sourceType,
-        author,
-        description,
-        direct_link AS directLink,
-        date_created AS dateCreated,
-        unique_id_string AS uniqueId
-      FROM posts
+  const limit = filterQuery.params.next(pageSize);
+  const offset = filterQuery.params.next((page - 1) * pageSize);
+  const postRows = await sql.query<PostRow>(
+    `
+      SELECT ${POST_COLUMNS}
+      FROM content.posts posts
       ${whereSql}
-      ORDER BY date_created DESC, idx DESC
-      LIMIT ? OFFSET ?
-    `)
-    .all(...filterQuery.params, pageSize, (page - 1) * pageSize) as PostRow[];
-  const urlsByPostId = getUrlsByPostId(
-    database,
+      ORDER BY posts.posted_at DESC, posts.post_id DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `,
+    filterQuery.params.toArray(),
+  );
+  const urlsByPostId = await getUrlsByPostId(
+    sql,
     postRows.map((post) => post.id),
   );
 
@@ -149,44 +122,46 @@ export function getPosts(
   };
 }
 
-function getFilteredPostCount(
-  database: FetchlinksDatabase,
+async function getFilteredPostCount(
+  sql: SqlClient,
   filterQuery: PostFilterQuery,
-): number {
-  const row = database
-    .prepare(`
-      SELECT COUNT(*) AS count
-      FROM posts
-      ${toWhereSql(filterQuery.clauses)}
-    `)
-    .get(...filterQuery.params) as CountRow | undefined;
+  whereSql: string,
+): Promise<number> {
+  const rows = await sql.query<CountRow>(
+    `
+      SELECT COUNT(*)::int AS count
+      FROM content.posts posts
+      ${whereSql}
+    `,
+    filterQuery.params.toArray(),
+  );
 
-  return row?.count ?? 0;
+  return rows[0]?.count ?? 0;
 }
 
-function getUrlsByPostId(
-  database: FetchlinksDatabase,
+async function getUrlsByPostId(
+  sql: SqlClient,
   postIds: number[],
-): Map<number, PostUrl[]> {
+): Promise<Map<number, PostUrl[]>> {
   if (postIds.length === 0) {
     return new Map();
   }
 
-  const placeholders = postIds.map(() => "?").join(", ");
-  const urlRows = database
-    .prepare(`
+  const urlRows = await sql.query<PostUrlRow>(
+    `
       SELECT
-        idx AS id,
-        post_id AS postId,
+        post_url_id::int   AS id,
+        post_id::int       AS "postId",
         position,
-        url AS originalUrl,
-        url_hash AS urlHash,
-        unshortened_url AS unshortenedUrl
-      FROM post_urls
-      WHERE post_id IN (${placeholders})
-      ORDER BY post_id ASC, position ASC, idx ASC
-    `)
-    .all(...postIds) as PostUrlRow[];
+        url                AS "originalUrl",
+        url_hash           AS "urlHash",
+        unshortened_url    AS "unshortenedUrl"
+      FROM content.post_urls
+      WHERE post_id = ANY($1::bigint[])
+      ORDER BY post_id ASC, position ASC, post_url_id ASC
+    `,
+    [postIds],
+  );
   const urlsByPostId = new Map<number, PostUrl[]>();
 
   for (const url of urlRows) {
@@ -206,44 +181,40 @@ function buildPostFilterQuery(
   filters: NormalizedPostFilters,
 ): PostFilterQuery {
   const clauses: string[] = [];
-  const params: SqlParameter[] = [];
+  const params = new SqlParams();
 
   if (filters.source) {
-    clauses.push("posts.source = ?");
-    params.push(filters.source);
+    clauses.push(`posts.source = ${params.next(filters.source)}`);
   }
 
   if (filters.sourceType) {
-    clauses.push("posts.source_type = ?");
-    params.push(filters.sourceType);
+    clauses.push(`posts.source_type = ${params.next(filters.sourceType)}`);
   }
 
   if (filters.author) {
-    clauses.push("posts.author = ?");
-    params.push(filters.author);
+    clauses.push(`posts.author = ${params.next(filters.author)}`);
   }
 
   if (filters.q) {
-    const pattern = `%${escapeLikeValue(filters.q.toLowerCase())}%`;
+    const pattern = params.next(`%${escapeLikeValue(filters.q.toLowerCase())}%`);
 
     clauses.push(`
       (
-        LOWER(COALESCE(posts.description, '')) LIKE ? ESCAPE '\\'
-        OR LOWER(posts.source) LIKE ? ESCAPE '\\'
-        OR LOWER(COALESCE(posts.author, '')) LIKE ? ESCAPE '\\'
-        OR LOWER(COALESCE(posts.direct_link, '')) LIKE ? ESCAPE '\\'
+        LOWER(COALESCE(posts.description, '')) LIKE ${pattern} ESCAPE '\\'
+        OR LOWER(posts.source) LIKE ${pattern} ESCAPE '\\'
+        OR LOWER(COALESCE(posts.author, '')) LIKE ${pattern} ESCAPE '\\'
+        OR LOWER(COALESCE(posts.direct_link, '')) LIKE ${pattern} ESCAPE '\\'
         OR EXISTS (
           SELECT 1
-          FROM post_urls search_urls
-          WHERE search_urls.post_id = posts.idx
+          FROM content.post_urls search_urls
+          WHERE search_urls.post_id = posts.post_id
             AND (
-              LOWER(search_urls.url) LIKE ? ESCAPE '\\'
-              OR LOWER(COALESCE(search_urls.unshortened_url, '')) LIKE ? ESCAPE '\\'
+              LOWER(search_urls.url) LIKE ${pattern} ESCAPE '\\'
+              OR LOWER(COALESCE(search_urls.unshortened_url, '')) LIKE ${pattern} ESCAPE '\\'
             )
         )
       )
     `);
-    params.push(pattern, pattern, pattern, pattern, pattern, pattern);
   }
 
   return { clauses, params };
@@ -278,13 +249,6 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
 
 function toWhereSql(clauses: string[]): string {
   return clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-}
-
-function escapeLikeValue(value: string): string {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("%", "\\%")
-    .replaceAll("_", "\\_");
 }
 
 function normalizePositiveInteger(

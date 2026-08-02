@@ -5,11 +5,8 @@ import Link from "next/link";
 import { formatRelative } from "../../../lib/format-relative";
 import { safeExternalHref } from "../../../lib/safe-external-href";
 import type { MastodonFollow } from "../../../models/mastodon-follows";
-import { loadAppConfig } from "../../../server/config";
-import {
-  getMastodonFollows,
-  withWritableMastodonDatabase,
-} from "../../../server/mastodon";
+import { getSqlClient } from "../../../server/sql";
+import { getMastodonFollows } from "../../../server/mastodon";
 
 type LoadResult =
   | {
@@ -22,21 +19,18 @@ type LoadResult =
 export const dynamic = "force-dynamic";
 
 export default async function AdminMastodonPage() {
-  const result = loadFollows();
+  const result = await loadFollows();
   return <AdminMastodonView result={result} />;
 }
 
-function loadFollows(): LoadResult {
+async function loadFollows(): Promise<LoadResult> {
   try {
-    const config = loadAppConfig(process.env);
-    return withWritableMastodonDatabase(config, (db) => {
-      const snapshot = getMastodonFollows(db);
-      return {
-        status: "ready" as const,
-        follows: snapshot.follows,
-        lastSyncedAt: snapshot.lastSyncedAt,
-      };
-    });
+    const snapshot = await getMastodonFollows(getSqlClient(process.env));
+    return {
+      status: "ready" as const,
+      follows: snapshot.follows,
+      lastSyncedAt: snapshot.lastSyncedAt,
+    };
   } catch {
     return { status: "error" };
   }

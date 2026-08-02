@@ -8,10 +8,9 @@ import type { RssFeed, RssFeedStatus } from "../../../models/rss-feeds";
 import {
   countRssFeedsByStatus,
   listRssFeeds,
-  withWritableFetchlinksDatabase,
   type RssFeedCounts,
 } from "../../../server/feeds";
-import { loadAppConfig } from "../../../server/config";
+import { getSqlClient } from "../../../server/sql";
 import {
   addFeedAction,
   deleteFeedAction,
@@ -55,25 +54,25 @@ export default async function AdminFeedsPage({
   const filters = parseFilters(resolved);
   const addFeedback = parseAddFeedback(resolved);
   const confirmRemoveId = parseConfirmRemoveId(resolved);
-  const result = loadFeeds(filters, addFeedback, confirmRemoveId);
+  const result = await loadFeeds(filters, addFeedback, confirmRemoveId);
   return <AdminFeedsView result={result} />;
 }
 
-function loadFeeds(
+async function loadFeeds(
   filters: ActiveFilters,
   addFeedback: AddFeedback | null,
   confirmRemoveId: number | null,
-): LoadResult {
+): Promise<LoadResult> {
   try {
-    const config = loadAppConfig(process.env);
-    return withWritableFetchlinksDatabase(config, (db) => ({
+    const sql = getSqlClient(process.env);
+    return {
       status: "ready" as const,
-      feeds: listRssFeeds(db, filters),
-      counts: countRssFeedsByStatus(db),
+      feeds: await listRssFeeds(sql, filters),
+      counts: await countRssFeedsByStatus(sql),
       filters,
       addFeedback,
       confirmRemoveId,
-    }));
+    };
   } catch {
     return { status: "error" };
   }
