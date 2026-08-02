@@ -144,31 +144,16 @@ class PostTests(unittest.TestCase):
         self.assertEqual(a.unique_id_string, b.unique_id_string)
         self.assertNotEqual(a.unique_id_string, '')
 
-    def test_get_post_row_shape(self):
-        p = Post()
-        p.source = 's'
-        p.source_type = 'rss'
-        p.author = 'a'
-        p.description = 'd'
-        p.direct_link = 'dl'
-        p.date_created = '2026-01-01 00:00:00'
-        p.unique_id_string = 'u'
-        self.assertEqual(
-            p.get_post_row(),
-            ('s', 'rss', 'a', 'd', 'dl', '2026-01-01 00:00:00', 'u'),
-        )
-
-    def test_get_url_rows_shape(self):
+    def test_url_records_are_ordered(self):
         p = Post()
         p.add_url('https://a.com')
         p.add_url('https://b.com')
-        rows = p.get_url_rows()
-        self.assertEqual(len(rows), 2)
-        # (position, url, url_hash)
-        self.assertEqual(rows[0][0], 0)
-        self.assertEqual(rows[0][1], 'https://a.com')
-        self.assertEqual(rows[0][2], build_hash('https://a.com'))
-        self.assertEqual(rows[1][0], 1)
+        p.source_type = 'rss'
+        p.date_created = '2026-01-01 00:00:00'
+        p.unique_id_string = 'u'
+        record = p.to_record()
+        self.assertEqual(list(record.urls),
+                         ['https://a.com', 'https://b.com'])
 
 
 class RssPostTests(unittest.TestCase):
@@ -293,9 +278,10 @@ class ClampDateNotInFutureTests(unittest.TestCase):
         parsed = dt.datetime.strptime(clamped, '%Y-%m-%d %H:%M:%S')
         self.assertLessEqual(parsed, dt.datetime.now(dt.UTC).replace(tzinfo=None) + dt.timedelta(seconds=1))
 
-    def test_get_post_row_clamps_future_date(self):
+    def test_record_clamps_future_date(self):
         post = Post()
         post.source = 'https://x/'
+        post.source_type = 'rss'
         post.author = 'a'
         post.description = 'd'
         post.direct_link = 'https://x/1'
@@ -303,11 +289,10 @@ class ClampDateNotInFutureTests(unittest.TestCase):
         post.add_url('https://example.com/x')
         post._generate_unique_url_string()
 
-        row = post.get_post_row()
-        clamped_date = row[5]
-        parsed = dt.datetime.strptime(clamped_date, '%Y-%m-%d %H:%M:%S')
+        record = post.to_record()
+        parsed = dt.datetime.fromisoformat(record.posted_at)
         self.assertLess(parsed.year, 2999)
-        # In-memory value is untouched; only the persisted column changes.
+        # In-memory value is untouched; only the persisted value changes.
         self.assertEqual(post.date_created, '2999-12-31 23:59:59')
 
 

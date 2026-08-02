@@ -7,28 +7,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-import db_setup
-import db_utils
 import export_rss_feeds
+from tests.pg_support import PostgresTestCase
 
 
-def _fresh_db(tmp: Path) -> Path:
-    db_path = tmp / 'fetchlinks.db'
-    db_setup.db_initial_setup(db_path)
-    return db_path
-
-
-def _insert(db_path: Path, *, url: str, enabled: int = 1, deleted_at: str | None = None,
-            last_error: str | None = None, consecutive_failures: int = 0) -> None:
-    import sqlite3
-    norm = url.lower().rstrip('/')
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            'INSERT INTO rss_feeds (feed_url, normalized_url, enabled, added_at, '
-            'deleted_at, last_error, consecutive_failures) VALUES (?,?,?,?,?,?,?)',
-            (url, norm, enabled, '2026-01-01 00:00:00', deleted_at,
-             last_error, consecutive_failures),
-        )
+def _reset_root_logging() -> None:
+    import logging
+    root = logging.getLogger()
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+        handler.close()
 
 
 class ClassifyTests(unittest.TestCase):
@@ -114,19 +102,35 @@ class WriteAtomicTests(unittest.TestCase):
             self.assertFalse(target.with_name('out.txt.tmp').exists())
 
 
-class ExportFlowTests(unittest.TestCase):
+class ExportFlowTests(PostgresTestCase):
+    def _insert(self, *, url: str, enabled: bool = True,
+                deleted_at: str | None = None, last_error: str | None = None,
+                consecutive_failures: int = 0) -> None:
+        norm = url.lower().rstrip('/')
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO catalog.rss_feeds (feed_url, normalized_url, enabled, deleted_at) '
+                'VALUES (%s, %s, %s, %s)',
+                (url, norm, enabled, deleted_at),
+            )
+            if last_error is not None or consecutive_failures:
+                cur.execute(
+                    'INSERT INTO content.rss_feed_health '
+                    '(normalized_url, last_error, consecutive_failures) VALUES (%s, %s, %s)',
+                    (norm, last_error, consecutive_failures),
+                )
+        self.conn.commit()
+
     def test_export_writes_snapshot_and_returns_stats(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            db_path = _fresh_db(tmp_path)
-            _insert(db_path, url='https://active/', enabled=1)
-            _insert(db_path, url='https://disabled/', enabled=0,
-                    last_error='HTTP 500', consecutive_failures=10)
-            _insert(db_path, url='https://removed/', enabled=0,
-                    deleted_at='2026-05-01 00:00:00')
-            output = tmp_path / 'snapshot.txt'
+            self._insert(url='https://active/', enabled=True)
+            self._insert(url='https://disabled/', enabled=False,
+                         last_error='HTTP 500', consecutive_failures=10)
+            self._insert(url='https://removed/', enabled=False,
+                         deleted_at='2026-05-01T00:00:00Z')
+            output = Path(tmp) / 'snapshot.txt'
 
-            stats = export_rss_feeds.export_rss_feeds(db_path, output)
+            stats = export_rss_feeds.export_rss_feeds(self.conn, output)
 
             self.assertEqual(stats['total'], 3)
             self.assertEqual(stats['active'], 1)
@@ -137,18 +141,34 @@ class ExportFlowTests(unittest.TestCase):
             self.assertIn('# https://disabled/', body)
             self.assertIn('# https://removed/', body)
 
-    def test_main_ignores_unrelated_source_credentials(self):
+    def test_a_feed_never_fetched_is_still_exported(self):
+        """A catalogued feed with no health row is new, not broken."""
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            db_path = _fresh_db(tmp_path)
-            _insert(db_path, url='https://active/', enabled=1)
-            output = tmp_path / 'snapshot.txt'
-            log_file = tmp_path / 'logs' / 'export.log'
-            config_path = tmp_path / 'fetchlinks.toml'
-            config_path.write_text(
-                f'''
+            self._insert(url='https://brand-new/')
+            output = Path(tmp) / 'snapshot.txt'
+
+            stats = export_rss_feeds.export_rss_feeds(self.conn, output)
+
+            self.assertEqual(stats['total'], 1)
+            self.assertEqual(stats['active'], 1)
+            self.assertIn('https://brand-new/', output.read_text(encoding='utf-8'))
+
+    def test_main_ignores_unrelated_source_credentials(self):
+        # configure_logging attaches a file handler to the root logger, which
+        # keeps the log file open; on Windows that blocks the temp directory
+        # cleanup. Cleanups run last-registered-first, so registering the temp
+        # directory first means the handler is closed before the removal.
+        tmp = self.enterContext(tempfile.TemporaryDirectory())
+        self.addCleanup(_reset_root_logging)
+
+        tmp_path = Path(tmp)
+        self._insert(url='https://active/', enabled=True)
+        output = tmp_path / 'snapshot.txt'
+        log_file = tmp_path / 'logs' / 'export.log'
+        config_path = tmp_path / 'fetchlinks.toml'
+        config_path.write_text(
+            f'''
 [paths]
-db = "{db_path}"
 log_file = "{log_file}"
 
 [sources.rss]
@@ -158,12 +178,16 @@ export_path = "{output}"
 enabled = true
 credential_location = "{tmp_path / 'missing-reddit.json'}"
 seed_file = "subreddits.txt"
-'''.lstrip(),
-                encoding='utf-8',
-            )
+'''.lstrip().replace('\\', '/'),
+            encoding='utf-8',
+        )
 
-            self.assertEqual(export_rss_feeds.main(['--config', str(config_path)]), 0)
-            self.assertIn('https://active/', output.read_text(encoding='utf-8'))
+        exit_code = export_rss_feeds.main(
+            ['--config', str(config_path), '--database-url', self.database_url]
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn('https://active/', output.read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

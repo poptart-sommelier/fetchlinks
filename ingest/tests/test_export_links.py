@@ -1,128 +1,111 @@
-import io
-import sqlite3
+"""Tests for export_links against PostgreSQL."""
+from __future__ import annotations
+
 import tempfile
 import unittest
-from contextlib import redirect_stdout
 from pathlib import Path
 
-import db_setup
 import export_links
+from tests.pg_support import PostgresTestCase
 
 
-def _write_toml(cfg_path: Path, db_value: str, log_dir: Path) -> None:
-    cfg_path.write_text(
-        '[paths]\n'
-        f'db = "{db_value}"\n'
-        f'log_file = "{(log_dir / "fetchlinks.log").as_posix()}"\n',
-        encoding='utf-8',
-    )
-
-
-class _ExportCase(unittest.TestCase):
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.tmp = Path(self._tmp.name)
-        self.db_path = self.tmp / 'db' / 'fetchlinks.db'
-        db_setup.db_initial_setup(self.db_path)
-        self.out_path = self.tmp / 'out' / 'links.txt'
-
-    def tearDown(self):
-        self._tmp.cleanup()
-
-    def _seed(self, rows):
-        # rows is list of (url, unshortened_url|None)
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.cursor()
+class ExportLinksTests(PostgresTestCase):
+    def _post(self, unique_id: str, urls, unshortened=None) -> None:
+        """Insert one post with its URLs. ``unshortened`` maps url -> value."""
+        unshortened = unshortened or {}
+        with self.conn.cursor() as cur:
             cur.execute(
-                'INSERT INTO posts (source, author, description, direct_link, '
-                'date_created, unique_id_string) VALUES (?, ?, ?, ?, ?, ?)',
-                ('s', 'a', 'd', 'dl', '2026-01-01 00:00:00', 'uid-1'),
+                'INSERT INTO content.posts (unique_id, source_type, posted_at) '
+                "VALUES (%s, 'rss', now()) RETURNING post_id",
+                (unique_id,),
             )
-            post_id = cur.lastrowid
-            for i, (url, unshort) in enumerate(rows):
+            post_id = cur.fetchone()[0]
+            for position, url in enumerate(urls):
                 cur.execute(
-                    'INSERT INTO post_urls (post_id, position, url, url_hash, unshortened_url) '
-                    'VALUES (?, ?, ?, ?, ?)',
-                    (post_id, i, url, f'hash{i}', unshort),
+                    'INSERT INTO content.post_urls '
+                    '(post_id, position, url, url_hash, unshortened_url) '
+                    'VALUES (%s, %s, %s, %s, %s)',
+                    (post_id, position, url, f'hash-{unique_id}-{position}',
+                     unshortened.get(url)),
                 )
-            conn.commit()
-
-
-class ResolveDbPathTests(unittest.TestCase):
-    def test_absolute_db_path_preserved(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            db_abs = tmp_path / 'data' / 'x.db'
-            cfg = tmp_path / 'fetchlinks.toml'
-            _write_toml(cfg, db_abs.as_posix(), tmp_path)
-            self.assertEqual(export_links.resolve_db_path(cfg), db_abs)
-
-    def test_relative_db_anchored_to_toml_dir(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cfg_dir = Path(tmp)
-            cfg = cfg_dir / 'fetchlinks.toml'
-            _write_toml(cfg, 'db/x.db', cfg_dir)
-            resolved = export_links.resolve_db_path(cfg)
-            self.assertEqual(resolved, (cfg_dir / 'db' / 'x.db').resolve())
-
-
-class ExportLinksTests(_ExportCase):
-    def test_missing_db_raises(self):
-        with self.assertRaises(FileNotFoundError):
-            export_links.export_links(self.tmp / 'no.db', self.out_path, None)
+        self.conn.commit()
 
     def test_writes_sorted_links_one_per_line(self):
-        self._seed([
-            ('https://b.example/', None),
-            ('https://a.example/', None),
-        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            self._post('p1', ['https://Zebra.example/', 'https://alpha.example/'])
+            self._post('p2', ['https://middle.example/'])
+            out = Path(tmp) / 'links.txt'
 
-        count = export_links.export_links(self.db_path, self.out_path, None)
+            count = export_links.export_links(self.conn, out, None)
 
-        self.assertEqual(count, 2)
-        lines = self.out_path.read_text(encoding='utf-8').splitlines()
-        self.assertEqual(lines, ['https://a.example/', 'https://b.example/'])
+            self.assertEqual(count, 3)
+            self.assertEqual(
+                out.read_text(encoding='utf-8').splitlines(),
+                ['https://alpha.example/', 'https://middle.example/',
+                 'https://Zebra.example/'],
+            )
 
     def test_prefers_unshortened_url_when_present(self):
-        self._seed([
-            ('https://t.co/abc', 'https://target.example/article'),
-            ('https://example.com/', ''),  # empty -> falls back to url
-        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            self._post(
+                'p1', ['https://t.co/abc'],
+                unshortened={'https://t.co/abc': 'https://real.example/story'},
+            )
+            out = Path(tmp) / 'links.txt'
 
-        export_links.export_links(self.db_path, self.out_path, None)
+            export_links.export_links(self.conn, out, None)
 
-        lines = self.out_path.read_text(encoding='utf-8').splitlines()
-        self.assertIn('https://target.example/article', lines)
-        self.assertIn('https://example.com/', lines)
-        self.assertNotIn('https://t.co/abc', lines)
+            self.assertEqual(out.read_text(encoding='utf-8').strip(),
+                             'https://real.example/story')
+
+    def test_empty_unshortened_url_falls_back_to_the_collected_url(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._post('p1', ['https://real.example/'],
+                       unshortened={'https://real.example/': ''})
+            out = Path(tmp) / 'links.txt'
+
+            export_links.export_links(self.conn, out, None)
+
+            self.assertEqual(out.read_text(encoding='utf-8').strip(),
+                             'https://real.example/')
 
     def test_respects_limit(self):
-        self._seed([(f'https://example{i}.com/', None) for i in range(5)])
+        with tempfile.TemporaryDirectory() as tmp:
+            self._post('p1', ['https://a.example/', 'https://b.example/',
+                              'https://c.example/'])
+            out = Path(tmp) / 'links.txt'
 
-        count = export_links.export_links(self.db_path, self.out_path, limit=2)
+            count = export_links.export_links(self.conn, out, 2)
 
-        self.assertEqual(count, 2)
-        self.assertEqual(len(self.out_path.read_text(encoding='utf-8').splitlines()), 2)
+            self.assertEqual(count, 2)
+            self.assertEqual(len(out.read_text(encoding='utf-8').splitlines()), 2)
+
+    def test_negative_limit_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                export_links.export_links(self.conn, Path(tmp) / 'links.txt', -1)
+
+    def test_creates_the_output_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._post('p1', ['https://a.example/'])
+            out = Path(tmp) / 'nested' / 'deeper' / 'links.txt'
+
+            export_links.export_links(self.conn, out, None)
+
+            self.assertTrue(out.exists())
 
 
-class MainTests(_ExportCase):
-    def test_main_accepts_cli_args_writes_file_and_prints_count(self):
-        self._seed([
-            ('https://b.example/', None),
-            ('https://a.example/', None),
-        ])
-        stdout = io.StringIO()
+class MainTests(PostgresTestCase):
+    def test_main_writes_file_and_prints_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / 'links.txt'
 
-        with redirect_stdout(stdout):
-            result = export_links.main([
-                '--db', str(self.db_path),
-                '--out', str(self.out_path),
-                '--limit', '1',
-            ])
+            exit_code = export_links.main(
+                ['--out', str(out), '--database-url', self.database_url]
+            )
 
-        self.assertEqual(result, 0)
-        self.assertEqual(self.out_path.read_text(encoding='utf-8').splitlines(), ['https://a.example/'])
-        self.assertIn(f'Wrote 1 URLs to {self.out_path}', stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(out.read_text(encoding='utf-8'), '')
 
 
 if __name__ == '__main__':

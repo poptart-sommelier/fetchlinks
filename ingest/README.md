@@ -35,16 +35,19 @@ To use a non-default config file, pass `--config /path/to/fetchlinks.toml`.
   `[paths].runtime_dir` optionally moves the collector's runtime directory;
   when omitted it falls back to `FETCHLINKS_RUNTIME_DIR`, then
   `~/.fetchlinks/runtime`.
-- RSS feeds: feed identity (URL, `enabled`, `deleted_at`) lives in the SQLite
-  `rss_feeds` table (the live source of truth); per-feed health (cache headers,
-  consecutive failures, last error/status) lives in a separate
-  `rss_feed_health` table keyed by `normalized_url`. In single-host mode both
-  share one file; the two-host split keeps identity in the control DB and
-  health in the data DB (`[paths].control_db`, defaults to `db`).
-  Manage feeds with `rss_feed_import.py` (`--input` / `--pruned` / `--seed-if-empty`).
-  A deterministic snapshot of the table is written by `export_rss_feeds.py` to
-  `[sources.rss].export_path`; in dev this intentionally updates
-  `ingest/data/config/rss_feeds.txt`, the seed file you review and commit.
+- RSS feeds: feed identity (URL, `enabled`, `deleted_at`) lives in the
+  PostgreSQL `catalog.rss_feeds` table (the live source of truth); per-feed
+  health (cache headers, consecutive failures, last error/status) lives in
+  `content.rss_feed_health`, keyed by `normalized_url`. The two are joined by
+  that natural key rather than a row id, so health survives a feed being
+  removed and re-added, and the admin-owned and publisher-owned schemas stay
+  independently writable.
+  Seed the catalog with `publish_tool.py bootstrap-catalog`; grow it later with
+  `rss_feed_import.py` (`--input` / `--pruned`), which validates candidates over
+  the network first. A deterministic snapshot of the catalog is written by
+  `export_rss_feeds.py` to `[sources.rss].export_path`; in dev this
+  intentionally updates `ingest/data/config/rss_feeds.txt`, the seed file you
+  review and commit.
 - Seed files: `catalog_seed.py` holds the parsing and key normalization for
   `rss_feeds.txt` and `subreddits.txt`. It is shared by the collector-side
   catalog builder and the destination-side bootstrap, so both agree on the
@@ -84,10 +87,9 @@ because a seed list would silently resurrect feeds the admin removed.
 
 ## Collection pipeline (`pipeline/`)
 
-`pipeline/` is the boundary between *collecting* data and *storing* it, added
-as the first step of the move to PostgreSQL. It is deliberately free of any
-database code, so the collecting half of the system can run anywhere while the
-storing half stays specific to one destination.
+`pipeline/` is the boundary between *collecting* data and *storing* it. It is
+deliberately free of any database code, so the collecting half of the system can
+run anywhere while the storing half stays specific to one destination.
 
 - `pipeline/contract.py` — contract v1: the normalized, destination-neutral
   record types (posts, RSS observations, source checkpoints, follows
@@ -168,7 +170,37 @@ python3 spool_tool.py demo                # synthetic batch through the whole li
   snapshot at all, so the publisher leaves the stored list alone; an empty
   snapshot is a real observation that the account follows nobody, and clears it.
 - Log output is written to `[paths].log_file` from `fetchlinks.toml`.
-- A separate one-shot, `retain.py`, prunes posts older than
+- `publish_tool.py retain` prunes posts older than
   `[retention].max_post_age_months` (falling back to
-  `[ingest].max_post_age_months`) and VACUUMs when enough pages are freed.
-  In production it runs weekly via `fetchlinks-retain.timer`.
+  `[ingest].max_post_age_months`) and forgets batch-ledger rows that can no
+  longer be replayed. It issues no `VACUUM`: PostgreSQL autovacuum handles
+  reclamation, and a manual full vacuum would take a lock the web app cannot
+  afford. In production it runs weekly via `fetchlinks-retain.timer`.
+
+## The publisher (`publisher/`)
+
+The destination-specific half. It is the only code that holds a database URL,
+and the collector cannot import it without failing `test_collector_boundary.py`.
+
+```bash
+cd ingest
+export FETCHLINKS_DATABASE_URL='postgresql://...'
+python3 publish_tool.py migrate             # apply db/migrations, owner role
+python3 publish_tool.py bootstrap-catalog   # first run only, from the seed files
+python3 publish_tool.py sync-catalog        # export catalog.v1.json for the collector
+python3 publish_tool.py publish             # drain every ready batch, FIFO
+python3 publish_tool.py retain              # apply the post age limit
+python3 publish_tool.py status              # queue depth and database totals
+```
+
+See [../db/README.md](../db/README.md) for the schema, the migration rules, and
+the three database roles.
+
+Two failure distinctions in `publisher/drain.py` are worth knowing, because
+they are what keep collected data from being lost:
+
+- A batch that fails **validation** is permanently unusable, so it is moved to
+  `failed` and the drain continues.
+- A batch that fails on a **database error** is left in `processing` and the
+  drain stops. Continuing would spin on a destination that is down, and the
+  next run retries `processing` first.

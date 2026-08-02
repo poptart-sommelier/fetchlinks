@@ -14,8 +14,13 @@ ingest/data/logs/
 fetch_links.log
 *.log
 *.log.*
-db/
-ingest/db/
+# db/ now holds the checked-in SQL schema, so ignore database files by
+# extension rather than ignoring the directory.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 .vscode/
 .idea/
 __pycache__/

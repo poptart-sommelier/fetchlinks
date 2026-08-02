@@ -6,20 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-import db_setup
-import db_utils
 import rss_feed_import as importer
-
-
-def _fresh_db(tmp: Path) -> Path:
-    db_path = tmp / 'fetchlinks.db'
-    db_setup.db_initial_setup(db_path)
-    return db_path
-
-
-def _seed_db_with(db_path: Path, urls: list[str]) -> None:
-    feeds = [(u, importer.normalize_feed_url(u)) for u in urls]
-    db_utils.db_insert_rss_feeds(feeds, db_path)
+from tests.pg_support import PostgresTestCase
 
 
 def _rss_feed(
@@ -253,37 +241,53 @@ class FeedCheckTests(unittest.TestCase):
         self.assertFalse(is_duplicate)
 
 
-class ImportWorkflowTests(unittest.TestCase):
-    def test_dry_run_writes_pruned_without_modifying_db(self):
+
+
+class ImportWorkflowTests(PostgresTestCase):
+    """The catalog-writing half of the importer, against a real database."""
+
+    def _seed(self, urls: list[str]) -> None:
+        with self.conn.cursor() as cur:
+            cur.executemany(
+                'INSERT INTO catalog.rss_feeds (feed_url, normalized_url) VALUES (%s, %s)',
+                [(u, importer.normalize_feed_url(u)) for u in urls],
+            )
+        self.conn.commit()
+
+    def _active_check(self, url: str) -> "importer.FeedCheck":
+        return importer.FeedCheck(
+            input_url=url,
+            feed_url=url,
+            final_url=url,
+            status='active',
+            latest_entry=datetime(2026, 5, 1, tzinfo=UTC),
+        )
+
+    def test_dry_run_writes_pruned_without_modifying_the_catalog(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             input_path = tmp_path / 'rss-list.txt'
-            db_path = _fresh_db(tmp_path)
             input_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _seed_db_with(db_path, ['https://existing.example/rss'])
-            before = db_utils.db_count_rss_feeds(db_path)
-            checks = [importer.FeedCheck(
-                input_url='https://new.example/feed.xml',
-                feed_url='https://new.example/feed.xml',
-                final_url='https://new.example/feed.xml',
-                status='active',
-                latest_entry=datetime(2026, 5, 1, tzinfo=UTC),
-            )]
+            self._seed(['https://existing.example/rss'])
+            checks = [self._active_check('https://new.example/feed.xml')]
 
             with patch.object(importer, 'check_candidates', return_value=checks):
-                added = _quiet_call(importer.import_from_input, input_path, db_path, dry_run=True, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path,
+                                    self.conn, dry_run=True, abandoned_days=365)
 
             self.assertEqual(added, 0)
-            self.assertEqual(db_utils.db_count_rss_feeds(db_path), before)
-            self.assertEqual((tmp_path / 'rss-list.txt.pruned').read_text(encoding='utf-8'), 'https://new.example/feed.xml\n')
+            self.assertEqual(self.count('catalog.rss_feeds'), 1)
+            self.assertEqual(
+                (tmp_path / 'rss-list.txt.pruned').read_text(encoding='utf-8'),
+                'https://new.example/feed.xml\n',
+            )
 
     def test_dry_run_excludes_same_site_duplicate_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             input_path = tmp_path / 'rss-list.txt'
-            db_path = _fresh_db(tmp_path)
             input_path.write_text('https://trustedsec.com/feed.rss\n', encoding='utf-8')
-            _seed_db_with(db_path, ['https://www.trustedsec.com/feed/'])
+            self._seed(['https://www.trustedsec.com/feed/'])
             candidate_check = importer.FeedCheck(
                 input_url='https://trustedsec.com/feed.rss',
                 feed_url='https://trustedsec.com/feed.rss',
@@ -305,96 +309,90 @@ class ImportWorkflowTests(unittest.TestCase):
 
             with patch.object(importer, 'check_candidates', return_value=[candidate_check]), \
                  patch.object(importer, 'check_feed', return_value=existing_check):
-                added = _quiet_call(importer.import_from_input, input_path, db_path, dry_run=True, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path,
+                                    self.conn, dry_run=True, abandoned_days=365)
 
             self.assertEqual(added, 0)
-            self.assertEqual((tmp_path / 'rss-list.txt.pruned').read_text(encoding='utf-8'), '')
+            self.assertEqual(
+                (tmp_path / 'rss-list.txt.pruned').read_text(encoding='utf-8'), '')
 
-    def test_default_input_mode_inserts_into_db(self):
+    def test_default_input_mode_inserts_into_the_catalog(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            input_path = tmp_path / 'rss-list.txt'
-            db_path = _fresh_db(tmp_path)
+            input_path = Path(tmp) / 'rss-list.txt'
             input_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _seed_db_with(db_path, ['https://existing.example/rss'])
-            checks = [importer.FeedCheck(
-                input_url='https://new.example/feed.xml',
-                feed_url='https://new.example/feed.xml',
-                final_url='https://new.example/feed.xml',
-                status='active',
-                latest_entry=datetime(2026, 5, 1, tzinfo=UTC),
-            )]
+            self._seed(['https://existing.example/rss'])
+            checks = [self._active_check('https://new.example/feed.xml')]
 
             with patch.object(importer, 'check_candidates', return_value=checks):
-                added = _quiet_call(importer.import_from_input, input_path, db_path, dry_run=False, abandoned_days=365)
+                added = _quiet_call(importer.import_from_input, input_path,
+                                    self.conn, dry_run=False, abandoned_days=365)
 
             self.assertEqual(added, 1)
-            feeds = importer.load_existing_feeds_from_db(db_path)
+            feeds = importer.load_existing_feeds_from_db(self.conn)
             self.assertIn('https://new.example/feed.xml', feeds)
             self.assertIn('https://existing.example/rss', feeds)
 
     def test_pruned_mode_applies_without_network_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            pruned_path = tmp_path / 'rss-list.txt.pruned'
-            db_path = _fresh_db(tmp_path)
+            pruned_path = Path(tmp) / 'rss-list.txt.pruned'
             pruned_path.write_text('https://new.example/feed.xml\n', encoding='utf-8')
-            _seed_db_with(db_path, ['https://existing.example/rss'])
+            self._seed(['https://existing.example/rss'])
 
             with patch.object(importer, 'check_candidates') as check_candidates:
-                added = _quiet_call(importer.import_from_pruned, pruned_path, db_path, dry_run=False)
+                added = _quiet_call(importer.import_from_pruned, pruned_path,
+                                    self.conn, dry_run=False)
 
-            feeds = importer.load_existing_feeds_from_db(db_path)
             self.assertEqual(added, 1)
-            self.assertIn('https://new.example/feed.xml', feeds)
+            self.assertIn('https://new.example/feed.xml',
+                          importer.load_existing_feeds_from_db(self.conn))
             check_candidates.assert_not_called()
 
-    def test_seed_if_empty_inserts_when_table_empty(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            db_path = _fresh_db(tmp_path)
-            seed_path = tmp_path / 'rss_feeds.txt'
-            seed_path.write_text(
-                '# header\nhttps://a.example/feed\n\nhttps://b.example/feed\n',
-                encoding='utf-8',
-            )
+    def test_existing_feed_is_not_inserted_twice(self):
+        self._seed(['https://existing.example/rss'])
 
-            added = _quiet_call(importer.seed_if_empty, seed_path, db_path)
+        added = importer.insert_feeds_into_db(
+            self.conn, ['HTTPS://Existing.example/rss'])
 
-            self.assertEqual(added, 2)
-            self.assertEqual(db_utils.db_count_rss_feeds(db_path), 2)
+        self.assertEqual(added, 0)
+        self.assertEqual(self.count('catalog.rss_feeds'), 1)
 
-    def test_seed_if_empty_noop_when_table_has_rows(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            db_path = _fresh_db(tmp_path)
-            _seed_db_with(db_path, ['https://existing.example/rss'])
-            seed_path = tmp_path / 'rss_feeds.txt'
-            seed_path.write_text('https://a.example/feed\n', encoding='utf-8')
+    def test_a_removed_feed_is_not_resurrected(self):
+        """Re-adding what an admin deleted must be an explicit restore."""
+        self._seed(['https://gone.example/rss'])
+        with self.conn.cursor() as cur:
+            cur.execute('UPDATE catalog.rss_feeds SET deleted_at = now(), enabled = false')
+        self.conn.commit()
 
-            added = _quiet_call(importer.seed_if_empty, seed_path, db_path)
+        added = importer.insert_feeds_into_db(self.conn, ['https://gone.example/rss'])
 
-            self.assertEqual(added, 0)
-            self.assertEqual(db_utils.db_count_rss_feeds(db_path), 1)
+        self.assertEqual(added, 0)
+        self.assertIsNotNone(self.scalar('SELECT deleted_at FROM catalog.rss_feeds'))
+        self.assertFalse(self.scalar('SELECT enabled FROM catalog.rss_feeds'))
 
-    def test_seed_if_empty_noop_when_seed_missing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            db_path = _fresh_db(tmp_path)
-            added = _quiet_call(importer.seed_if_empty, tmp_path / 'missing.txt', db_path)
-            self.assertEqual(added, 0)
+    def test_duplicates_within_one_batch_are_collapsed(self):
+        added = importer.insert_feeds_into_db(
+            self.conn,
+            ['https://a.example/rss', 'HTTPS://A.example/rss', 'https://b.example/rss'],
+        )
 
-    def test_parse_args_rejects_abandoned_days_with_pruned(self):
+        self.assertEqual(added, 2)
+        self.assertEqual(self.count('catalog.rss_feeds'), 2)
+
+
+class ParseArgsTests(unittest.TestCase):
+    def test_rejects_abandoned_days_with_pruned(self):
         with self.assertRaises(SystemExit):
-            _quiet_call(importer.parse_args, ['--pruned', '/tmp/rss-list.txt.pruned', '--abandoned-days', '30'])
+            _quiet_call(importer.parse_args,
+                        ['--pruned', '/tmp/rss-list.txt.pruned', '--abandoned-days', '30'])
 
-    def test_parse_args_rejects_abandoned_days_with_seed(self):
+    def test_requires_an_input_mode(self):
         with self.assertRaises(SystemExit):
-            _quiet_call(importer.parse_args, ['--seed-if-empty', '/tmp/seed.txt', '--abandoned-days', '30'])
+            _quiet_call(importer.parse_args, [])
 
-    def test_parse_args_rejects_dry_run_with_seed(self):
+    def test_input_and_pruned_are_mutually_exclusive(self):
         with self.assertRaises(SystemExit):
-            _quiet_call(importer.parse_args, ['--seed-if-empty', '/tmp/seed.txt', '--dry-run'])
+            _quiet_call(importer.parse_args,
+                        ['--input', '/tmp/a.txt', '--pruned', '/tmp/b.txt'])
 
 
 if __name__ == '__main__':

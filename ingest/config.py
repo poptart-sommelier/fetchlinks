@@ -27,13 +27,8 @@ _VALID_LOG_LEVELS = {'CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'}
 
 @dataclass(frozen=True)
 class PathsConfig:
-    db: Path
     log_file: Path
     log_level: str = 'INFO'
-    # Admin-owned catalog DB (rss_feeds + subreddits identity/flags). When the
-    # ingest and web roles run on one host this defaults to ``db`` (one
-    # physical file); the Pi+VM split points it at a separate file.
-    control_db: Path = field(default_factory=Path)
     # Where queued batches, collector state, and the catalog snapshot live.
     # Kept outside the checkout so deploying code never disturbs them. When
     # unset the collector falls back to FETCHLINKS_RUNTIME_DIR, then to a
@@ -51,9 +46,8 @@ class IngestPolicy:
 @dataclass(frozen=True)
 class RetentionPolicy:
     enabled: bool = True
-    # When None, retention.run() falls back to IngestPolicy.max_post_age_months.
+    # When None, retention falls back to IngestPolicy.max_post_age_months.
     max_post_age_months: int | None = None
-    vacuum_threshold_pages: int = 1000
 
 @dataclass(frozen=True)
 class RssSource:
@@ -123,8 +117,14 @@ class AppConfig:
 
 # --- Loader ----------------------------------------------------------------
 
-def load_config(config_path: Path) -> AppConfig:
-    """Load and validate ``fetchlinks.toml`` at ``config_path``."""
+def load_config(config_path: Path, *, require_credentials: bool = True) -> AppConfig:
+    """Load and validate ``fetchlinks.toml`` at ``config_path``.
+
+    ``require_credentials=False`` skips the existence check on source
+    credential files. The Publisher needs the same file for its seed and
+    retention settings but must never depend on Collector secrets being
+    present, so that the two halves can hold disjoint sets of credentials.
+    """
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f'Config file does not exist: {config_path}')
@@ -136,7 +136,8 @@ def load_config(config_path: Path) -> AppConfig:
     paths = _build_paths(raw.get('paths', {}), base)
     ingest = _build_ingest(raw.get('ingest', {}))
     retention = _build_retention(raw.get('retention', {}))
-    sources = _build_sources(raw.get('sources', {}), base)
+    sources = _build_sources(raw.get('sources', {}), base,
+                             require_credentials=require_credentials)
 
     # Ensure log directory exists; mirrors old behaviour.
     paths.log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -159,26 +160,16 @@ def _resolve_path(value: Any, base: Path, *, expanduser: bool = False) -> Path:
 def _build_paths(section: dict, base: Path) -> PathsConfig:
     if not isinstance(section, dict):
         raise ValueError('[paths] must be a table')
-    for required in ('db', 'log_file'):
-        if required not in section:
-            raise ValueError(f'[paths] missing required field: {required}')
+    if 'log_file' not in section:
+        raise ValueError('[paths] missing required field: log_file')
 
     log_level = str(section.get('log_level', 'INFO')).upper()
     if log_level not in _VALID_LOG_LEVELS:
         raise ValueError(f'[paths] log_level must be one of {sorted(_VALID_LOG_LEVELS)}')
 
-    db = _resolve_path(section['db'], base)
-    # control_db is optional; when unset the catalog shares the data db file.
-    if 'control_db' in section:
-        control_db = _resolve_path(section['control_db'], base)
-    else:
-        control_db = db
-
     return PathsConfig(
-        db=db,
         log_file=_resolve_path(section['log_file'], base),
         log_level=log_level,
-        control_db=control_db,
         runtime_dir=(_resolve_path(section['runtime_dir'], base)
                      if 'runtime_dir' in section else None),
     )
@@ -223,26 +214,29 @@ def _build_retention(section: dict) -> RetentionPolicy:
         if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age < 1:
             raise ValueError('[retention] max_post_age_months must be a positive integer')
 
-    threshold = section.get('vacuum_threshold_pages', 1000)
-    if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 0:
-        raise ValueError('[retention] vacuum_threshold_pages must be a non-negative integer')
+    # vacuum_threshold_pages was a SQLite concern; PostgreSQL autovacuum makes
+    # it meaningless, so it is accepted and ignored rather than rejected, to
+    # keep an older config file from failing to load.
 
     return RetentionPolicy(
         enabled=enabled,
         max_post_age_months=max_age,
-        vacuum_threshold_pages=threshold,
     )
 
 
-def _build_sources(section: dict, base: Path) -> Sources:
+def _build_sources(section: dict, base: Path, *,
+                   require_credentials: bool = True) -> Sources:
     if not isinstance(section, dict):
         raise ValueError('[sources] must be a table')
 
     return Sources(
         rss=_build_rss(section.get('rss'), base),
-        reddit=_build_reddit(section.get('reddit'), base),
-        bluesky=_build_bluesky(section.get('bluesky'), base),
-        mastodon=_build_mastodon(section.get('mastodon'), base),
+        reddit=_build_reddit(section.get('reddit'), base,
+                             require_credentials=require_credentials),
+        bluesky=_build_bluesky(section.get('bluesky'), base,
+                               require_credentials=require_credentials),
+        mastodon=_build_mastodon(section.get('mastodon'), base,
+                                 require_credentials=require_credentials),
     )
 
 
@@ -288,7 +282,8 @@ def _read_feeds_file(path: Path) -> list[str]:
     return out
 
 
-def _build_reddit(section: dict | None, base: Path) -> RedditSource | None:
+def _build_reddit(section: dict | None, base: Path, *,
+                  require_credentials: bool = True) -> RedditSource | None:
     if section is None:
         return None
     if not isinstance(section, dict):
@@ -298,7 +293,9 @@ def _build_reddit(section: dict | None, base: Path) -> RedditSource | None:
     cred = section.get('credential_location')
     if enabled and not cred:
         raise ValueError('[sources.reddit] credential_location required when enabled')
-    cred_path = _expand_credential(cred, base, label='reddit') if enabled else _maybe_path(cred, base)
+    cred_path = (_expand_credential(cred, base, label='reddit',
+                                    require_exists=require_credentials)
+                 if enabled else _maybe_path(cred, base))
 
     seed_file_value = section.get('seed_file')
     seed_file = _resolve_path(seed_file_value, base) if seed_file_value else None
@@ -335,7 +332,8 @@ def _build_reddit(section: dict | None, base: Path) -> RedditSource | None:
     )
 
 
-def _build_bluesky(section: dict | None, base: Path) -> BlueskySource | None:
+def _build_bluesky(section: dict | None, base: Path, *,
+                   require_credentials: bool = True) -> BlueskySource | None:
     if section is None:
         return None
     if not isinstance(section, dict):
@@ -345,7 +343,9 @@ def _build_bluesky(section: dict | None, base: Path) -> BlueskySource | None:
     cred = section.get('credential_location')
     if enabled and not cred:
         raise ValueError('[sources.bluesky] credential_location required when enabled')
-    cred_path = _expand_credential(cred, base, label='bluesky') if enabled else _maybe_path(cred, base)
+    cred_path = (_expand_credential(cred, base, label='bluesky',
+                                    require_exists=require_credentials)
+                 if enabled else _maybe_path(cred, base))
 
     timeline_limit = section.get('timeline_limit', 50)
     if not isinstance(timeline_limit, int) or isinstance(timeline_limit, bool) or timeline_limit < 1:
@@ -358,7 +358,8 @@ def _build_bluesky(section: dict | None, base: Path) -> BlueskySource | None:
     )
 
 
-def _build_mastodon(section: dict | None, base: Path) -> MastodonSource | None:
+def _build_mastodon(section: dict | None, base: Path, *,
+                    require_credentials: bool = True) -> MastodonSource | None:
     if section is None:
         return None
     if not isinstance(section, dict):
@@ -395,7 +396,8 @@ def _build_mastodon(section: dict | None, base: Path) -> MastodonSource | None:
         if instance_enabled and not cred:
             raise ValueError(f'Mastodon instance {name!r} requires credential_location when enabled')
         cred_path = (
-            _expand_credential(cred, base, label=f'mastodon instance {name}')
+            _expand_credential(cred, base, label=f'mastodon instance {name}',
+                               require_exists=require_credentials)
             if instance_enabled
             else _maybe_path(cred, base)
         )
@@ -426,9 +428,10 @@ def _maybe_path(value: Any, base: Path) -> Path | None:
     return _resolve_path(value, base, expanduser=True)
 
 
-def _expand_credential(value: Any, base: Path, *, label: str) -> Path:
+def _expand_credential(value: Any, base: Path, *, label: str,
+                       require_exists: bool = True) -> Path:
     path = _resolve_path(value, base, expanduser=True)
-    if not path.exists():
+    if require_exists and not path.exists():
         raise FileNotFoundError(f'{label} credential file not found at {path}')
     return path
 

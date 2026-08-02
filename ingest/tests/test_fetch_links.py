@@ -25,8 +25,7 @@ from pipeline.state import CollectorState
 
 
 def _paths(tmp: Path, runtime_dir: Path | None = None) -> PathsConfig:
-    db = tmp / 'fetchlinks.db'
-    return PathsConfig(db=db, control_db=db, log_file=tmp / 'fetchlinks.log',
+    return PathsConfig(log_file=tmp / 'fetchlinks.log',
                        log_level='INFO', runtime_dir=runtime_dir)
 
 
@@ -99,8 +98,12 @@ class CollectRoutingTests(unittest.TestCase):
             fetch_links.collect(cfg, build_catalog(), CollectorState())
 
         passed = list(rss_run.call_args.args) + list(rss_run.call_args.kwargs.values())
-        self.assertNotIn(cfg.paths.db, passed)
-        self.assertNotIn(cfg.paths.control_db, passed)
+        # PathsConfig no longer carries a database location at all, so the
+        # check is that nothing database-shaped reaches a source module.
+        for value in passed:
+            text = str(value).lower()
+            self.assertNotIn('.db', text)
+            self.assertNotIn('postgres', text)
 
     def test_passes_configured_ingest_age_limit_to_sources(self):
         tmp = Path('/tmp/fl-test')

@@ -32,10 +32,9 @@ FORBIDDEN_MODULES = frozenset({
     'db_utils', 'db_setup', 'sqlite3', 'psycopg', 'psycopg2', 'sqlalchemy',
 })
 
-# ``utils.py`` still carries the legacy SQLite row helpers, which Phase 3
-# removes. It imports nothing database-specific, so the import checks below
-# still cover it; only the stricter text scan skips it.
-TEXT_SCAN_EXEMPT = frozenset({'utils.py'})
+# Every collector module is now scanned. The exemption that carried
+# ``utils.py`` through Phase 2 is gone with its SQLite row helpers.
+TEXT_SCAN_EXEMPT = frozenset()
 
 
 def _imported_names(path: Path) -> set[str]:

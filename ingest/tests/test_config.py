@@ -8,7 +8,6 @@ import config as app_config
 def _toml(
     cfg_dir: Path,
     *,
-    db='fetchlinks.db',
     log_file='fetchlinks.log',
     log_level='INFO',
     extra: str = '',
@@ -16,7 +15,6 @@ def _toml(
     cfg = cfg_dir / 'fetchlinks.toml'
     cfg.write_text(
         '[paths]\n'
-        f'db = "{db}"\n'
         f'log_file = "{log_file}"\n'
         f'log_level = "{log_level}"\n'
         + extra,
@@ -33,7 +31,6 @@ class LoadConfigTests(unittest.TestCase):
 
             cfg = app_config.load_config(cfg_path)
 
-            self.assertEqual(cfg.paths.db, (tmp_path / 'fetchlinks.db').resolve())
             self.assertEqual(cfg.paths.log_file, (tmp_path / 'fetchlinks.log').resolve())
             self.assertEqual(cfg.paths.log_level, 'INFO')
             self.assertEqual(cfg.sources.rss, None)
@@ -41,26 +38,28 @@ class LoadConfigTests(unittest.TestCase):
             self.assertEqual(cfg.sources.bluesky, None)
             self.assertEqual(cfg.sources.mastodon, None)
 
-    def test_control_db_defaults_to_data_db_when_unset(self):
+    def test_missing_log_file_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            cfg_path = _toml(tmp_path)
+            cfg_path = Path(tmp) / 'fetchlinks.toml'
+            cfg_path.write_text('[paths]\nlog_level = "INFO"\n', encoding='utf-8')
 
-            cfg = app_config.load_config(cfg_path)
+            with self.assertRaises(ValueError):
+                app_config.load_config(cfg_path)
 
-            self.assertEqual(cfg.paths.control_db, cfg.paths.db)
-
-    def test_control_db_resolves_separately_when_set(self):
+    def test_credentials_can_be_absent_for_the_publisher(self):
+        """The Publisher shares this file but holds none of the Collector's secrets."""
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            cfg_path = _toml(tmp_path, extra='control_db = "control.db"\n')
-
-            cfg = app_config.load_config(cfg_path)
-
-            self.assertEqual(
-                cfg.paths.control_db, (tmp_path / 'control.db').resolve()
+            cfg_path = _toml(
+                Path(tmp),
+                extra='\n[sources.bluesky]\nenabled = true\n'
+                      'credential_location = "does-not-exist.json"\n',
             )
-            self.assertNotEqual(cfg.paths.control_db, cfg.paths.db)
+
+            with self.assertRaises(FileNotFoundError):
+                app_config.load_config(cfg_path)
+
+            cfg = app_config.load_config(cfg_path, require_credentials=False)
+            self.assertTrue(cfg.sources.bluesky.enabled)
 
     def test_missing_file_raises(self):
         with self.assertRaises(FileNotFoundError):
@@ -220,18 +219,16 @@ class RetentionConfigTests(unittest.TestCase):
             cfg = app_config.load_config(_toml(Path(tmp)))
             self.assertTrue(cfg.retention.enabled)
             self.assertIsNone(cfg.retention.max_post_age_months)
-            self.assertEqual(cfg.retention.vacuum_threshold_pages, 1000)
 
     def test_explicit_values_are_loaded(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg_path = _toml(
                 Path(tmp),
-                extra='\n[retention]\nenabled = false\nmax_post_age_months = 6\nvacuum_threshold_pages = 250\n',
+                extra='\n[retention]\nenabled = false\nmax_post_age_months = 6\n',
             )
             cfg = app_config.load_config(cfg_path)
             self.assertFalse(cfg.retention.enabled)
             self.assertEqual(cfg.retention.max_post_age_months, 6)
-            self.assertEqual(cfg.retention.vacuum_threshold_pages, 250)
 
     def test_invalid_max_age_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -239,11 +236,12 @@ class RetentionConfigTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 app_config.load_config(cfg)
 
-    def test_negative_threshold_raises(self):
+    def test_obsolete_vacuum_setting_is_ignored(self):
+        """An older config file must still load after SQLite went away."""
         with tempfile.TemporaryDirectory() as tmp:
             cfg = _toml(Path(tmp), extra='\n[retention]\nvacuum_threshold_pages = -1\n')
-            with self.assertRaises(ValueError):
-                app_config.load_config(cfg)
+            loaded = app_config.load_config(cfg)
+            self.assertTrue(loaded.retention.enabled)
 
 
 if __name__ == '__main__':
