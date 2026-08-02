@@ -136,6 +136,28 @@ class Post:
         # (position, url, url_hash) -- post_id is filled in by db_utils after insert.
         return [(idx, url, build_hash(url)) for idx, url in enumerate(self.urls)]
 
+    def to_record(self):
+        """Convert to the destination-independent contract record.
+
+        Applies the same future-date clamp as ``get_post_row`` so a post means
+        the same thing whichever way it is written out. Positions and URL
+        hashes are deliberately not included: they are derivable from the
+        ordered list, and a publisher that recomputes them cannot inherit a
+        stale hash from an old collector.
+        """
+        from pipeline.contract import PostRecord
+
+        return PostRecord(
+            unique_id=self.unique_id_string,
+            source=self.source,
+            source_type=self.source_type,
+            author=self.author,
+            description=self.description,
+            direct_link=self.direct_link,
+            posted_at=clamp_date_not_in_future(self.date_created),
+            urls=list(self.urls),
+        )
+
 
 class RssPost(Post):
     def __init__(self, feed_source, feed_author, post, site_link=None):

@@ -17,39 +17,12 @@ import sys
 import config as app_config
 import db_setup
 import db_utils
-
-
-def clean_subreddit_name(subreddit: str) -> str:
-    """Strip an ``r/`` prefix and surrounding slashes, preserving case."""
-    value = subreddit.strip().strip('/')
-    if value[:2].lower() == 'r/':
-        value = value[2:]
-    return value.strip('/')
-
-
-def normalize_subreddit_name(subreddit: str) -> str:
-    """Lowercase key used for de-duplication and the UNIQUE constraint."""
-    return clean_subreddit_name(subreddit).lower()
-
-
-def read_subreddits_file(path: Path) -> list[str]:
-    """Read one subreddit name per line; skip blank lines and ``#`` comments."""
-    out: list[str] = []
-    for line in path.read_text(encoding='utf-8').splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
-            continue
-        out.append(stripped)
-    return out
-
-
-def resolve_seed_names(reddit_config) -> list[str]:
-    """Resolve subreddit names from the seed file (preferred) or inline list."""
-    if reddit_config is None:
-        return []
-    if reddit_config.seed_file and reddit_config.seed_file.exists():
-        return read_subreddits_file(reddit_config.seed_file)
-    return list(reddit_config.subreddits)
+from catalog_seed import (
+    clean_subreddit_name,
+    normalize_subreddit_name,
+    read_subreddits_file,
+)
+from catalog_seed import resolve_seed_subreddit_names as resolve_seed_names
 
 
 def seed_if_empty(subreddits, db_path: Path) -> int:

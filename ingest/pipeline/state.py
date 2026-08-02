@@ -116,6 +116,27 @@ class CollectorState:
             'last_modified': last_modified or None,
         }
 
+    def apply_rss_observations(self, records: Iterable[Any]) -> int:
+        """Refresh cached validators from the observations a batch carries.
+
+        Only a successful fetch updates the cache. A 500 or a timeout says
+        nothing about whether the previously stored ETag is still valid, and
+        clearing it would turn one bad day into a full re-download of every
+        feed, so failures deliberately leave the cache untouched.
+        """
+        applied = 0
+        for record in records:
+            document = contract.as_dict(record)
+            if not document.get('success'):
+                continue
+            self.set_rss_headers(
+                document['normalized_url'],
+                document.get('etag'),
+                document.get('last_modified'),
+            )
+            applied += 1
+        return applied
+
     def retain_feeds(self, normalized_urls: Iterable[str]) -> int:
         """Drop cache entries for feeds that left the catalog.
 

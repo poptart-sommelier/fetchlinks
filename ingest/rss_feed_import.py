@@ -26,6 +26,12 @@ import requests
 import config as app_config
 import db_setup
 import db_utils
+from catalog_seed import (
+    TRAILING_PUNCTUATION,
+    clean_candidate_url,
+    normalize_feed_url,
+    seed_feed_pairs,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_ABANDONED_DAYS = 365
@@ -34,7 +40,6 @@ MAX_WORKERS = 20
 USER_AGENT = 'fetchlinks-rss-import/0.1 (+https://github.com/poptart-sommelier/fetchlinks)'
 
 URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
-TRAILING_PUNCTUATION = '.,;:!?)]}\''
 
 
 @dataclass(frozen=True)
@@ -86,23 +91,6 @@ def extract_urls(text: str) -> list[str]:
     return urls
 
 
-def clean_candidate_url(url: str) -> str:
-    cleaned = url.strip().rstrip(TRAILING_PUNCTUATION)
-    while cleaned.endswith(')') and cleaned.count('(') < cleaned.count(')'):
-        cleaned = cleaned[:-1]
-    parts = urlsplit(cleaned)
-    if parts.scheme.lower() not in {'http', 'https'} or not parts.netloc:
-        return ''
-    return cleaned
-
-
-def normalize_feed_url(url: str) -> str:
-    cleaned, _fragment = urldefrag(url.strip())
-    parts = urlsplit(cleaned)
-    scheme = parts.scheme.lower()
-    netloc = parts.netloc.lower()
-    path = parts.path or '/'
-    return urlunsplit((scheme, netloc, path, parts.query, ''))
 
 
 def canonical_hostname(url: str) -> str:
@@ -544,14 +532,7 @@ def seed_if_empty(seed_path: Path, db_path: Path) -> int:
         return 0
     if not seed_path.exists():
         return 0
-    feeds: list[str] = []
-    for line in seed_path.read_text(encoding='utf-8').splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
-            continue
-        cleaned = clean_candidate_url(stripped)
-        if cleaned:
-            feeds.append(cleaned)
+    feeds = [feed_url for _key, feed_url in seed_feed_pairs(seed_path)]
     return insert_feeds_into_db(db_path, feeds)
 
 

@@ -1,7 +1,6 @@
 # Fetchlinks Ingest
 
-The ingest app gathers posts with external links from configured sources and
-stores them in a local SQLite database.
+The ingest app gathers posts with external links from configured sources.
 
 Current sources:
 
@@ -10,8 +9,10 @@ Current sources:
 - Bluesky home timeline
 - Mastodon home timelines (multi-instance)
 
-The backend deduplicates rows using a hash of extracted URLs and stores
-results in the `posts` table.
+Collection is split from persistence. `fetch_links.py` is the **collector**: it
+fetches, normalizes, and deduplicates (by a hash of the extracted URLs), then
+writes one batch of records to disk. A destination-specific **publisher** reads
+those batches and applies them. The collector never opens a database.
 
 ## Quick start
 
@@ -21,6 +22,7 @@ Once setup is complete, run:
 
 ```bash
 cd ingest
+python3 catalog_tool.py build-from-seeds   # first run only, without a publisher
 python3 fetch_links.py
 ```
 
@@ -30,6 +32,9 @@ To use a non-default config file, pass `--config /path/to/fetchlinks.toml`.
 
 - Runtime config: `ingest/data/config/fetchlinks.toml`
   (paths, ingest policy, and per-source `enabled` flags + credential paths).
+  `[paths].runtime_dir` optionally moves the collector's runtime directory;
+  when omitted it falls back to `FETCHLINKS_RUNTIME_DIR`, then
+  `~/.fetchlinks/runtime`.
 - RSS feeds: feed identity (URL, `enabled`, `deleted_at`) lives in the SQLite
   `rss_feeds` table (the live source of truth); per-feed health (cache headers,
   consecutive failures, last error/status) lives in a separate
@@ -40,9 +45,42 @@ To use a non-default config file, pass `--config /path/to/fetchlinks.toml`.
   A deterministic snapshot of the table is written by `export_rss_feeds.py` to
   `[sources.rss].export_path`; in dev this intentionally updates
   `ingest/data/config/rss_feeds.txt`, the seed file you review and commit.
+- Seed files: `catalog_seed.py` holds the parsing and key normalization for
+  `rss_feeds.txt` and `subreddits.txt`. It is shared by the collector-side
+  catalog builder and the destination-side bootstrap, so both agree on the
+  natural keys (`normalized_url`, `normalized_name`) that join a catalog entry
+  to everything observed about it.
 
 Use the per-source `enabled` flag in `fetchlinks.toml` to toggle providers
 without changing code.
+
+## The catalog
+
+The collector reads *what to collect* from a single file,
+`runtime/catalog/catalog.v1.json`. Feeds and subreddits are managed in the web
+admin, so their identity is canonical in the destination database; a publisher
+exports this snapshot and the collector reads only the file. That keeps the
+collector working from the last good snapshot when the destination is
+unreachable — only a machine that has never synced has nothing to fall back on.
+
+The catalog carries identity and nothing else: no health, no counters, no
+cursors. Anything the collector can derive itself stays in collector state, so a
+stale catalog can never roll back a resume position. Its `revision` is a digest
+of the entries rather than an export timestamp, so an unchanged subscription
+list keeps the same revision and a batch's `catalog_revision` answers "which
+list produced this?".
+
+```bash
+cd ingest
+python3 catalog_tool.py show                      # current snapshot
+python3 catalog_tool.py build-from-seeds          # build one from the seed files
+python3 catalog_tool.py build-from-seeds --force  # replace an exported catalog
+```
+
+`build-from-seeds` is both the bootstrap for a brand-new install and the way to
+exercise collection on a machine that has never talked to a database. It refuses
+to overwrite a catalog exported from a database unless `--force` is passed,
+because a seed list would silently resurrect feeds the admin removed.
 
 ## Collection pipeline (`pipeline/`)
 
@@ -60,8 +98,14 @@ storing half stays specific to one destination.
 - `pipeline/spool.py` — the crash-safe batch queue.
 - `pipeline/state.py` — the collector's private resume cursors and RSS cache
   headers.
-- `pipeline/layout.py` — resolves the runtime directory (override with
-  `FETCHLINKS_RUNTIME_DIR`, default `~/.fetchlinks/runtime`).
+- `pipeline/catalog.py` — the file-backed catalog snapshot.
+- `pipeline/collection.py` — what one collection cycle produced, before
+  anything is written down. Source modules return one of these and the
+  collector merges them into a single batch, which is what makes a cycle
+  atomic: a crash mid-Mastodon does not leave Reddit's posts queued and its
+  checkpoint lost.
+- `pipeline/layout.py` — resolves the runtime directory (`[paths].runtime_dir`,
+  then `FETCHLINKS_RUNTIME_DIR`, default `~/.fetchlinks/runtime`).
 
 ### Runtime directory
 
@@ -116,8 +160,13 @@ python3 spool_tool.py demo                # synthetic batch through the whole li
 ## Notes
 
 - Bluesky uses the official atproto SDK.
-- Bluesky ingestion persists pagination cursor state in the database and
-  resumes on later runs.
+- Every source resumes from `runtime/state/collector-state.v1.json`: Bluesky and
+  Mastodon pagination cursors, the newest Reddit fullname per subreddit, and RSS
+  `ETag`/`Last-Modified` cache validators. Nothing about resuming depends on the
+  destination being reachable.
+- Follows snapshots distinguish *absent* from *empty*. A failed sync reports no
+  snapshot at all, so the publisher leaves the stored list alone; an empty
+  snapshot is a real observation that the account follows nobody, and clears it.
 - Log output is written to `[paths].log_file` from `fetchlinks.toml`.
 - A separate one-shot, `retain.py`, prunes posts older than
   `[retention].max_post_age_months` (falling back to

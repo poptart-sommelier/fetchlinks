@@ -311,5 +311,65 @@ class ClampDateNotInFutureTests(unittest.TestCase):
         self.assertEqual(post.date_created, '2999-12-31 23:59:59')
 
 
+class PostToRecordTests(unittest.TestCase):
+    @staticmethod
+    def _post(date_created='2026-01-02 03:04:05'):
+        post = Post()
+        post.source = 'https://feed.example'
+        post.source_type = 'rss'
+        post.author = 'someone'
+        post.description = 'a description'
+        post.direct_link = 'https://feed.example/post/1'
+        post.date_created = date_created
+        post.add_url('https://example.com/one')
+        post.add_url('https://example.com/two')
+        post._generate_unique_url_string()
+        return post
+
+    def test_carries_the_natural_identity_and_ordered_urls(self):
+        post = self._post()
+
+        record = post.to_record()
+
+        self.assertEqual(record.unique_id, post.unique_id_string)
+        self.assertEqual(record.source, 'https://feed.example')
+        self.assertEqual(record.source_type, 'rss')
+        self.assertEqual(record.author, 'someone')
+        self.assertEqual(record.description, 'a description')
+        self.assertEqual(record.direct_link, 'https://feed.example/post/1')
+        self.assertEqual(record.urls,
+                         ['https://example.com/one', 'https://example.com/two'])
+
+    def test_carries_no_row_ids_positions_or_url_hashes(self):
+        """The publisher derives those, so a stale one can never be inherited."""
+        document = self._post().to_record().to_dict()
+
+        self.assertNotIn('id', document)
+        self.assertNotIn('post_id', document)
+        self.assertNotIn('url_hash', document)
+        self.assertNotIn('position', document)
+        self.assertEqual(sorted(document), [
+            'author', 'description', 'direct_link', 'posted_at', 'source',
+            'source_type', 'unique_id', 'urls',
+        ])
+
+    def test_clamps_a_future_date_the_same_way_the_row_does(self):
+        post = self._post(date_created='2999-12-31 23:59:59')
+
+        record = post.to_record()
+
+        self.assertLess(int(record.posted_at[:4]), 2999)
+        # The in-memory post is untouched; only the emitted record is clamped.
+        self.assertEqual(post.date_created, '2999-12-31 23:59:59')
+
+    def test_urls_are_copied_not_aliased(self):
+        post = self._post()
+
+        record = post.to_record()
+        post.add_url('https://example.com/three')
+
+        self.assertEqual(len(record.urls), 2)
+
+
 if __name__ == '__main__':
     unittest.main()

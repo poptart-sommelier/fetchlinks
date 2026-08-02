@@ -8,6 +8,10 @@
 db        = "../../db/fetchlinks.db"
 log_file  = "../logs/fetch_links.log"
 log_level = "INFO"
+# Collector runtime directory (catalog, resume state, batch spool). Kept outside
+# the checkout so deploying or rolling back code never disturbs queued batches.
+# Omit to fall back to FETCHLINKS_RUNTIME_DIR, then ~/.fetchlinks/runtime.
+# runtime_dir = "~/.fetchlinks/runtime"
 
 [ingest]
 max_post_age_months                  = 3

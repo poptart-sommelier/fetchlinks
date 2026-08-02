@@ -1,27 +1,28 @@
-"""RSS ingestion using requests + ETag/Last-Modified caching.
+"""RSS collection using requests + ETag/Last-Modified caching.
 
-- Active feeds are read from the control DB ``rss_feeds`` table (enabled = 1
-  and not tombstoned). The seed file is only consulted at first bootstrap by
-  ``rss_feed_import.py --seed-if-empty``.
+- Which feeds to fetch comes from the catalog snapshot; the cached validators
+  for each feed come from local collector state. Neither involves a database.
 - Uses requests with explicit timeouts so a single slow feed can't hang a worker.
 - Sends If-None-Match / If-Modified-Since headers; 304 responses skip parsing.
-- Per-feed health (etag, last_modified, last_status, consecutive_failures)
-  is persisted into the data DB ``rss_feed_health`` table, keyed by
-  ``normalized_url``. Feeds are never auto-disabled by ingest; the failure
-  count is surfaced to the admin for manual removal.
+- Every fetch attempt produces an observation record describing the outcome.
+  Whether an outcome counts against a feed's health, and what that does to a
+  failure counter, is left to the publisher so that replaying a batch cannot
+  inflate the count.
 - Connection pooling via shared requests.Session.
 - Hands raw bytes to feedparser.parse() (no second network round-trip).
 """
+import calendar
 import concurrent.futures
+import datetime
 import logging
-from pathlib import Path
 
 import feedparser
 import requests
 
-import db_utils
 import ingest_limits
 import url_filters
+from pipeline.collection import CollectionResult
+from pipeline.contract import RssObservationRecord, utc_now
 from utils import RssPost
 
 logger = logging.getLogger(__name__)
@@ -32,8 +33,8 @@ USER_AGENT = 'fetchlinks-rss/0.1 (+https://github.com/poptart-sommelier/fetchlin
 # What we pass between fetch and parse:
 #   (normalized_url, feed_url, parsed_feed_or_none, new_etag,
 #    new_last_modified, status_code, error_message_or_none)
-# The natural key is ``normalized_url`` (not an autoincrement id), so health
-# updates can be written to the data DB without consulting the control DB.
+# The natural key is ``normalized_url`` (not an autoincrement id), so an
+# observation can be tied back to its feed without consulting any catalog.
 FetchResult = tuple[
     str, str, feedparser.FeedParserDict | None, str, str, int, str | None,
 ]
@@ -100,8 +101,8 @@ def fetch_feeds(feeds, timeout):
     """Fetch every feed in parallel.
 
     ``feeds`` is an iterable of
-    ``(normalized_url, feed_url, etag, last_modified)`` tuples (typically from
-    ``db_utils.db_get_active_rss_feeds``).
+    ``(normalized_url, feed_url, etag, last_modified)`` tuples, built from the
+    catalog joined to the collector's cached validators.
     """
     results: list[FetchResult] = []
     with requests.Session() as session:
@@ -194,42 +195,78 @@ def pick_site_link(parsed_feed) -> str | None:
     return None
 
 
+def latest_entry_at(parsed_feed) -> str | None:
+    """Newest entry timestamp in a parsed feed, or None if undatable.
+
+    Lets the admin distinguish a feed that is healthy but dormant from one
+    that is genuinely broken, which a status code alone cannot show. Feedparser
+    normalizes ``*_parsed`` to UTC, so no timezone guessing is needed.
+    """
+    if parsed_feed is None:
+        return None
+    entries = getattr(parsed_feed, 'entries', None) or []
+    newest = None
+    for entry in entries:
+        if not hasattr(entry, 'get'):
+            continue
+        parsed = entry.get('published_parsed') or entry.get('updated_parsed')
+        if not parsed:
+            continue
+        try:
+            moment = datetime.datetime.fromtimestamp(calendar.timegm(parsed), datetime.UTC)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if newest is None or moment > newest:
+            newest = moment
+    return newest.strftime('%Y-%m-%dT%H:%M:%SZ') if newest else None
+
+
 def run(
     rss_source,
-    db_path: Path,
+    catalog,
+    state,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
-    control_db_path: Path | None = None,
-):
-    """Fetch every active RSS feed, parse + filter posts, persist health.
+) -> CollectionResult:
+    """Fetch every catalogued RSS feed and return what was observed.
 
-    ``rss_source`` is a ``config.RssSource``. Feed *identity + on/off* lives
-    in the control DB (``control_db_path``; defaults to ``db_path`` for
-    single-host installs); posts and per-feed health are written to the data
-    DB (``db_path``). The seed file is *not* consulted here.
+    ``catalog`` supplies feed identity and ``state`` supplies the cached
+    validators for conditional requests. Nothing is written here: the caller
+    decides when the whole cycle is durable.
     """
-    control_db_path = control_db_path or db_path
-    active = db_utils.db_get_active_rss_feeds(control_db_path, db_path)
-    if not active:
-        logger.info('RSS: no active feeds (rss_feeds table is empty or all disabled)')
-        return
+    result = CollectionResult()
 
-    fetch_results = fetch_feeds(active, rss_source.request_timeout_seconds)
-
-    health_updates = [
-        {
-            'normalized_url': normalized_url,
-            'status': status,
-            'etag': etag,
-            'last_modified': last_mod,
-            'error': err,
-            'site_link': pick_site_link(feed),
-        }
-        for (normalized_url, _url, feed, etag, last_mod, status, err)
-        in fetch_results
+    feeds = [
+        (normalized_url, feed_url, *state.rss_headers(normalized_url))
+        for normalized_url, feed_url in catalog.feed_urls
     ]
-    db_utils.db_update_rss_feed_after_fetch(health_updates, db_path)
+    if not feeds:
+        logger.info('RSS: no active feeds in the catalog')
+        return result
+
+    fetch_results = fetch_feeds(feeds, rss_source.request_timeout_seconds)
+    observed_at = utc_now()
+
+    result.add_rss_observations(
+        RssObservationRecord(
+            normalized_url=normalized_url,
+            feed_url=url,
+            observed_at=observed_at,
+            # 304 is a successful conditional request, not a miss: the cached
+            # copy is confirmed current, so it must not count against health.
+            success=status in (200, 304),
+            # _fetch_one reports 0 when the request never got a response at
+            # all. That is an absence of a status, not status zero.
+            status=status or None,
+            error=err,
+            etag=etag or None,
+            last_modified=last_mod or None,
+            latest_entry_at=latest_entry_at(feed),
+            site_link=pick_site_link(feed),
+        )
+        for (normalized_url, url, feed, etag, last_mod, status, err) in fetch_results
+    )
 
     parsed_posts = parse_posts(fetch_results)
     recent_posts = ingest_limits.filter_posts_by_age(
@@ -238,6 +275,8 @@ def run(
         recent_posts, excluded_url_host_keywords or [], 'RSS')
     recent_posts = url_filters.filter_posts_by_url_or_description_keywords(
         recent_posts, excluded_url_or_description_keywords or [], 'RSS')
+
+    result.add_posts(post.to_record() for post in recent_posts)
 
     counts = {200: 0, 304: 0, 'error': 0}
     for _norm, _u, _f, _e, _l, status, _err in fetch_results:
@@ -249,18 +288,10 @@ def run(
         else:
             counts['error'] += 1
 
-    if recent_posts:
-        inserted_count = db_utils.db_insert(recent_posts, db_path)
-        logger.info(
-            'RSS: %s feeds (200=%s, 304=%s, errors=%s); '
-            '%s posts parsed, %s age-eligible, %s inserted',
-            len(fetch_results), counts[200], counts[304], counts['error'],
-            len(parsed_posts), len(recent_posts), inserted_count,
-        )
-    else:
-        logger.info(
-            'RSS: %s feeds (200=%s, 304=%s, errors=%s); '
-            '%s posts parsed, no age-eligible new posts',
-            len(fetch_results), counts[200], counts[304], counts['error'],
-            len(parsed_posts),
-        )
+    logger.info(
+        'RSS: %s feeds (200=%s, 304=%s, errors=%s); '
+        '%s posts parsed, %s age-eligible collected',
+        len(fetch_results), counts[200], counts[304], counts['error'],
+        len(parsed_posts), len(recent_posts),
+    )
+    return result

@@ -4,6 +4,8 @@ from unittest.mock import Mock, patch
 
 import reddit_links
 from config import RedditSource
+from pipeline.catalog import build_catalog
+from pipeline.state import CollectorState
 from utils import Post
 from utils import RedditPost
 
@@ -129,21 +131,17 @@ class RedditLinksTests(unittest.TestCase):
         self.assertEqual(posts, [])
         self.assertIsNone(newest_fullname)
 
-    def test_get_subreddits_uses_stored_state_and_session_headers(self):
+    def test_get_subreddits_uses_catalog_and_state(self):
         reddit_config = RedditSource(
             enabled=True,
             credential_location=Path('/tmp/reddit.json'),
             subreddits=('Netsec',),
         )
-        db_path = Path('/tmp/db/fetchlinks.db')
+        catalog = build_catalog(subreddit_pairs=[('netsec', 'Netsec')])
+        state = CollectorState()
+        state.set_checkpoint('reddit', 'netsec', cursor='t3_seen')
 
-        with patch.object(reddit_links.db_utils, 'db_get_reddit_states', return_value={'netsec': 't3_seen'}), \
-             patch.object(
-                 reddit_links.db_utils,
-                 'db_get_active_subreddits',
-                 return_value=[(1, 'Netsec', 'netsec')],
-             ), \
-             patch.object(reddit_links, 'RedditAuth') as auth_class, \
+        with patch.object(reddit_links, 'RedditAuth') as auth_class, \
              patch.object(reddit_links.requests, 'Session') as session_class, \
              patch.object(
                  reddit_links,
@@ -154,12 +152,37 @@ class RedditLinksTests(unittest.TestCase):
             auth_class.return_value.user_agent = 'test-ua/0.1'
             session = session_class.return_value.__enter__.return_value
 
-            posts, state_updates = reddit_links.get_subreddits(reddit_config, db_path)
+            posts, state_updates = reddit_links.get_subreddits(
+                reddit_config, catalog, state,
+            )
 
         self.assertEqual(len(posts), 1)
         self.assertEqual(state_updates, [('netsec', 't3_new')])
-        session.headers.update.assert_called_once_with({'Authorization': 'Bearer token', 'User-Agent': 'test-ua/0.1'})
-        get_subreddit.assert_called_once_with(session, 'netsec', 't3_seen', limit=100, max_pages=5)
+        session.headers.update.assert_called_once()
+        get_subreddit.assert_called_once_with(
+            session, 'netsec', 't3_seen', limit=100, max_pages=5,
+        )
+
+    def test_get_subreddits_reads_only_the_catalog(self):
+        """A subreddit configured but not catalogued must not be fetched."""
+        reddit_config = RedditSource(
+            enabled=True,
+            credential_location=Path('/tmp/reddit.json'),
+            subreddits=('netsec', 'notcatalogued'),
+        )
+        catalog = build_catalog(subreddit_pairs=[('netsec', 'netsec')])
+
+        with patch.object(reddit_links, 'RedditAuth') as auth_class, \
+             patch.object(reddit_links.requests, 'Session'), \
+             patch.object(reddit_links, 'get_subreddit',
+                          return_value=([], None)) as get_subreddit:
+            auth_class.return_value.get_auth.return_value = 'token'
+            auth_class.return_value.user_agent = 'test-ua/0.1'
+            reddit_links.get_subreddits(reddit_config, catalog, CollectorState())
+
+        self.assertEqual(get_subreddit.call_count, 1)
+        self.assertEqual(get_subreddit.call_args.args[1], 'netsec')
+
 
 
 class RedditPostExtractUrlsTests(unittest.TestCase):
@@ -190,9 +213,21 @@ class RedditRunTests(unittest.TestCase):
             credential_location=Path('/tmp/reddit.json'),
             subreddits=('netsec',),
         )
-        self.db_path = Path('/tmp/db/fetchlinks.db')
+        self.catalog = build_catalog(subreddit_pairs=[('netsec', 'netsec')])
+        self.state = CollectorState()
 
-    def test_run_does_not_insert_when_no_posts_parse_but_persists_state(self):
+    @staticmethod
+    def _post(url, description=''):
+        post = Post()
+        post.source = 'r/netsec'
+        post.source_type = 'reddit'
+        post.date_created = '2999-01-01 00:00:00'
+        post.description = description
+        post.add_url(url)
+        post._generate_unique_url_string()
+        return post
+
+    def test_run_checkpoints_even_when_no_posts_parse(self):
         state_updates = [('netsec', 't3_new')]
 
         with patch.object(
@@ -200,92 +235,105 @@ class RedditRunTests(unittest.TestCase):
             'get_subreddits',
             return_value=([_make_reddit_post('https://example.com')], state_updates),
         ) as get_subreddits, \
-             patch.object(reddit_links, 'parse_posts', return_value=[]) as parse_posts, \
-             patch.object(reddit_links.db_utils, 'db_insert') as db_insert, \
-             patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
-            reddit_links.run(self.reddit_config, self.db_path)
+             patch.object(reddit_links, 'parse_posts', return_value=[]) as parse_posts:
+            result = reddit_links.run(self.reddit_config, self.catalog, self.state)
 
-        get_subreddits.assert_called_once_with(self.reddit_config, self.db_path, None)
+        get_subreddits.assert_called_once_with(
+            self.reddit_config, self.catalog, self.state,
+        )
         parse_posts.assert_called_once()
-        db_insert.assert_not_called()
-        set_states.assert_called_once_with(state_updates, self.db_path)
+        self.assertEqual(result.posts, [])
+        self.assertEqual(len(result.checkpoints), 1)
+        checkpoint = result.checkpoints[0]
+        self.assertEqual(checkpoint.source_type, 'reddit')
+        self.assertEqual(checkpoint.source_key, 'netsec')
+        self.assertEqual(checkpoint.cursor, 't3_new')
+        self.assertEqual(checkpoint.source_url, 'https://www.reddit.com/r/netsec')
 
-    def test_run_inserts_parsed_posts_and_persists_state(self):
-        parsed_posts = [RedditPost(_make_reddit_post('https://example.com/article'))]
-        state_updates = [('netsec', 't3_new')]
-
-        with patch.object(
-            reddit_links,
-            'get_subreddits',
-            return_value=([_make_reddit_post('https://example.com/article')], state_updates),
-        ), \
-             patch.object(reddit_links, 'parse_posts', return_value=parsed_posts), \
-             patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
-             patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
-            reddit_links.run(self.reddit_config, self.db_path)
-
-        db_insert.assert_called_once_with(parsed_posts, self.db_path)
-        set_states.assert_called_once_with(state_updates, self.db_path)
-
-    def test_run_filters_old_posts_before_insert_but_persists_state(self):
-        old_post = RedditPost(_make_reddit_post('https://example.com/old', created_utc=946684800))
-        recent_post = RedditPost(_make_reddit_post('https://example.com/recent', created_utc=4102444800))
-        state_updates = [('netsec', 't3_new')]
+    def test_run_returns_parsed_posts_and_checkpoints(self):
+        parsed = [RedditPost(_make_reddit_post('https://example.com/article'))]
 
         with patch.object(
             reddit_links,
             'get_subreddits',
-            return_value=([_make_reddit_post('https://example.com/recent')], state_updates),
+            return_value=([], [('netsec', 't3_new')]),
         ), \
-             patch.object(reddit_links, 'parse_posts', return_value=[old_post, recent_post]), \
-             patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
-             patch.object(reddit_links.db_utils, 'db_set_reddit_states') as set_states:
-            reddit_links.run(self.reddit_config, self.db_path, max_post_age_months=3)
+             patch.object(reddit_links, 'parse_posts', return_value=parsed):
+            result = reddit_links.run(self.reddit_config, self.catalog, self.state)
 
-        db_insert.assert_called_once_with([recent_post], self.db_path)
-        set_states.assert_called_once_with(state_updates, self.db_path)
+        self.assertEqual([record.unique_id for record in result.posts],
+                         [parsed[0].unique_id_string])
+        self.assertEqual(len(result.checkpoints), 1)
 
-    def test_run_filters_denied_host_keywords_before_insert(self):
-        state_updates = [('netsec', 't3_new')]
+    def test_run_checkpoints_the_newest_post_seen_not_the_newest_kept(self):
+        """Filtered-out posts must not be re-read on the next cycle."""
+        old_post = RedditPost(
+            _make_reddit_post('https://example.com/old', created_utc=946684800),
+        )
+        recent_post = RedditPost(
+            _make_reddit_post('https://example.com/recent', created_utc=4102444800),
+        )
+
+        with patch.object(
+            reddit_links,
+            'get_subreddits',
+            return_value=([], [('netsec', 't3_new')]),
+        ), \
+             patch.object(reddit_links, 'parse_posts',
+                          return_value=[old_post, recent_post]):
+            result = reddit_links.run(self.reddit_config, self.catalog, self.state,
+                                      max_post_age_months=3)
+
+        self.assertEqual([record.unique_id for record in result.posts],
+                         [recent_post.unique_id_string])
+        self.assertEqual(result.checkpoints[0].cursor, 't3_new')
+
+    def test_run_filters_denied_host_keywords(self):
         post = Post()
         post.date_created = '2999-01-01 00:00:00'
         post.add_url('https://www.businessinsider.com/story')
         post.add_url('https://example.com/allowed')
         post._generate_unique_url_string()
 
-        with patch.object(reddit_links, 'get_subreddits', return_value=([], state_updates)), \
-             patch.object(reddit_links, 'parse_posts', return_value=[post]), \
-             patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
-             patch.object(reddit_links.db_utils, 'db_set_reddit_states'):
-            reddit_links.run(self.reddit_config, self.db_path, excluded_url_host_keywords=['insider'])
+        with patch.object(reddit_links, 'get_subreddits', return_value=([], [])), \
+             patch.object(reddit_links, 'parse_posts', return_value=[post]):
+            result = reddit_links.run(self.reddit_config, self.catalog, self.state,
+                                      excluded_url_host_keywords=['insider'])
 
-        inserted_posts = db_insert.call_args.args[0]
-        self.assertEqual(inserted_posts[0].urls, ['https://example.com/allowed'])
+        self.assertEqual(result.posts[0].urls, ['https://example.com/allowed'])
 
-    def test_run_filters_denied_url_or_description_keywords_before_insert(self):
-        state_updates = [('netsec', 't3_new')]
-        blocked = Post()
-        blocked.date_created = '2999-01-01 00:00:00'
-        blocked.description = 'Politics story'
-        blocked.add_url('https://example.com/story')
-        blocked._generate_unique_url_string()
-        allowed = Post()
-        allowed.date_created = '2999-01-01 00:00:00'
-        allowed.description = 'Technology story'
-        allowed.add_url('https://example.com/allowed')
-        allowed._generate_unique_url_string()
+    def test_run_filters_denied_url_or_description_keywords(self):
+        blocked = self._post('https://example.com/story', description='Politics story')
+        allowed = self._post('https://example.com/allowed', description='Technology story')
 
-        with patch.object(reddit_links, 'get_subreddits', return_value=([], state_updates)), \
-             patch.object(reddit_links, 'parse_posts', return_value=[blocked, allowed]), \
-             patch.object(reddit_links.db_utils, 'db_insert', return_value=1) as db_insert, \
-             patch.object(reddit_links.db_utils, 'db_set_reddit_states'):
-            reddit_links.run(
-                self.reddit_config,
-                self.db_path,
+        with patch.object(reddit_links, 'get_subreddits', return_value=([], [])), \
+             patch.object(reddit_links, 'parse_posts',
+                          return_value=[blocked, allowed]):
+            result = reddit_links.run(
+                self.reddit_config, self.catalog, self.state,
                 excluded_url_or_description_keywords=['politics'],
             )
 
-        db_insert.assert_called_once_with([allowed], self.db_path)
+        self.assertEqual([record.unique_id for record in result.posts],
+                         [allowed.unique_id_string])
+
+    def test_run_produces_no_rss_observations_or_follows(self):
+        with patch.object(reddit_links, 'get_subreddits', return_value=([], [])), \
+             patch.object(reddit_links, 'parse_posts', return_value=[]):
+            result = reddit_links.run(self.reddit_config, self.catalog, self.state)
+
+        self.assertEqual(result.rss_observations, [])
+        self.assertIsNone(result.bluesky_follows)
+        self.assertEqual(result.mastodon_follows, {})
+        self.assertTrue(result.is_empty)
+
+
+class DestinationIndependenceTests(unittest.TestCase):
+    def test_module_holds_no_database_imports(self):
+        source = Path(reddit_links.__file__).read_text(encoding='utf-8')
+        for forbidden in ('db_utils', 'db_setup', 'sqlite3', 'psycopg'):
+            self.assertNotIn(forbidden, source,
+                             f'{forbidden} must not appear in reddit_links.py')
 
 
 if __name__ == '__main__':

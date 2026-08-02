@@ -34,6 +34,11 @@ class PathsConfig:
     # ingest and web roles run on one host this defaults to ``db`` (one
     # physical file); the Pi+VM split points it at a separate file.
     control_db: Path = field(default_factory=Path)
+    # Where queued batches, collector state, and the catalog snapshot live.
+    # Kept outside the checkout so deploying code never disturbs them. When
+    # unset the collector falls back to FETCHLINKS_RUNTIME_DIR, then to a
+    # default under the home directory.
+    runtime_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -174,6 +179,8 @@ def _build_paths(section: dict, base: Path) -> PathsConfig:
         log_file=_resolve_path(section['log_file'], base),
         log_level=log_level,
         control_db=control_db,
+        runtime_dir=(_resolve_path(section['runtime_dir'], base)
+                     if 'runtime_dir' in section else None),
     )
 
 

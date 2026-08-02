@@ -1,13 +1,13 @@
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-import db_utils
 import ingest_limits
 import url_filters
 from auth import BlueskyAuth
 from config import BlueskySource
+from pipeline.collection import CollectionResult
+from pipeline.contract import BlueskyFollowRecord, CheckpointRecord, utc_now
 from utils import BlueskyPost, extract_urls_from_text
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,11 @@ FOLLOWS_PAGE_LIMIT = 100
 MAX_FOLLOWS_PAGES = 50
 # Hosts to exclude from extracted links (we don't want to link back to Bluesky itself).
 EXCLUDED_HOSTS = ('bsky.app', 'bsky.social')
+
+# The Bluesky account reads one timeline, so there is only ever one stream to
+# resume; the key is a constant rather than something derived from credentials.
+CHECKPOINT_SOURCE_TYPE = 'bluesky'
+CHECKPOINT_SOURCE_KEY = 'timeline'
 
 
 def _is_excluded_host(url: str) -> bool:
@@ -157,21 +162,22 @@ def _fetch_timeline_page(client, cursor: Optional[str], limit: int) -> Tuple[Lis
 
 def run(
     bluesky_config: BlueskySource,
-    db_path: Path,
+    state,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: List[str] | None = None,
     excluded_url_or_description_keywords: List[str] | None = None,
-):
+) -> CollectionResult:
+    result = CollectionResult()
     if not bluesky_config.enabled:
         logger.info('Bluesky source is disabled; skipping')
-        return
+        return result
 
     timeline_limit = max(1, min(bluesky_config.timeline_limit, MAX_TIMELINE_LIMIT))
 
     auth_client = BlueskyAuth(str(bluesky_config.credential_location))
     client = auth_client.get_client()
 
-    previous_cursor = db_utils.db_get_bluesky_cursor(db_path)
+    previous_cursor = state.checkpoint(CHECKPOINT_SOURCE_TYPE, CHECKPOINT_SOURCE_KEY)
 
     feed_items: List[Dict[str, Any]] = []
     cursor = previous_cursor
@@ -239,18 +245,31 @@ def run(
         excluded_url_or_description_keywords or [],
         'Bluesky',
     )
-    inserted_count = db_utils.db_insert(recent_posts, db_path)
-    db_utils.db_set_bluesky_cursor(next_cursor, db_path)
+    result.add_posts(post.to_record() for post in recent_posts)
+
+    # An unchanged cursor is not an advance; storing it again would only churn
+    # the observation time. An empty one means the timeline call gave us
+    # nowhere to resume from, and writing that down would restart the source.
+    if next_cursor and next_cursor != previous_cursor:
+        result.add_checkpoints([
+            CheckpointRecord(
+                source_type=CHECKPOINT_SOURCE_TYPE,
+                source_key=CHECKPOINT_SOURCE_KEY,
+                cursor=next_cursor,
+                observed_at=utc_now(),
+                source_url='https://bsky.app',
+            )
+        ])
 
     logger.info(
-        'Parsed %s Bluesky posts (skipped %s no-links, %s missing-fields), %s age-eligible, inserted %s new rows, cursor advanced=%s',
+        'Parsed %s Bluesky posts (skipped %s no-links, %s missing-fields), %s age-eligible collected, cursor advanced=%s',
         len(parsed_posts),
         skipped_no_links,
         skipped_missing_fields,
         len(recent_posts),
-        inserted_count,
-        bool(next_cursor),
+        bool(next_cursor and next_cursor != previous_cursor),
     )
+    return result
 
 
 def _self_did(client) -> Optional[str]:
@@ -272,13 +291,17 @@ def _call_get_follows(client, actor: str, cursor: Optional[str], limit: int) -> 
     return _as_dict(response)
 
 
-def sync_follows(bluesky_config: BlueskySource, db_path: Path) -> None:
-    """Refresh the read-only snapshot of accounts this Bluesky account follows.
+def sync_follows(bluesky_config: BlueskySource) -> CollectionResult:
+    """Capture a complete snapshot of accounts this Bluesky account follows.
 
-    Best-effort: any failure is logged and never raised into the ingest run.
+    Best-effort: any failure is logged and never raised into the collection
+    run. A failure returns no snapshot at all rather than an empty one, because
+    an empty snapshot is a claim that the account follows nobody and would tell
+    the publisher to clear the whole list.
     """
+    result = CollectionResult()
     if not bluesky_config.enabled:
-        return
+        return result
 
     try:
         auth_client = BlueskyAuth(str(bluesky_config.credential_location))
@@ -287,9 +310,9 @@ def sync_follows(bluesky_config: BlueskySource, db_path: Path) -> None:
         actor = _self_did(client) or auth_client.identifier
         if not actor:
             logger.warning('Bluesky: could not resolve own actor; skipping follows sync')
-            return
+            return result
 
-        follows: List[Tuple[str, str, str]] = []
+        follows: List[BlueskyFollowRecord] = []
         cursor: Optional[str] = None
         for _page in range(1, MAX_FOLLOWS_PAGES + 1):
             response = _call_get_follows(client, actor, cursor, FOLLOWS_PAGE_LIMIT)
@@ -301,12 +324,17 @@ def sync_follows(bluesky_config: BlueskySource, db_path: Path) -> None:
                 did = profile.get('did')
                 handle = profile.get('handle')
                 if isinstance(did, str) and isinstance(handle, str) and did and handle:
-                    follows.append((did, handle, profile.get('displayName') or ''))
+                    follows.append(BlueskyFollowRecord(
+                        did=did,
+                        handle=handle,
+                        display_name=profile.get('displayName') or '',
+                    ))
             cursor = response.get('cursor')
             if not cursor:
                 break
 
-        written = db_utils.db_replace_bluesky_follows(follows, db_path)
-        logger.info('Bluesky: synced %s follows', written)
+        result.set_bluesky_follows(follows)
+        logger.info('Bluesky: captured %s follows', len(follows))
     except Exception as exc:  # noqa: BLE001 - best-effort snapshot
         logger.error('Bluesky: follows sync failed: %s', exc)
+    return result
