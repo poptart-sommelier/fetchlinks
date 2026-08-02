@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/checkpoint.v1.json",
+  "title": "Fetchlinks source checkpoint (contract v1)",
+  "description": "How far a source has been read. Publishers apply checkpoints last-write-wins by observed_at so replaying an older batch cannot regress a cursor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_type",
+    "source_key",
+    "cursor",
+    "observed_at",
+    "source_url"
+  ],
+  "properties": {
+    "source_type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 32
+    },
+    "source_key": {
+      "description": "Natural key of the stream within the source: a subreddit name, a Mastodon instance name, or 'timeline'.",
+      "type": "string",
+      "minLength": 1
+    },
+    "cursor": {
+      "description": "Opaque provider cursor. Always a string, even when the provider returns a numeric-looking value.",
+      "type": "string",
+      "minLength": 1
+    },
+    "observed_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "source_url": {
+      "description": "Instance URL for multi-instance sources such as Mastodon; null otherwise.",
+      "type": ["string", "null"]
+    }
+  }
+}

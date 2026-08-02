@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/manifest.v1.json",
+  "title": "Fetchlinks batch manifest (contract v1)",
+  "description": "Describes one immutable collection batch. The manifest is the authoritative index of a batch: any file it names must be present, well formed, and match its recorded count and checksum.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "batch_id",
+    "created_at",
+    "collector_version",
+    "collector_commit",
+    "catalog_revision",
+    "files"
+  ],
+  "properties": {
+    "contract_version": {
+      "description": "Immutable contract version. An incompatible change introduces version 2 rather than altering version 1.",
+      "type": "integer",
+      "const": 1
+    },
+    "batch_id": {
+      "description": "Lexicographically sortable, time-ordered batch identifier so FIFO ordering is a plain name sort.",
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{12}Z-[0-9a-f]{8}$"
+    },
+    "created_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "collector_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "collector_commit": {
+      "type": ["string", "null"]
+    },
+    "catalog_revision": {
+      "description": "Revision of the catalog snapshot the collector read, or null when it ran without one.",
+      "type": ["string", "null"]
+    },
+    "files": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fileEntry" }
+    }
+  },
+  "$defs": {
+    "fileEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "record_count", "sha256", "scope", "observed_at"],
+      "properties": {
+        "name": {
+          "description": "File name within the batch directory. Never a path.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "posts",
+            "rss_observations",
+            "checkpoints",
+            "bluesky_follows",
+            "mastodon_follows"
+          ]
+        },
+        "record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "scope": {
+          "description": "Which slice of a source the file covers, for snapshot kinds that are per-instance.",
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "observed_at": {
+          "description": "When a complete snapshot was taken. Required for snapshot kinds, null otherwise.",
+          "oneOf": [
+            { "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "mastodon_follows" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "scope": { "type": "string", "minLength": 1 },
+              "observed_at": { "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "bluesky_follows" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "observed_at": { "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

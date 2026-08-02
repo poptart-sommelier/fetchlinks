@@ -3,3 +3,6 @@ python-dateutil
 requests
 requests-oauthlib
 atproto
+# Validates the checked-in batch-contract JSON Schemas, so the documented
+# contract and the enforced contract cannot drift apart.
+jsonschema
