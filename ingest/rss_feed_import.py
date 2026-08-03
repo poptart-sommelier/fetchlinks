@@ -1,13 +1,13 @@
-"""Import RSS feeds into the rss_feeds DB table.
+"""Import RSS feeds into the ``catalog.rss_feeds`` table.
 
-Three modes:
-- ``--input FILE``: extract URLs, validate over the network, INSERT OR IGNORE
-  the active ones into rss_feeds. ``--dry-run`` writes a reusable .pruned file
-  instead.
+Two modes:
+- ``--input FILE``: extract URLs, validate over the network, insert the active
+  ones into the catalog. ``--dry-run`` writes a reusable .pruned file instead.
 - ``--pruned FILE``: apply a previously reviewed one-URL-per-line file to the
-  DB without re-validating.
-- ``--seed-if-empty FILE``: bulk INSERT OR IGNORE the URLs from FILE only when
-  the rss_feeds table is empty. No network calls. Used by bootstrap.
+  catalog without re-validating.
+
+First-time seeding lives in ``publish_tool.py bootstrap-catalog``, not here;
+this tool is for growing an already-live catalog from a list of candidates.
 """
 import argparse
 import calendar
@@ -24,8 +24,12 @@ import feedparser
 import requests
 
 import config as app_config
-import db_setup
-import db_utils
+from publisher.connection import connect, resolve_database_url
+from catalog_seed import (
+    TRAILING_PUNCTUATION,
+    clean_candidate_url,
+    normalize_feed_url,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_ABANDONED_DAYS = 365
@@ -34,7 +38,6 @@ MAX_WORKERS = 20
 USER_AGENT = 'fetchlinks-rss-import/0.1 (+https://github.com/poptart-sommelier/fetchlinks)'
 
 URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
-TRAILING_PUNCTUATION = '.,;:!?)]}\''
 
 
 @dataclass(frozen=True)
@@ -86,23 +89,6 @@ def extract_urls(text: str) -> list[str]:
     return urls
 
 
-def clean_candidate_url(url: str) -> str:
-    cleaned = url.strip().rstrip(TRAILING_PUNCTUATION)
-    while cleaned.endswith(')') and cleaned.count('(') < cleaned.count(')'):
-        cleaned = cleaned[:-1]
-    parts = urlsplit(cleaned)
-    if parts.scheme.lower() not in {'http', 'https'} or not parts.netloc:
-        return ''
-    return cleaned
-
-
-def normalize_feed_url(url: str) -> str:
-    cleaned, _fragment = urldefrag(url.strip())
-    parts = urlsplit(cleaned)
-    scheme = parts.scheme.lower()
-    netloc = parts.netloc.lower()
-    path = parts.path or '/'
-    return urlunsplit((scheme, netloc, path, parts.query, ''))
 
 
 def canonical_hostname(url: str) -> str:
@@ -129,15 +115,16 @@ def normalize_text(text: str) -> str:
     return re.sub(r'\s+', ' ', str(text).strip().lower())
 
 
-def load_existing_feeds_from_db(db_path: Path) -> list[str]:
-    """Return feed_url values for every row in rss_feeds (inc. tombstoned).
+def load_existing_feeds_from_db(conn) -> list[str]:
+    """Return feed_url for every catalogued feed, including tombstoned ones.
 
-    Tombstoned and disabled rows are still returned so de-dup correctly
-    skips them; INSERT OR IGNORE against ``normalized_url`` enforces the
-    same invariant at write time.
+    Tombstoned and disabled rows are still returned so de-dup correctly skips
+    them: re-adding a feed an admin removed should require an explicit
+    restore, not a rerun of this importer.
     """
-    db_setup.db_initial_setup(db_path)
-    return [row['feed_url'] for row in db_utils.db_get_all_rss_feeds(db_path)]
+    with conn.cursor() as cur:
+        cur.execute('SELECT feed_url FROM catalog.rss_feeds')
+        return [row[0] for row in cur.fetchall()]
 
 
 def dedupe_against_existing(candidates: list[str], existing_feeds: list[str]) -> tuple[list[str], list[str], list[str]]:
@@ -411,15 +398,16 @@ def write_pruned(input_path: Path, feeds: list[str]) -> Path:
     return pruned_path
 
 
-def insert_feeds_into_db(db_path: Path, feeds_to_add: list[str]) -> int:
-    """Bulk INSERT OR IGNORE feed URLs into the rss_feeds table.
+def insert_feeds_into_db(conn, feeds_to_add: list[str]) -> int:
+    """Insert feed URLs into ``catalog.rss_feeds``, ignoring ones already there.
 
     Returns the number of rows actually inserted (after deduping against
-    existing rows on normalized_url, including tombstoned rows).
+    existing rows on normalized_url, including tombstoned rows). A conflicting
+    row is left untouched rather than revived, for the same reason it is
+    excluded from the candidate list.
     """
     if not feeds_to_add:
         return 0
-    db_setup.db_initial_setup(db_path)
     rows = []
     seen = set()
     for feed in feeds_to_add:
@@ -428,7 +416,16 @@ def insert_feeds_into_db(db_path: Path, feeds_to_add: list[str]) -> int:
             continue
         seen.add(key)
         rows.append((feed, key))
-    return db_utils.db_insert_rss_feeds(rows, db_path)
+
+    with conn.cursor() as cur:
+        cur.executemany(
+            'INSERT INTO catalog.rss_feeds (feed_url, normalized_url) '
+            'VALUES (%s, %s) ON CONFLICT (normalized_url) DO NOTHING',
+            rows,
+        )
+        inserted = cur.rowcount
+    conn.commit()
+    return max(inserted, 0)
 
 
 def summarize_checks(checks: list[FeedCheck]) -> dict[str, list[FeedCheck]]:
@@ -492,17 +489,17 @@ def print_report(
         print('No changes made to the rss_feeds table')
 
 
-def import_from_input(input_path: Path, db_path: Path, dry_run: bool, abandoned_days: int) -> int:
+def import_from_input(input_path: Path, conn, dry_run: bool, abandoned_days: int) -> int:
     text = input_path.read_text(encoding='utf-8')
     extracted = extract_urls(text)
-    existing_feeds = load_existing_feeds_from_db(db_path)
+    existing_feeds = load_existing_feeds_from_db(conn)
     candidates, already_present, duplicate_in_input = dedupe_against_existing(extracted, existing_feeds)
     checks = check_candidates(candidates, abandoned_days)
     checks = mark_same_site_content_duplicates(checks, existing_feeds, abandoned_days)
     accepted_feeds = unique_feed_urls([check.feed_url for check in checks if check.status == 'active'])
 
     pruned_path = write_pruned(input_path, accepted_feeds) if dry_run else None
-    added_count = 0 if dry_run else insert_feeds_into_db(db_path, accepted_feeds)
+    added_count = 0 if dry_run else insert_feeds_into_db(conn, accepted_feeds)
     print_report(
         len(extracted),
         already_present,
@@ -516,11 +513,11 @@ def import_from_input(input_path: Path, db_path: Path, dry_run: bool, abandoned_
     return added_count
 
 
-def import_from_pruned(pruned_path: Path, db_path: Path, dry_run: bool) -> int:
+def import_from_pruned(pruned_path: Path, conn, dry_run: bool) -> int:
     feeds = read_pruned(pruned_path)
-    existing_feeds = load_existing_feeds_from_db(db_path)
+    existing_feeds = load_existing_feeds_from_db(conn)
     candidates, already_present, duplicate_in_input = dedupe_against_existing(feeds, existing_feeds)
-    added_count = 0 if dry_run else insert_feeds_into_db(db_path, candidates)
+    added_count = 0 if dry_run else insert_feeds_into_db(conn, candidates)
     print_report(
         len(feeds),
         already_present,
@@ -533,39 +530,18 @@ def import_from_pruned(pruned_path: Path, db_path: Path, dry_run: bool) -> int:
     return added_count
 
 
-def seed_if_empty(seed_path: Path, db_path: Path) -> int:
-    """Bulk-insert URLs from ``seed_path`` only when rss_feeds is empty.
-
-    Returns the number of rows inserted (0 if the table already had rows or
-    the seed file is missing/empty). No network calls.
-    """
-    db_setup.db_initial_setup(db_path)
-    if db_utils.db_count_rss_feeds(db_path) > 0:
-        return 0
-    if not seed_path.exists():
-        return 0
-    feeds: list[str] = []
-    for line in seed_path.read_text(encoding='utf-8').splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
-            continue
-        cleaned = clean_candidate_url(stripped)
-        if cleaned:
-            feeds.append(cleaned)
-    return insert_feeds_into_db(db_path, feeds)
-
-
 def parse_args(argv: list[str]):
-    parser = argparse.ArgumentParser(description='Import RSS feeds into the rss_feeds DB table.')
+    parser = argparse.ArgumentParser(
+        description='Import RSS feeds into the catalog.rss_feeds table.')
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument('--input', type=Path, help='Text file containing RSS/feed/homepage URLs')
     input_group.add_argument('--pruned', type=Path, help='Previously validated one-feed-URL-per-line file')
-    input_group.add_argument('--seed-if-empty', type=Path, dest='seed_if_empty',
-                             help='Bulk-insert URLs from FILE only when rss_feeds is empty (no network)')
     parser.add_argument('--config', type=Path, default=app_config.DEFAULT_CONFIG,
-                        help='Path to fetchlinks.toml (used to locate the DB)')
+                        help='Path to fetchlinks.toml')
+    parser.add_argument('--database-url', default=None,
+                        help='Override the database URL')
     parser.add_argument('--dry-run', action='store_true',
-                        help='Do not modify the rss_feeds table; with --input, write INPUT.pruned')
+                        help='Do not modify the catalog; with --input, write INPUT.pruned')
     parser.add_argument(
         '--abandoned-days',
         type=int,
@@ -578,31 +554,18 @@ def parse_args(argv: list[str]):
         parser.error('--abandoned-days must be a positive integer')
     if args.pruned and args.abandoned_days != DEFAULT_ABANDONED_DAYS:
         parser.error('--abandoned-days cannot be used with --pruned because network checks are skipped')
-    if args.seed_if_empty and args.abandoned_days != DEFAULT_ABANDONED_DAYS:
-        parser.error('--abandoned-days cannot be used with --seed-if-empty because network checks are skipped')
-    if args.seed_if_empty and args.dry_run:
-        parser.error('--dry-run is not supported with --seed-if-empty')
 
     return args
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    cfg = app_config.load_config(args.config)
-    # rss_feeds is a control-owned identity table; seed it into control_db
-    # (which equals paths.db in single-host mode).
-    db_path = cfg.paths.control_db
-    if args.seed_if_empty:
-        inserted = seed_if_empty(args.seed_if_empty, db_path)
-        if inserted:
-            print(f'Seeded {inserted} feed(s) into rss_feeds from {args.seed_if_empty}')
+    url = resolve_database_url(args.database_url)
+    with connect(url) as conn:
+        if args.input:
+            import_from_input(args.input, conn, args.dry_run, args.abandoned_days)
         else:
-            print('rss_feeds already populated (or seed file missing/empty); no changes made.')
-        return 0
-    if args.input:
-        import_from_input(args.input, db_path, args.dry_run, args.abandoned_days)
-    else:
-        import_from_pruned(args.pruned, db_path, args.dry_run)
+            import_from_pruned(args.pruned, conn, args.dry_run)
     return 0
 
 

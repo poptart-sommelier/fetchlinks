@@ -1,46 +1,55 @@
-"""Export the rss_feeds DB table to a deterministic text snapshot.
+"""Export the feed catalog to a deterministic text snapshot.
 
 The snapshot is split into three sections:
-  - active feeds (enabled = 1, not tombstoned)
-  - disabled feeds (enabled = 0, not tombstoned) as commented lines
+  - active feeds (enabled, not tombstoned)
+  - disabled feeds (not enabled, not tombstoned) as commented lines
   - removed feeds (deleted_at IS NOT NULL) as commented lines
 
-Output is sorted by normalized_url within each section so diffs are stable.
-A timestamped header records when the snapshot was taken.
+Output is sorted by normalized_url within each section so diffs are stable,
+and a timestamped header records when the snapshot was taken.
+
+A Publisher-side tool: identity comes from ``catalog.rss_feeds`` and the
+failure detail from ``content.rss_feed_health``, so it needs a database URL.
+Rendering is kept separate from reading, because the shape of this file is a
+human-review artefact and has nothing to do with where the rows came from.
 
 Usage:
     python export_rss_feeds.py [--config PATH] [--output PATH]
+                               [--database-url URL]
 
-``--output`` defaults to ``cfg.sources.rss.export_path`` from the loaded
-config. The file is written atomically (write-temp + rename).
+``--output`` defaults to ``[sources.rss].export_path`` from the config. The
+file is written atomically (write-temp + rename).
 """
 from __future__ import annotations
 
 import logging
 import os
 import sys
-import tomllib
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from logging import StreamHandler
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import config as app_config
-import db_utils
+from publisher.connection import connect, resolve_database_url
 
 logger = logging.getLogger(__name__)
 
 _LOG_LEVEL_VALUES = {'CRITICAL': 50, 'ERROR': 40, 'WARNING': 30, 'INFO': 20, 'DEBUG': 10}
 
-
-@dataclass(frozen=True)
-class ExportConfig:
-    db_path: Path
-    control_db_path: Path
-    log_file: Path
-    log_level: str
-    export_path: Path | None
+# Left join because health only exists once a feed has actually been fetched;
+# a catalogued feed that has never run is not an error, it is just new.
+_QUERY = """
+    SELECT f.feed_url,
+           f.normalized_url,
+           f.enabled,
+           f.deleted_at,
+           h.last_error,
+           COALESCE(h.consecutive_failures, 0) AS consecutive_failures
+    FROM catalog.rss_feeds f
+    LEFT JOIN content.rss_feed_health h ON h.normalized_url = f.normalized_url
+    ORDER BY f.normalized_url COLLATE "C" ASC
+"""
 
 
 def configure_logging(log_file: Path, log_level_name: str) -> None:
@@ -57,61 +66,7 @@ def configure_logging(log_file: Path, log_level_name: str) -> None:
     )
 
 
-def _resolve_config_path(value, base: Path) -> Path:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError('Path value must be a non-empty string')
-    path = Path(value).expanduser()
-    if not path.is_absolute():
-        path = (base / path).resolve()
-    return path
-
-
-def load_export_config(config_path: Path) -> ExportConfig:
-    config_path = Path(config_path)
-    if not config_path.exists():
-        raise FileNotFoundError(f'Config file does not exist: {config_path}')
-
-    with open(config_path, 'rb') as fh:
-        raw = tomllib.load(fh)
-
-    base = config_path.resolve().parent
-    paths = raw.get('paths', {})
-    if not isinstance(paths, dict):
-        raise ValueError('[paths] must be a table')
-    for required in ('db', 'log_file'):
-        if required not in paths:
-            raise ValueError(f'[paths] missing required field: {required}')
-
-    sources = raw.get('sources', {})
-    if not isinstance(sources, dict):
-        raise ValueError('[sources] must be a table')
-    rss = sources.get('rss', {})
-    if rss is None:
-        rss = {}
-    if not isinstance(rss, dict):
-        raise ValueError('[sources.rss] must be a table')
-
-    export_value = rss.get('export_path')
-    log_level = str(paths.get('log_level', 'INFO')).upper()
-    if log_level not in _LOG_LEVEL_VALUES:
-        raise ValueError(f'[paths] log_level must be one of {sorted(_LOG_LEVEL_VALUES)}')
-
-    log_file = _resolve_config_path(paths['log_file'], base)
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    db_path = _resolve_config_path(paths['db'], base)
-    # control_db is optional; when unset the catalog shares the data db file.
-    if 'control_db' in paths:
-        control_db_path = _resolve_config_path(paths['control_db'], base)
-    else:
-        control_db_path = db_path
-    return ExportConfig(
-        db_path=db_path,
-        control_db_path=control_db_path,
-        log_file=log_file,
-        log_level=log_level,
-        export_path=_resolve_config_path(export_value, base) if export_value else None,
-    )
-
+# --- Rendering (no database) ------------------------------------------------
 
 def _classify(rows):
     active, disabled, removed = [], [], []
@@ -132,7 +87,7 @@ def render_snapshot(rows, generated_at: datetime, output_path: Path | None = Non
     lines: list[str] = []
     lines.append(f'# Generated by export_rss_feeds.py at {generated_at.strftime("%Y-%m-%dT%H:%M:%SZ")}')
     lines.append(f'# active={len(active)}  disabled={len(disabled)}  removed={len(removed)}')
-    lines.append('# The DB is the live source of truth; this file is a snapshot copy.')
+    lines.append('# The catalog is the live source of truth; this file is a snapshot copy.')
     if output_path is not None:
         lines.append(f'# Snapshot path: {output_path}')
     lines.append('')
@@ -182,16 +137,22 @@ def write_atomic(output_path: Path, text: str) -> None:
         output_path.write_text(text, encoding='utf-8')
 
 
-def export_rss_feeds(db_path: Path, output_path: Path,
-                     control_db_path: Path | None = None) -> dict:
-    """Read every feed from the DB and write a snapshot to ``output_path``.
+# --- Reading ----------------------------------------------------------------
 
-    Identity comes from ``control_db_path`` (defaults to ``db_path``) and
-    health from ``db_path``; in single-host mode they are the same file.
+def read_feed_rows(conn) -> list[dict]:
+    """Return every catalogued feed with its health detail, oldest key first."""
+    with conn.cursor() as cur:
+        cur.execute(_QUERY)
+        columns = [d.name for d in cur.description]
+        return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+
+def export_rss_feeds(conn, output_path: Path) -> dict:
+    """Write a snapshot of the feed catalog to ``output_path``.
 
     Returns ``{'total', 'active', 'disabled', 'removed', 'output_path'}``.
     """
-    rows = db_utils.db_get_all_rss_feeds(control_db_path or db_path, db_path)
+    rows = read_feed_rows(conn)
     active, disabled, removed = _classify(rows)
     text = render_snapshot(rows, datetime.now(UTC), output_path)
     write_atomic(output_path, text)
@@ -206,39 +167,43 @@ def export_rss_feeds(db_path: Path, output_path: Path,
 
 def parse_arguments(argv: list[str] | None = None):
     import argparse
-    parser = argparse.ArgumentParser(description='Export rss_feeds to a text snapshot.')
+    parser = argparse.ArgumentParser(description='Export the feed catalog to a text snapshot.')
     parser.add_argument('--config', type=Path, default=app_config.DEFAULT_CONFIG,
                         help='Path to fetchlinks.toml')
     parser.add_argument('--output', type=Path, default=None,
                         help='Override the export path from [sources.rss].export_path')
+    parser.add_argument('--database-url', default=None,
+                        help='Override the database URL')
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_arguments(argv)
     try:
-        cfg = load_export_config(args.config)
-        configure_logging(cfg.log_file, cfg.log_level)
+        cfg = app_config.load_config(args.config, require_credentials=False)
+        configure_logging(cfg.paths.log_file, cfg.paths.log_level)
 
         if args.output:
             output_path = args.output.expanduser().resolve()
-        elif cfg.export_path:
-            output_path = cfg.export_path
+        elif cfg.sources.rss and cfg.sources.rss.export_path:
+            output_path = cfg.sources.rss.export_path
         else:
             raise RuntimeError(
                 '--output not given and [sources.rss].export_path is not set'
             )
 
-        stats = export_rss_feeds(cfg.db_path, output_path, cfg.control_db_path)
+        url = resolve_database_url(args.database_url)
+        with connect(url) as conn:
+            stats = export_rss_feeds(conn, output_path)
         logger.info(
-            'Exported rss_feeds: total=%s active=%s disabled=%s removed=%s -> %s',
+            'Exported feed catalog: total=%s active=%s disabled=%s removed=%s -> %s',
             stats['total'], stats['active'], stats['disabled'],
             stats['removed'], stats['output_path'],
         )
         return 0
     except Exception as exc:
-        logging.exception('export_rss_feeds failed: %s', exc)
-        raise SystemExit(1) from exc
+        logger.error('Export failed: %s', exc)
+        return 1
 
 
 if __name__ == '__main__':

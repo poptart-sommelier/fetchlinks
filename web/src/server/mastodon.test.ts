@@ -1,95 +1,96 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 
-import { getMastodonFollows, withWritableMastodonDatabase } from "./mastodon";
+import { getMastodonFollows } from "./mastodon";
+import { describePostgres, usePostgres } from "./test-support/postgres";
 
-type Fixture = {
-  dbPath: string;
-  cleanup: () => void;
-};
+describePostgres("mastodon follows", () => {
+  const pg = usePostgres();
 
-function createFixture(seed: (db: DatabaseSync) => void): Fixture {
-  const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-masto-"));
-  const dbPath = path.join(directory, "fetchlinks.db");
-  const database = new DatabaseSync(dbPath);
-  database.exec(`
-    CREATE TABLE posts (
-      idx              INTEGER PRIMARY KEY,
-      source           TEXT NOT NULL,
-      source_type      TEXT,
-      author           TEXT,
-      description      TEXT,
-      direct_link      TEXT,
-      date_created     TEXT NOT NULL,
-      unique_id_string TEXT NOT NULL UNIQUE
+  async function addFollow(
+    instanceName: string,
+    accountId: string,
+    acct: string,
+    syncedAt: string,
+    url: string | null = null,
+  ): Promise<void> {
+    await pg.exec(
+      `INSERT INTO content.mastodon_follows
+         (instance_name, account_id, acct, display_name, url, synced_at)
+       VALUES ($1, $2, $3, NULL, $4, $5)`,
+      [instanceName, accountId, acct, url, syncedAt],
     );
-  `);
-  seed(database);
-  database.close();
-  return {
-    dbPath,
-    cleanup: () => rmSync(directory, { force: true, recursive: true }),
-  };
-}
+  }
 
-describe("getMastodonFollows", () => {
-  it("creates the schema on a fresh DB and returns an empty snapshot", () => {
-    const fixture = createFixture(() => {});
-    try {
-      const snapshot = withWritableMastodonDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => getMastodonFollows(db),
-      );
-      expect(snapshot.follows).toEqual([]);
-      expect(snapshot.lastSyncedAt).toBeNull();
-    } finally {
-      fixture.cleanup();
-    }
+  it("returns an empty snapshot when nothing has been synced", async () => {
+    await expect(getMastodonFollows(pg.sql)).resolves.toEqual({
+      follows: [],
+      lastSyncedAt: null,
+    });
   });
 
-  it("returns follows ordered by instance then acct with derived posts", () => {
-    const fixture = createFixture((db) => {
-      db.exec(`
-        CREATE TABLE mastodon_follows (
-          instance_name TEXT NOT NULL,
-          account_id    TEXT NOT NULL,
-          acct          TEXT NOT NULL,
-          display_name  TEXT,
-          url           TEXT,
-          synced_at     TEXT NOT NULL,
-          PRIMARY KEY (instance_name, account_id)
-        );
-        INSERT INTO mastodon_follows
-          (instance_name, account_id, acct, display_name, url, synced_at)
-        VALUES
-          ('infosec', '2', 'zed', 'Zed', 'https://infosec.exchange/@zed', '2026-02-01 00:00:00'),
-          ('infosec', '1', 'abe', NULL, 'https://infosec.exchange/@abe', '2026-02-03 00:00:00'),
-          ('hachyderm', '5', 'kit', 'Kit', 'https://hachyderm.io/@kit', '2026-02-02 00:00:00');
-        INSERT INTO posts
-          (idx, source, source_type, author, description, direct_link, date_created, unique_id_string)
-        VALUES
-          (1, 'https://infosec.exchange/@abe', 'mastodon', 'Abe', 'd', 'l', '2026-01-15 00:00:00', 'u1');
-      `);
-    });
-    try {
-      const snapshot = withWritableMastodonDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => getMastodonFollows(db),
+  it("groups by instance, then orders by account without regard to case", async () => {
+    await addFollow("mastodon.social", "2", "Zoe", "2026-01-01T00:00:00Z");
+    await addFollow("mastodon.social", "1", "adam", "2026-01-01T00:00:00Z");
+    await addFollow("fosstodon.org", "3", "kim", "2026-01-01T00:00:00Z");
+
+    const snapshot = await getMastodonFollows(pg.sql);
+
+    expect(
+      snapshot.follows.map((follow) => [follow.instanceName, follow.acct]),
+    ).toEqual([
+      ["fosstodon.org", "kim"],
+      ["mastodon.social", "adam"],
+      ["mastodon.social", "Zoe"],
+    ]);
+  });
+
+  it("reports the most recent sync time across all instances", async () => {
+    await addFollow("mastodon.social", "1", "a", "2026-01-01T00:00:00Z");
+    await addFollow("fosstodon.org", "2", "b", "2026-04-01T09:00:00Z");
+
+    const snapshot = await getMastodonFollows(pg.sql);
+
+    expect(snapshot.lastSyncedAt).toBe("2026-04-01T09:00:00Z");
+  });
+
+  // Mastodon accounts are matched on the profile url exactly, since the same
+  // acct can exist on more than one instance.
+  it("matches posts to a follow by profile url", async () => {
+    await addFollow(
+      "mastodon.social",
+      "1",
+      "someone",
+      "2026-01-01T00:00:00Z",
+      "https://mastodon.social/@someone",
+    );
+    for (const [uniqueId, postedAt] of [
+      ["p1", "2026-01-05T00:00:00Z"],
+      ["p2", "2026-02-05T00:00:00Z"],
+    ] as const) {
+      await pg.exec(
+        `INSERT INTO content.posts (unique_id, source, source_type, posted_at)
+         VALUES ($1, 'https://mastodon.social/@someone', 'mastodon', $2)`,
+        [uniqueId, postedAt],
       );
-      expect(
-        snapshot.follows.map((f) => `${f.instanceName}/${f.acct}`),
-      ).toEqual(["hachyderm/kit", "infosec/abe", "infosec/zed"]);
-      const abe = snapshot.follows.find((f) => f.acct === "abe");
-      expect(abe?.latestPostAt).toBe("2026-01-15 00:00:00");
-      expect(abe?.postSource).toBe("https://infosec.exchange/@abe");
-      const zed = snapshot.follows.find((f) => f.acct === "zed");
-      expect(zed?.latestPostAt).toBeNull();
-      expect(snapshot.lastSyncedAt).toBe("2026-02-03 00:00:00");
-    } finally {
-      fixture.cleanup();
     }
+
+    const snapshot = await getMastodonFollows(pg.sql);
+
+    expect(snapshot.follows[0]?.latestPostAt).toBe("2026-02-05T00:00:00Z");
+    expect(snapshot.follows[0]?.postSource).toBe(
+      "https://mastodon.social/@someone",
+    );
+  });
+
+  it("reports no posts for a follow with no url recorded", async () => {
+    await addFollow("mastodon.social", "1", "someone", "2026-01-01T00:00:00Z");
+    await pg.exec(
+      `INSERT INTO content.posts (unique_id, source, source_type, posted_at)
+       VALUES ('p1', 'https://mastodon.social/@someone', 'mastodon', '2026-01-01T00:00:00Z')`,
+    );
+
+    const snapshot = await getMastodonFollows(pg.sql);
+
+    expect(snapshot.follows[0]?.latestPostAt).toBeNull();
   });
 });

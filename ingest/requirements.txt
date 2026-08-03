@@ -3,3 +3,9 @@ python-dateutil
 requests
 requests-oauthlib
 atproto
+# Validates the checked-in batch-contract JSON Schemas, so the documented
+# contract and the enforced contract cannot drift apart.
+jsonschema
+# PostgreSQL driver for the publisher. Only the publisher imports it; the
+# collector must keep running on a machine that has no database at all.
+psycopg[binary]

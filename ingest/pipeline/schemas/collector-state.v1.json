@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/collector-state.v1.json",
+  "title": "Fetchlinks collector state (contract v1)",
+  "description": "Collector-owned local resume state. It never leaves the collecting host and is deliberately separate from the batch contract, so a destination can be rebuilt without re-fetching everything and a collector can run with no database at all.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["state_version", "updated_at", "rss_cache", "checkpoints"],
+  "properties": {
+    "state_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "updated_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "rss_cache": {
+      "description": "Conditional-request headers keyed by normalized feed URL.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["etag", "last_modified"],
+        "properties": {
+          "etag": { "type": ["string", "null"] },
+          "last_modified": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "checkpoints": {
+      "description": "Resume cursors nested by source type then natural source key, so a key containing separators can never collide with another source.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cursor", "observed_at", "source_url"],
+          "properties": {
+            "cursor": { "type": "string", "minLength": 1 },
+            "observed_at": { "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json" },
+            "source_url": { "type": ["string", "null"] }
+          }
+        }
+      }
+    }
+  }
+}

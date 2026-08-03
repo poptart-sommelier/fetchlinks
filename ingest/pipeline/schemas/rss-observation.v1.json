@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/rss-observation.v1.json",
+  "title": "Fetchlinks RSS fetch observation (contract v1)",
+  "description": "The outcome of one attempt to fetch one RSS feed. Health counters are derived by the publisher and never carried here, so replaying a batch cannot inflate them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "normalized_url",
+    "feed_url",
+    "observed_at",
+    "success",
+    "status",
+    "error",
+    "etag",
+    "last_modified",
+    "latest_entry_at",
+    "site_link"
+  ],
+  "properties": {
+    "normalized_url": {
+      "description": "Natural key joining this observation to the feed catalog.",
+      "type": "string",
+      "minLength": 1
+    },
+    "feed_url": {
+      "description": "Feed URL as configured, before normalization.",
+      "type": "string",
+      "minLength": 1
+    },
+    "observed_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "success": {
+      "description": "True when the feed was fetched successfully or confirmed unchanged.",
+      "type": "boolean"
+    },
+    "status": {
+      "description": "HTTP status code, or null when the request never produced one.",
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 599
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "etag": {
+      "type": ["string", "null"]
+    },
+    "last_modified": {
+      "type": ["string", "null"]
+    },
+    "latest_entry_at": {
+      "description": "Timestamp of the newest entry seen in this feed, or null when unknown.",
+      "oneOf": [
+        { "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json" },
+        { "type": "null" }
+      ]
+    },
+    "site_link": {
+      "description": "Website the feed advertises, used as the public-facing source link.",
+      "type": ["string", "null"]
+    }
+  }
+}

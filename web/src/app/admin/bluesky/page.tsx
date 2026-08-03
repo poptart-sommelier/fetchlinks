@@ -5,11 +5,8 @@ import Link from "next/link";
 import { formatRelative } from "../../../lib/format-relative";
 import { safeExternalHref } from "../../../lib/safe-external-href";
 import type { BlueskyFollow } from "../../../models/bluesky-follows";
-import { loadAppConfig } from "../../../server/config";
-import {
-  getBlueskyFollows,
-  withWritableBlueskyDatabase,
-} from "../../../server/bluesky";
+import { getSqlClient } from "../../../server/sql";
+import { getBlueskyFollows } from "../../../server/bluesky";
 
 type LoadResult =
   | {
@@ -22,21 +19,18 @@ type LoadResult =
 export const dynamic = "force-dynamic";
 
 export default async function AdminBlueskyPage() {
-  const result = loadFollows();
+  const result = await loadFollows();
   return <AdminBlueskyView result={result} />;
 }
 
-function loadFollows(): LoadResult {
+async function loadFollows(): Promise<LoadResult> {
   try {
-    const config = loadAppConfig(process.env);
-    return withWritableBlueskyDatabase(config, (db) => {
-      const snapshot = getBlueskyFollows(db);
-      return {
-        status: "ready" as const,
-        follows: snapshot.follows,
-        lastSyncedAt: snapshot.lastSyncedAt,
-      };
-    });
+    const snapshot = await getBlueskyFollows(getSqlClient(process.env));
+    return {
+      status: "ready" as const,
+      follows: snapshot.follows,
+      lastSyncedAt: snapshot.lastSyncedAt,
+    };
   } catch {
     return { status: "error" };
   }

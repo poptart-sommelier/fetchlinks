@@ -164,10 +164,11 @@ web/                                   Next.js webapp (TypeScript, vitest)
 
 ## Baseline facts
 
-- Reddit, Bluesky, Mastodon, and RSS are **all live in production** with
-  credentials at the paths referenced by `ingest/data/config/fetchlinks.toml`.
-  New credentialed sources need config entries and matching external files.
-- The DB is the live source of truth for posts, URLs, and `rss_feeds`.
+- Reddit, Bluesky, Mastodon, and RSS are implemented, but Fetchlinks has not yet
+  been deployed in production. Credentialed sources need config entries and
+  matching external files.
+- When the current SQLite topology is run, the DB is the runtime source of truth
+  for posts, URLs, and `rss_feeds`.
   In the two-host split, feed/subreddit identity + on/off live in VM-owned
   control.db and everything ingest produces (posts, health, follows, cursors)
   lives in Pi-owned data.db, joined on natural keys.

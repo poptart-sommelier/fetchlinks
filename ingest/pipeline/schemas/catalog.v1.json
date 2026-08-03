@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/catalog.v1.json",
+  "title": "Fetchlinks collection catalog (contract v1)",
+  "description": "What the collector should collect: feed and subreddit identity only. Exported from the destination by a publisher, then read by the collector, which is how the collector learns about admin changes without holding database credentials. Carries no health, no cursors, and no counters -- only the subscription list.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "catalog_version",
+    "revision",
+    "generated_at",
+    "source",
+    "rss_feeds",
+    "subreddits"
+  ],
+  "properties": {
+    "catalog_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "revision": {
+      "description": "Digest of the entries alone. Stable while the subscription list is unchanged, so a batch's catalog_revision says which list produced it.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generated_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "source": {
+      "description": "Where this snapshot came from, for diagnosis only.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "rss_feeds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["feed_url", "normalized_url"],
+        "properties": {
+          "feed_url": {
+            "description": "The URL to request.",
+            "type": "string",
+            "pattern": "^https?://"
+          },
+          "normalized_url": {
+            "description": "Natural key tying observations back to this feed.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "subreddits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "normalized_name"],
+        "properties": {
+          "name": {
+            "description": "Display form, preserving the case a human typed.",
+            "type": "string",
+            "minLength": 1
+          },
+          "normalized_name": {
+            "description": "Lowercase natural key, also the path segment requested.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_]+$"
+          }
+        }
+      }
+    }
+  }
+}

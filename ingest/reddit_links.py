@@ -1,20 +1,25 @@
 import requests
 import logging
-from pathlib import Path
 
 # Custom libraries
 from utils import RedditPost
-import db_utils
 import ingest_limits
 import url_filters
 from auth import RedditAuth
 from config import RedditSource
+from pipeline.collection import CollectionResult
+from pipeline.contract import CheckpointRecord, utc_now
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT_SECONDS = 20
 DEFAULT_LISTING_LIMIT = 100
 MAX_LISTING_LIMIT = 100
 MAX_PAGES = 5
+
+# Checkpoints are keyed by source type plus the natural key of the stream. For
+# Reddit that is the normalized subreddit name, so renaming the display case of
+# a subreddit does not orphan its resume position.
+CHECKPOINT_SOURCE_TYPE = 'reddit'
 
 
 def _post_fullname(post: dict) -> str:
@@ -48,12 +53,9 @@ def _log_rate_limit(response):
         logger.debug('Reddit rate limit remaining=%s reset=%s', remaining, reset)
 
 
-def get_subreddits(reddit_config: RedditSource, db_path: Path, control_db_path: Path | None = None) -> tuple[list[dict], list[tuple[str, str]]]:
+def get_subreddits(reddit_config: RedditSource, catalog, state) -> tuple[list[dict], list[tuple[str, str]]]:
     subreddit_posts = []
     state_updates = []
-    control_db_path = control_db_path or db_path
-    active_subreddits = db_utils.db_get_active_subreddits(control_db_path)
-    reddit_states = db_utils.db_get_reddit_states(db_path)
 
     reddit_auth = RedditAuth(str(reddit_config.credential_location))
     token = reddit_auth.get_auth()
@@ -63,11 +65,12 @@ def get_subreddits(reddit_config: RedditSource, db_path: Path, control_db_path: 
 
     with requests.Session() as session:
         session.headers.update(headers)
-        for _subreddit_id, _name, normalized_name in active_subreddits:
+        for subreddit in catalog.subreddits:
+            normalized_name = subreddit.normalized_name
             posts, newest_fullname = get_subreddit(
                 session,
                 normalized_name,
-                reddit_states.get(normalized_name),
+                state.checkpoint(CHECKPOINT_SOURCE_TYPE, normalized_name),
                 limit=limit,
                 max_pages=max_pages,
             )
@@ -165,13 +168,15 @@ def parse_posts(posts: list[dict]) -> list[RedditPost]:
 
 def run(
     reddit_config: RedditSource,
-    db_path: Path,
+    catalog,
+    state,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
-    control_db_path: Path | None = None,
-):
-    subreddit_posts, state_updates = get_subreddits(reddit_config, db_path, control_db_path)
+) -> CollectionResult:
+    """Read every catalogued subreddit and return what was collected."""
+    result = CollectionResult()
+    subreddit_posts, state_updates = get_subreddits(reddit_config, catalog, state)
     parsed_posts = parse_posts(subreddit_posts)
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Reddit')
     recent_posts = url_filters.filter_posts_by_url_host_keywords(
@@ -185,10 +190,21 @@ def run(
         'Reddit',
     )
 
-    if recent_posts:
-        inserted_count = db_utils.db_insert(recent_posts, db_path)
-        logger.info('Inserted %s Reddit posts into DB', inserted_count)
-    else:
-        logger.info('No new Reddit posts found')
+    result.add_posts(post.to_record() for post in recent_posts)
+    logger.info('Collected %s Reddit posts', len(recent_posts))
 
-    db_utils.db_set_reddit_states(state_updates, db_path)
+    # The checkpoint is the newest post seen, not the newest post kept: age and
+    # keyword filters must not make the next run re-read what was deliberately
+    # discarded.
+    observed_at = utc_now()
+    result.add_checkpoints(
+        CheckpointRecord(
+            source_type=CHECKPOINT_SOURCE_TYPE,
+            source_key=normalized_name,
+            cursor=newest_fullname,
+            observed_at=observed_at,
+            source_url=f'https://www.reddit.com/r/{normalized_name}',
+        )
+        for normalized_name, newest_fullname in state_updates
+    )
+    return result

@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import requests
 
 import rss_links
+from pipeline.catalog import build_catalog
+from pipeline.state import CollectorState
 from utils import Post
 
 
@@ -257,30 +259,57 @@ class FetchFeedsTests(unittest.TestCase):
         self.assertEqual(by_id[1], (1, 'https://a/', 'eA', 'lA', 15))
         self.assertEqual(by_id[2], (2, 'https://b/', '', '', 15))
 
-
 class RunTests(unittest.TestCase):
-    def setUp(self):
-        self.db_path = Path('/tmp/db/fetchlinks.db')
+    """``run`` collects; it must never reach for a database."""
 
-    def test_run_no_active_feeds_returns_early(self):
-        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
-                          return_value=[]) as get_active, \
-             patch.object(rss_links, 'fetch_feeds') as fetch_feeds, \
-             patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch') as update:
-            rss_links.run(_rss_source(), self.db_path)
+    @staticmethod
+    def _catalog(*pairs):
+        return build_catalog(pairs or [('https://feed.example/rss.xml',
+                                        'https://feed.example/rss.xml')])
 
-        # control_db_path defaults to db_path for single-host installs.
-        get_active.assert_called_once_with(self.db_path, self.db_path)
+    @staticmethod
+    def _post(url, description='', date_created='2999-01-01 00:00:00'):
+        post = Post()
+        post.source = 'https://feed.example'
+        post.source_type = 'rss'
+        post.date_created = date_created
+        post.description = description
+        post.add_url(url)
+        post._generate_unique_url_string()
+        return post
+
+    def test_run_no_catalogued_feeds_returns_an_empty_result(self):
+        with patch.object(rss_links, 'fetch_feeds') as fetch_feeds:
+            result = rss_links.run(_rss_source(), build_catalog(), CollectorState())
+
         fetch_feeds.assert_not_called()
-        update.assert_not_called()
+        self.assertTrue(result.is_empty)
 
-    def test_run_persists_health_even_when_no_posts(self):
-        active = [
+    def test_run_passes_cached_validators_from_state(self):
+        state = CollectorState()
+        state.set_rss_headers('https://a.example/feed.xml', 'old-etag', 'old-lm')
+        catalog = self._catalog(
+            ('https://a.example/feed.xml', 'https://a.example/feed.xml'),
+            ('https://b.example/feed.xml', 'https://b.example/feed.xml'),
+        )
+
+        with patch.object(rss_links, 'fetch_feeds', return_value=[]) as fetch_feeds, \
+             patch.object(rss_links, 'parse_posts', return_value=[]):
+            rss_links.run(_rss_source(request_timeout_seconds=20), catalog, state)
+
+        feeds, timeout = fetch_feeds.call_args.args
+        self.assertEqual(timeout, 20)
+        self.assertEqual(sorted(feeds), [
             ('https://a.example/feed.xml', 'https://a.example/feed.xml',
              'old-etag', 'old-lm'),
-            ('https://b.example/feed.xml', 'https://b.example/feed.xml', '', ''),
-        ]
+            ('https://b.example/feed.xml', 'https://b.example/feed.xml', None, None),
+        ])
+
+    def test_run_observes_every_feed_even_when_no_posts(self):
+        catalog = self._catalog(
+            ('https://a.example/feed.xml', 'https://a.example/feed.xml'),
+            ('https://b.example/feed.xml', 'https://b.example/feed.xml'),
+        )
         fetch_results = [
             ('https://a.example/feed.xml', 'https://a.example/feed.xml',
              None, 'new-etag', 'new-lm', 304, None),
@@ -288,130 +317,145 @@ class RunTests(unittest.TestCase):
              None, '', '', 0, 'ConnectionError'),
         ]
 
-        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
-                          return_value=active) as get_active, \
-             patch.object(rss_links, 'fetch_feeds',
-                          return_value=fetch_results) as fetch_feeds, \
-             patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch') as update, \
-             patch.object(rss_links, 'parse_posts', return_value=[]), \
-             patch.object(rss_links.db_utils, 'db_insert') as db_insert:
-            rss_links.run(_rss_source(request_timeout_seconds=20), self.db_path)
+        with patch.object(rss_links, 'fetch_feeds', return_value=fetch_results), \
+             patch.object(rss_links, 'parse_posts', return_value=[]):
+            result = rss_links.run(_rss_source(), catalog, CollectorState())
 
-        get_active.assert_called_once_with(self.db_path, self.db_path)
-        fetch_feeds.assert_called_once_with(active, 20)
-        update.assert_called_once()
-        rows, db_path_arg = update.call_args.args
-        self.assertEqual(db_path_arg, self.db_path)
-        self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[0]['normalized_url'], 'https://a.example/feed.xml')
-        self.assertEqual(rows[0]['status'], 304)
-        self.assertEqual(rows[1]['error'], 'ConnectionError')
-        db_insert.assert_not_called()
+        self.assertEqual(result.posts, [])
+        by_url = {obs.normalized_url: obs for obs in result.rss_observations}
+        self.assertEqual(len(by_url), 2)
 
-    def test_run_uses_separate_control_db_when_provided(self):
-        control_db = Path('/tmp/db/control.db')
-        active = [('https://a/', 'https://a/', '', '')]
+        conditional = by_url['https://a.example/feed.xml']
+        # 304 confirms the cached copy; it is a success, not a miss.
+        self.assertTrue(conditional.success)
+        self.assertEqual(conditional.status, 304)
+        self.assertEqual(conditional.etag, 'new-etag')
 
-        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
-                          return_value=active) as get_active, \
-             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
-             patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch'), \
-             patch.object(rss_links, 'parse_posts', return_value=[]), \
-             patch.object(rss_links.db_utils, 'db_insert'):
-            rss_links.run(_rss_source(), self.db_path,
-                          control_db_path=control_db)
+        failed = by_url['https://b.example/feed.xml']
+        self.assertFalse(failed.success)
+        # A request that never got a response has no status, rather than zero.
+        self.assertIsNone(failed.status)
+        self.assertEqual(failed.error, 'ConnectionError')
+        self.assertIsNone(failed.etag)
 
-        get_active.assert_called_once_with(control_db, self.db_path)
+    def test_run_carries_no_failure_counter(self):
+        """Counters are the publisher's job, so a replay cannot inflate them."""
+        fetch_results = [('https://a.example/feed.xml', 'https://a.example/feed.xml',
+                          None, '', '', 500, 'HTTP 500')]
+        catalog = self._catalog(('https://a.example/feed.xml',
+                                 'https://a.example/feed.xml'))
 
-    def test_run_inserts_parsed_posts(self):
-        active = [('https://feed.example/rss.xml', 'https://feed.example/rss.xml',
-                   '', '')]
-        parsed_posts = [object()]
+        with patch.object(rss_links, 'fetch_feeds', return_value=fetch_results), \
+             patch.object(rss_links, 'parse_posts', return_value=[]):
+            result = rss_links.run(_rss_source(), catalog, CollectorState())
 
-        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
-                          return_value=active), \
-             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
-             patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch'), \
-             patch.object(rss_links, 'parse_posts', return_value=parsed_posts), \
-             patch.object(rss_links.db_utils, 'db_insert',
-                          return_value=1) as db_insert:
-            rss_links.run(_rss_source(), self.db_path)
+        document = result.rss_observations[0].to_dict()
+        self.assertNotIn('consecutive_failures', document)
 
-        db_insert.assert_called_once_with(parsed_posts, self.db_path)
+    def test_run_returns_parsed_posts_as_records(self):
+        post = self._post('https://example.com/story')
 
-    def test_run_filters_old_posts_before_insert(self):
-        active = [('https://feed.example/rss.xml', 'https://feed.example/rss.xml',
-                   '', '')]
-        old_post = SimpleNamespace(date_created='2000-01-01 00:00:00')
-        recent_post = SimpleNamespace(date_created='2999-01-01 00:00:00')
+        with patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links, 'parse_posts', return_value=[post]):
+            result = rss_links.run(_rss_source(), self._catalog(), CollectorState())
 
-        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
-                          return_value=active), \
-             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
-             patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch'), \
+        self.assertEqual(len(result.posts), 1)
+        record = result.posts[0]
+        self.assertEqual(record.unique_id, post.unique_id_string)
+        self.assertEqual(record.urls, ['https://example.com/story'])
+        self.assertEqual(record.source_type, 'rss')
+
+    def test_run_filters_old_posts(self):
+        old_post = self._post('https://example.com/old', date_created='2000-01-01 00:00:00')
+        recent_post = self._post('https://example.com/new')
+
+        with patch.object(rss_links, 'fetch_feeds', return_value=[]), \
              patch.object(rss_links, 'parse_posts',
-                          return_value=[old_post, recent_post]), \
-             patch.object(rss_links.db_utils, 'db_insert',
-                          return_value=1) as db_insert:
-            rss_links.run(_rss_source(), self.db_path, max_post_age_months=3)
+                          return_value=[old_post, recent_post]):
+            result = rss_links.run(_rss_source(), self._catalog(), CollectorState(),
+                                   max_post_age_months=3)
 
+        self.assertEqual([record.unique_id for record in result.posts],
+                         [recent_post.unique_id_string])
 
-        db_insert.assert_called_once_with([recent_post], self.db_path)
-
-    def test_run_filters_denied_host_keywords_before_insert(self):
-        active = [(1, 'https://feed.example/rss.xml', '', '')]
+    def test_run_filters_denied_host_keywords(self):
         post = Post()
         post.date_created = '2999-01-01 00:00:00'
         post.add_url('https://www.businessinsider.com/story')
         post.add_url('https://example.com/allowed')
         post._generate_unique_url_string()
 
-        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
-                          return_value=active), \
-             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
-             patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch', return_value=0), \
-             patch.object(rss_links, 'parse_posts', return_value=[post]), \
-             patch.object(rss_links.db_utils, 'db_insert',
-                          return_value=1) as db_insert:
-            rss_links.run(_rss_source(), self.db_path,
-                          excluded_url_host_keywords=['insider'])
+        with patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links, 'parse_posts', return_value=[post]):
+            result = rss_links.run(_rss_source(), self._catalog(), CollectorState(),
+                                   excluded_url_host_keywords=['insider'])
 
-        inserted_posts = db_insert.call_args.args[0]
-        self.assertEqual(inserted_posts[0].urls, ['https://example.com/allowed'])
+        self.assertEqual(result.posts[0].urls, ['https://example.com/allowed'])
 
-    def test_run_filters_denied_url_or_description_keywords_before_insert(self):
-        active = [(1, 'https://feed.example/rss.xml', '', '')]
-        blocked = Post()
-        blocked.date_created = '2999-01-01 00:00:00'
-        blocked.description = 'Politics story'
-        blocked.add_url('https://example.com/story')
-        blocked._generate_unique_url_string()
-        allowed = Post()
-        allowed.date_created = '2999-01-01 00:00:00'
-        allowed.description = 'Technology story'
-        allowed.add_url('https://example.com/allowed')
-        allowed._generate_unique_url_string()
+    def test_run_filters_denied_url_or_description_keywords(self):
+        blocked = self._post('https://example.com/story', description='Politics story')
+        allowed = self._post('https://example.com/allowed', description='Technology story')
 
-        with patch.object(rss_links.db_utils, 'db_get_active_rss_feeds',
-                          return_value=active), \
-             patch.object(rss_links, 'fetch_feeds', return_value=[]), \
-             patch.object(rss_links.db_utils,
-                          'db_update_rss_feed_after_fetch', return_value=0), \
-             patch.object(rss_links, 'parse_posts',
-                          return_value=[blocked, allowed]), \
-             patch.object(rss_links.db_utils, 'db_insert',
-                          return_value=1) as db_insert:
-            rss_links.run(
-                _rss_source(), self.db_path,
+        with patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links, 'parse_posts', return_value=[blocked, allowed]):
+            result = rss_links.run(
+                _rss_source(), self._catalog(), CollectorState(),
                 excluded_url_or_description_keywords=['politics'],
             )
 
-        db_insert.assert_called_once_with([allowed], self.db_path)
+        self.assertEqual([record.unique_id for record in result.posts],
+                         [allowed.unique_id_string])
+
+    def test_run_produces_no_checkpoints(self):
+        """RSS resumes by cache validators, not a cursor."""
+        with patch.object(rss_links, 'fetch_feeds', return_value=[]), \
+             patch.object(rss_links, 'parse_posts', return_value=[]):
+            result = rss_links.run(_rss_source(), self._catalog(), CollectorState())
+
+        self.assertEqual(result.checkpoints, [])
+
+
+class LatestEntryAtTests(unittest.TestCase):
+    @staticmethod
+    def _feed(*structs):
+        entries = [_FeedEntry({'published_parsed': struct}) for struct in structs]
+        return SimpleNamespace(entries=entries)
+
+    def test_returns_none_without_a_feed(self):
+        self.assertIsNone(rss_links.latest_entry_at(None))
+
+    def test_returns_none_when_no_entry_is_datable(self):
+        feed = SimpleNamespace(entries=[_FeedEntry({'title': 'no date'})])
+        self.assertIsNone(rss_links.latest_entry_at(feed))
+
+    def test_returns_the_newest_entry(self):
+        feed = self._feed(
+            (2026, 1, 1, 0, 0, 0, 0, 1, 0),
+            (2026, 3, 4, 5, 6, 7, 0, 63, 0),
+            (2025, 12, 31, 0, 0, 0, 0, 365, 0),
+        )
+        self.assertEqual(rss_links.latest_entry_at(feed), '2026-03-04T05:06:07Z')
+
+    def test_falls_back_to_updated_when_published_is_absent(self):
+        feed = SimpleNamespace(entries=[
+            _FeedEntry({'updated_parsed': (2026, 2, 2, 1, 2, 3, 0, 33, 0)}),
+        ])
+        self.assertEqual(rss_links.latest_entry_at(feed), '2026-02-02T01:02:03Z')
+
+    def test_ignores_unparseable_timestamps(self):
+        feed = SimpleNamespace(entries=[
+            _FeedEntry({'published_parsed': 'not a struct'}),
+            _FeedEntry({'published_parsed': (2026, 1, 1, 0, 0, 0, 0, 1, 0)}),
+        ])
+        self.assertEqual(rss_links.latest_entry_at(feed), '2026-01-01T00:00:00Z')
+
+
+class DestinationIndependenceTests(unittest.TestCase):
+    def test_module_holds_no_database_imports(self):
+        source = Path(rss_links.__file__).read_text(encoding='utf-8')
+        for forbidden in ('db_utils', 'db_setup', 'sqlite3', 'psycopg'):
+            self.assertNotIn(forbidden, source,
+                             f'{forbidden} must not appear in rss_links.py')
 
 
 class PickSiteLinkTests(unittest.TestCase):

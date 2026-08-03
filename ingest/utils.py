@@ -120,21 +120,27 @@ class Post:
     def post_has_urls(self) -> bool:
         return bool(self.urls)
 
-    def get_post_row(self) -> tuple:
-        # Row for the `posts` table; matches db_utils.db_insert column order.
-        return (
-            self.source,
-            self.source_type,
-            self.author,
-            self.description,
-            self.direct_link,
-            clamp_date_not_in_future(self.date_created),
-            self.unique_id_string,
-        )
+    def to_record(self):
+        """Convert to the destination-independent contract record.
 
-    def get_url_rows(self) -> List[tuple]:
-        # (position, url, url_hash) -- post_id is filled in by db_utils after insert.
-        return [(idx, url, build_hash(url)) for idx, url in enumerate(self.urls)]
+        Clamps a future post date so a post means the same thing whichever way
+        it is written out. Positions and URL
+        hashes are deliberately not included: they are derivable from the
+        ordered list, and a publisher that recomputes them cannot inherit a
+        stale hash from an old collector.
+        """
+        from pipeline.contract import PostRecord
+
+        return PostRecord(
+            unique_id=self.unique_id_string,
+            source=self.source,
+            source_type=self.source_type,
+            author=self.author,
+            description=self.description,
+            direct_link=self.direct_link,
+            posted_at=clamp_date_not_in_future(self.date_created),
+            urls=list(self.urls),
+        )
 
 
 class RssPost(Post):

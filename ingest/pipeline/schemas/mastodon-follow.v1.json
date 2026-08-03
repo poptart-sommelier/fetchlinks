@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/mastodon-follow.v1.json",
+  "title": "Fetchlinks Mastodon follow record (contract v1)",
+  "description": "One followed Mastodon account. The owning instance is the file's manifest scope rather than a field, so each file is a self-contained snapshot of one instance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["account_id", "acct", "display_name", "url"],
+  "properties": {
+    "account_id": {
+      "description": "Instance-local account id. Always a string, even though Mastodon returns digits.",
+      "type": "string",
+      "minLength": 1
+    },
+    "acct": {
+      "type": "string",
+      "minLength": 1
+    },
+    "display_name": {
+      "type": ["string", "null"]
+    },
+    "url": {
+      "type": ["string", "null"]
+    }
+  }
+}

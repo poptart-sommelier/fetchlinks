@@ -1,28 +1,15 @@
-import { DatabaseSync } from "node:sqlite";
-
-import type { AppConfig } from "./config";
-import { loadAppConfig } from "./config";
-import {
-  openWritableFetchlinksDatabase,
-  withWritableFetchlinksDatabase,
-  type WritableFetchlinksDatabase,
-} from "./feeds";
 import type {
   Subreddit,
   SubredditListFilters,
   SubredditStatus,
 } from "../models/subreddits";
-
-type DbConfig = Pick<AppConfig, "fetchlinksDbPath"> &
-  Partial<Pick<AppConfig, "controlDbPath">>;
-
-type Env = Partial<Record<string, string | undefined>>;
+import { escapeLikeValue, SqlParams, utcIso, type SqlClient } from "./sql";
 
 type SubredditRow = {
   id: number;
   name: string;
   normalizedName: string;
-  enabled: number;
+  enabled: boolean;
   addedAt: string;
   deletedAt: string | null;
   lastFetchedAt: string | null;
@@ -33,47 +20,29 @@ type SubredditRow = {
 const REDDIT_URL_PREFIX = "https://www.reddit.com/r/";
 
 const SELECT_COLUMNS = `
-  s.subreddit_id    AS id,
-  s.name            AS name,
-  s.normalized_name AS normalizedName,
-  s.enabled         AS enabled,
-  s.added_at        AS addedAt,
-  s.deleted_at      AS deletedAt,
-  rs.time_created   AS lastFetchedAt,
-  (
-    SELECT MAX(p.date_created) FROM data.posts p
+  s.subreddit_id::int       AS id,
+  s.name                    AS name,
+  s.normalized_name         AS "normalizedName",
+  s.enabled                 AS enabled,
+  ${utcIso("s.added_at")}   AS "addedAt",
+  ${utcIso("s.deleted_at")} AS "deletedAt",
+  ${utcIso("rs.observed_at")} AS "lastFetchedAt",
+  ${utcIso(`(
+    SELECT MAX(p.posted_at) FROM content.posts p
     WHERE p.source_type = 'reddit'
       AND LOWER(p.source) = '${REDDIT_URL_PREFIX}' || s.normalized_name
-  )                 AS latestPostAt,
+  )`)}                      AS "latestPostAt",
   (
-    SELECT p.source FROM data.posts p
+    SELECT p.source FROM content.posts p
     WHERE p.source_type = 'reddit'
       AND LOWER(p.source) = '${REDDIT_URL_PREFIX}' || s.normalized_name
     LIMIT 1
-  )                 AS postSource
+  )                         AS "postSource"
 `;
 
 const FROM_CLAUSE =
-  "FROM subreddits s LEFT JOIN data.reddit_state rs ON rs.subreddit = s.normalized_name";
-
-export function openWritableSubredditsDatabase(
-  config: DbConfig,
-): WritableFetchlinksDatabase {
-  return openWritableFetchlinksDatabase(config);
-}
-
-export function withWritableSubredditsDatabase<T>(
-  config: DbConfig,
-  callback: (database: WritableFetchlinksDatabase) => T,
-): T {
-  return withWritableFetchlinksDatabase(config, callback);
-}
-
-export function openConfiguredWritableSubredditsDatabase(
-  env: Env = process.env,
-): WritableFetchlinksDatabase {
-  return openWritableSubredditsDatabase(loadAppConfig(env));
-}
+  "FROM catalog.subreddits s " +
+  "LEFT JOIN content.reddit_state rs ON rs.subreddit = s.normalized_name";
 
 function rowToSubreddit(row: SubredditRow): Subreddit {
   const status: SubredditStatus = row.deletedAt
@@ -85,7 +54,7 @@ function rowToSubreddit(row: SubredditRow): Subreddit {
     id: row.id,
     name: row.name,
     normalizedName: row.normalizedName,
-    enabled: row.enabled === 1,
+    enabled: row.enabled,
     addedAt: row.addedAt,
     deletedAt: row.deletedAt,
     lastFetchedAt: row.lastFetchedAt,
@@ -95,38 +64,37 @@ function rowToSubreddit(row: SubredditRow): Subreddit {
   };
 }
 
-export function listSubreddits(
-  database: DatabaseSync,
+export async function listSubreddits(
+  sql: SqlClient,
   filters: SubredditListFilters = {},
-): Subreddit[] {
+): Promise<Subreddit[]> {
   const clauses: string[] = [];
-  const params: (string | number)[] = [];
+  const params = new SqlParams();
   const status = filters.status ?? "all";
 
   if (status === "active") {
-    clauses.push("s.enabled = 1 AND s.deleted_at IS NULL");
+    clauses.push("s.enabled AND s.deleted_at IS NULL");
   } else if (status === "disabled") {
-    clauses.push("s.enabled = 0 AND s.deleted_at IS NULL");
+    clauses.push("NOT s.enabled AND s.deleted_at IS NULL");
   } else if (status === "removed") {
     clauses.push("s.deleted_at IS NOT NULL");
   }
 
   const q = filters.q?.trim();
   if (q) {
-    const pattern = `%${escapeLikeValue(q.toLowerCase())}%`;
+    const pattern = params.next(`%${escapeLikeValue(q.toLowerCase())}%`);
     clauses.push(
-      "(LOWER(s.name) LIKE ? ESCAPE '\\' OR LOWER(s.normalized_name) LIKE ? ESCAPE '\\')",
+      `(LOWER(s.name) LIKE ${pattern} ESCAPE '\\' OR LOWER(s.normalized_name) LIKE ${pattern} ESCAPE '\\')`,
     );
-    params.push(pattern, pattern);
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  const rows = database
-    .prepare(
-      `SELECT ${SELECT_COLUMNS} ${FROM_CLAUSE} ${where} ` +
-        "ORDER BY s.enabled DESC, s.deleted_at IS NOT NULL ASC, s.normalized_name ASC",
-    )
-    .all(...params) as SubredditRow[];
+  const rows = await sql.query<SubredditRow>(
+    `SELECT ${SELECT_COLUMNS} ${FROM_CLAUSE} ${where} ` +
+      "ORDER BY s.enabled DESC, (s.deleted_at IS NOT NULL) ASC, s.normalized_name ASC",
+    params.toArray(),
+  );
+
   return rows.map(rowToSubreddit);
 }
 
@@ -137,30 +105,19 @@ export type SubredditCounts = {
   total: number;
 };
 
-export function countSubredditsByStatus(
-  database: DatabaseSync,
-): SubredditCounts {
-  const row = database
-    .prepare(
-      `SELECT
-        SUM(CASE WHEN deleted_at IS NULL AND enabled = 1 THEN 1 ELSE 0 END) AS active,
-        SUM(CASE WHEN deleted_at IS NULL AND enabled = 0 THEN 1 ELSE 0 END) AS disabled,
-        SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END) AS removed,
-        COUNT(*) AS total
-      FROM subreddits`,
-    )
-    .get() as {
-      active: number | null;
-      disabled: number | null;
-      removed: number | null;
-      total: number | null;
-    };
-  return {
-    active: row.active ?? 0,
-    disabled: row.disabled ?? 0,
-    removed: row.removed ?? 0,
-    total: row.total ?? 0,
-  };
+export async function countSubredditsByStatus(
+  sql: SqlClient,
+): Promise<SubredditCounts> {
+  const rows = await sql.query<SubredditCounts>(
+    `SELECT
+      COALESCE(SUM(CASE WHEN deleted_at IS NULL AND enabled THEN 1 ELSE 0 END), 0)::int AS active,
+      COALESCE(SUM(CASE WHEN deleted_at IS NULL AND NOT enabled THEN 1 ELSE 0 END), 0)::int AS disabled,
+      COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0)::int AS removed,
+      COUNT(*)::int AS total
+    FROM catalog.subreddits`,
+  );
+
+  return rows[0] ?? { active: 0, disabled: 0, removed: 0, total: 0 };
 }
 
 export type AddSubredditResult =
@@ -185,22 +142,23 @@ export function normalizeSubredditName(raw: string): string {
   return cleanSubredditName(raw).toLowerCase();
 }
 
-function selectByNormalized(
-  database: DatabaseSync,
+async function selectByNormalized(
+  sql: SqlClient,
   normalized: string,
-): SubredditRow | undefined {
-  return database
-    .prepare(
-      `SELECT ${SELECT_COLUMNS} ${FROM_CLAUSE} WHERE s.normalized_name = ?`,
-    )
-    .get(normalized) as SubredditRow | undefined;
+): Promise<SubredditRow | undefined> {
+  const rows = await sql.query<SubredditRow>(
+    `SELECT ${SELECT_COLUMNS} ${FROM_CLAUSE} WHERE s.normalized_name = $1`,
+    [normalized],
+  );
+
+  return rows[0];
 }
 
-export function addSubreddit(
-  database: WritableFetchlinksDatabase,
+export async function addSubreddit(
+  sql: SqlClient,
   rawName: string,
   now: Date = new Date(),
-): AddSubredditResult {
+): Promise<AddSubredditResult> {
   const cleaned = cleanSubredditName(rawName);
   if (!cleaned) {
     return { status: "invalid", reason: "Subreddit name is required." };
@@ -214,63 +172,52 @@ export function addSubreddit(
   }
   const normalized = cleaned.toLowerCase();
 
-  const existing = selectByNormalized(database, normalized);
-  if (existing) {
-    return { status: "exists", subreddit: rowToSubreddit(existing) };
+  const inserted = await sql.query<{ id: number }>(
+    `INSERT INTO catalog.subreddits (name, normalized_name, enabled, added_at)
+     VALUES ($1, $2, true, $3)
+     ON CONFLICT (normalized_name) DO NOTHING
+     RETURNING subreddit_id::int AS id`,
+    [cleaned, normalized, now],
+  );
+
+  const row = await selectByNormalized(sql, normalized);
+  if (!row) {
+    return { status: "invalid", reason: "The subreddit could not be saved." };
   }
 
-  const addedAt = formatTimestamp(now);
-  database
-    .prepare(
-      `INSERT INTO subreddits (name, normalized_name, enabled, added_at)
-       VALUES (?, ?, 1, ?)`,
-    )
-    .run(cleaned, normalized, addedAt);
-
-  const inserted = selectByNormalized(database, normalized) as SubredditRow;
-  return { status: "added", subreddit: rowToSubreddit(inserted) };
+  return {
+    status: inserted.length > 0 ? "added" : "exists",
+    subreddit: rowToSubreddit(row),
+  };
 }
 
-export function softDeleteSubreddit(
-  database: WritableFetchlinksDatabase,
+export async function softDeleteSubreddit(
+  sql: SqlClient,
   subredditId: number,
   now: Date = new Date(),
-): boolean {
-  const result = database
-    .prepare(
-      `UPDATE subreddits
-       SET deleted_at = ?, enabled = 0
-       WHERE subreddit_id = ? AND deleted_at IS NULL`,
-    )
-    .run(formatTimestamp(now), subredditId);
-  return Number(result.changes) > 0;
-}
-
-export function restoreSubreddit(
-  database: WritableFetchlinksDatabase,
-  subredditId: number,
-): boolean {
-  const result = database
-    .prepare(
-      `UPDATE subreddits
-       SET deleted_at = NULL, enabled = 1
-       WHERE subreddit_id = ? AND deleted_at IS NOT NULL`,
-    )
-    .run(subredditId);
-  return Number(result.changes) > 0;
-}
-
-function formatTimestamp(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
-    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
+): Promise<boolean> {
+  const rows = await sql.query<{ id: number }>(
+    `UPDATE catalog.subreddits
+     SET deleted_at = $1, enabled = false
+     WHERE subreddit_id = $2 AND deleted_at IS NULL
+     RETURNING subreddit_id::int AS id`,
+    [now, subredditId],
   );
+
+  return rows.length > 0;
 }
 
-function escapeLikeValue(value: string): string {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("%", "\\%")
-    .replaceAll("_", "\\_");
+export async function restoreSubreddit(
+  sql: SqlClient,
+  subredditId: number,
+): Promise<boolean> {
+  const rows = await sql.query<{ id: number }>(
+    `UPDATE catalog.subreddits
+     SET deleted_at = NULL, enabled = true
+     WHERE subreddit_id = $1 AND deleted_at IS NOT NULL
+     RETURNING subreddit_id::int AS id`,
+    [subredditId],
+  );
+
+  return rows.length > 0;
 }

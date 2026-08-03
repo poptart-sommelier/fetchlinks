@@ -96,14 +96,22 @@ describe("Home", () => {
     expect(markup).toContain("No posts match the current filters.");
   });
 
-  it("renders a safe error state when the database cannot be configured", () => {
-    const result = loadLatestPosts({ env: {} });
+  it("renders a safe error state when the database cannot be configured", async () => {
+    const result = await loadLatestPosts({ env: {} });
     const markup = renderToStaticMarkup(<LatestPostsView result={result} />);
 
     expect(result.status).toBe("error");
     expect(markup).toContain("Posts are unavailable");
     expect(markup).toContain("The database could not be opened.");
-    expect(markup).not.toContain("FETCHLINKS_DB is required");
+    expect(markup).not.toContain("DATABASE_URL is required");
+  });
+
+  it("renders the error state rather than surfacing a bad connection string", async () => {
+    const result = await loadLatestPosts({ env: { DATABASE_URL: "nonsense" } });
+    const markup = renderToStaticMarkup(<LatestPostsView result={result} />);
+
+    expect(result.status).toBe("error");
+    expect(markup).not.toContain("nonsense");
   });
 });
 

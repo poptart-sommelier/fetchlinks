@@ -5,9 +5,12 @@
 # bootstrap.sh is run from.
 
 [paths]
-db        = "../../db/fetchlinks.db"
 log_file  = "../logs/fetch_links.log"
 log_level = "INFO"
+# Collector runtime directory (catalog, resume state, batch spool). Kept outside
+# the checkout so deploying or rolling back code never disturbs queued batches.
+# Omit to fall back to FETCHLINKS_RUNTIME_DIR, then ~/.fetchlinks/runtime.
+# runtime_dir = "~/.fetchlinks/runtime"
 
 [ingest]
 max_post_age_months                  = 3
@@ -15,10 +18,10 @@ excluded_url_host_keywords           = ["businessinsider", "economist.com", "bri
 excluded_url_or_description_keywords = ["trump", "covid"]
 
 [retention]
-# Pruning weekly via fetchlinks-retain.timer.
+# Pruning weekly via fetchlinks-retain.timer, which runs
+# `publish_tool.py retain`. PostgreSQL autovacuum handles reclamation.
 # max_post_age_months omitted => falls back to [ingest].max_post_age_months.
 enabled                 = true
-vacuum_threshold_pages  = 1000
 
 # --- Sources ---------------------------------------------------------------
 # Credentials are read from the JSON files referenced by `credential_location`
@@ -26,9 +29,9 @@ vacuum_threshold_pages  = 1000
 
 [sources.rss]
 enabled                     = true
-# One-time seed; loaded into the rss_feeds table only when the table is empty.
+# One-time seed for `publish_tool.py bootstrap-catalog`.
 seed_file                   = "rss_feeds.txt"
-# Where fetchlinks-export-rss-feeds writes the deterministic DB snapshot.
+# Where fetchlinks-export-rss-feeds writes the deterministic catalog snapshot.
 # In dev this intentionally updates the seed file you review and commit.
 export_path                 = "rss_feeds.txt"
 auto_disable_after_failures = 10
@@ -37,9 +40,8 @@ request_timeout_seconds     = 10
 [sources.reddit]
 enabled             = true
 credential_location = "~/.fetchlinks/reddit.json"
-# One-time seed; loaded into the subreddits table only when the table is empty
-# (via subreddit_import.py --seed-if-empty, run by bootstrap). After seeding the
-# DB is the live source of truth; manage subreddits from the web admin.
+# One-time seed for `publish_tool.py bootstrap-catalog`. After seeding, the
+# catalog is the live source of truth; manage subreddits from the web admin.
 seed_file           = "subreddits.txt"
 # Optional: listing_limit (default 100), max_pages (default 5)
 

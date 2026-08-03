@@ -1,16 +1,16 @@
 import html
 import logging
 from html.parser import HTMLParser
-from pathlib import Path
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
 
-import db_utils
 import ingest_limits
 import url_filters
 from auth import MastodonAuth
 from config import MastodonInstance, MastodonSource
+from pipeline.collection import CollectionResult
+from pipeline.contract import CheckpointRecord, MastodonFollowRecord, utc_now
 from utils import MastodonPost, extract_urls_from_text
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,12 @@ REQUEST_TIMEOUT_SECONDS = 20
 SUPPORTED_TIMELINES = {'home'}
 # Cap pages when mirroring the following list so a huge graph can't stall ingest.
 MAX_FOLLOWING_PAGES = 40
+
+# Each configured instance is its own stream with its own cursor and its own
+# follows list, so the configured source name is both the checkpoint key and
+# the snapshot scope.
+CHECKPOINT_SOURCE_TYPE = 'mastodon'
+
 
 class _StatusContentParser(HTMLParser):
     def __init__(self):
@@ -200,19 +206,20 @@ def _parse_status(status: dict) -> MastodonPost | None:
 
 def _run_instance(
     instance_config: MastodonInstance,
-    db_path: Path,
+    state,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
-) -> int:
+) -> CollectionResult:
+    result = CollectionResult()
     if not instance_config.enabled:
         logger.info('Mastodon source %s is disabled; skipping', instance_config.name)
-        return 0
+        return result
 
     source_name = instance_config.name
     instance_url = _normalize_instance_url(instance_config.instance_url)
     auth_client = MastodonAuth(str(instance_config.credential_location))
-    last_seen_id = db_utils.db_get_mastodon_last_seen_id(source_name, db_path)
+    last_seen_id = state.checkpoint(CHECKPOINT_SOURCE_TYPE, source_name)
 
     with requests.Session() as session:
         session.headers.update(auth_client.headers)
@@ -243,46 +250,55 @@ def _run_instance(
         excluded_url_or_description_keywords or [],
         f'Mastodon {source_name}',
     )
-    inserted_count = db_utils.db_insert(recent_posts, db_path)
+    result.add_posts(post.to_record() for post in recent_posts)
+
     highest_id = _highest_status_id(statuses)
     if highest_id:
-        db_utils.db_set_mastodon_last_seen_id(source_name, instance_url, highest_id, db_path)
+        result.add_checkpoints([
+            CheckpointRecord(
+                source_type=CHECKPOINT_SOURCE_TYPE,
+                source_key=source_name,
+                cursor=highest_id,
+                observed_at=utc_now(),
+                source_url=instance_url,
+            )
+        ])
 
     logger.info(
-        'Mastodon %s: fetched %s statuses, parsed %s posts (skipped %s no-links, %s missing-fields), %s age-eligible, inserted %s',
+        'Mastodon %s: fetched %s statuses, parsed %s posts (skipped %s no-links, %s missing-fields), %s age-eligible collected',
         source_name,
         len(statuses),
         len(parsed_posts),
         skipped_no_links,
         skipped_missing_fields,
         len(recent_posts),
-        inserted_count,
     )
-    return inserted_count
+    return result
 
 
 def run(
     mastodon_config: MastodonSource,
-    db_path: Path,
+    state,
     max_post_age_months: int = ingest_limits.DEFAULT_MAX_POST_AGE_MONTHS,
     excluded_url_host_keywords: list[str] | None = None,
     excluded_url_or_description_keywords: list[str] | None = None,
-):
+) -> CollectionResult:
+    result = CollectionResult()
     if not mastodon_config.enabled:
         logger.info('Mastodon source is disabled; skipping')
-        return
+        return result
 
-    total_inserted = 0
     for instance_config in mastodon_config.instances:
-        total_inserted += _run_instance(
+        result.extend(_run_instance(
             instance_config,
-            db_path,
+            state,
             max_post_age_months,
             excluded_url_host_keywords or [],
             excluded_url_or_description_keywords or [],
-        )
+        ))
 
-    logger.info('Inserted %s Mastodon posts into DB', total_inserted)
+    logger.info('Collected %s Mastodon posts', len(result.posts))
+    return result
 
 
 def _verify_credentials_account_id(session: requests.Session, instance_url: str) -> str | None:
@@ -341,14 +357,17 @@ def _fetch_following_pages(session: requests.Session, instance_url: str, account
     return following
 
 
-def sync_follows(mastodon_config: MastodonSource, db_path: Path) -> None:
-    """Refresh the read-only follows snapshot for each enabled instance.
+def sync_follows(mastodon_config: MastodonSource) -> CollectionResult:
+    """Capture a complete follows snapshot for each enabled instance.
 
-    Best-effort: a failure for one instance is logged and does not abort the
-    others, and never raises into the ingest run.
+    Best-effort: a failure for one instance is logged, does not abort the
+    others, and never raises into the collection run. A failed instance
+    contributes no snapshot rather than an empty one, so the publisher leaves
+    its existing list alone instead of clearing it.
     """
+    result = CollectionResult()
     if not mastodon_config.enabled:
-        return
+        return result
 
     for instance_config in mastodon_config.instances:
         if not instance_config.enabled:
@@ -368,16 +387,17 @@ def sync_follows(mastodon_config: MastodonSource, db_path: Path) -> None:
                     continue
                 accounts = _fetch_following_pages(session, instance_url, account_id)
             follows = [
-                (
-                    str(acc.get('id') or ''),
-                    acc.get('acct') or acc.get('username') or '',
-                    acc.get('display_name') or '',
-                    acc.get('url') or '',
+                MastodonFollowRecord(
+                    account_id=str(acc.get('id') or ''),
+                    acct=acc.get('acct') or acc.get('username') or '',
+                    display_name=acc.get('display_name') or '',
+                    url=acc.get('url') or '',
                 )
                 for acc in accounts
                 if isinstance(acc, dict)
             ]
-            written = db_utils.db_replace_mastodon_follows(source_name, follows, db_path)
-            logger.info('Mastodon %s: synced %s follows', source_name, written)
+            result.set_mastodon_follows(source_name, follows)
+            logger.info('Mastodon %s: captured %s follows', source_name, len(follows))
         except Exception as exc:  # noqa: BLE001 - best-effort snapshot
             logger.error('Mastodon %s: follows sync failed: %s', source_name, exc)
+    return result

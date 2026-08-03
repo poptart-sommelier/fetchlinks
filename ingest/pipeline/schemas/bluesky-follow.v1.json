@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/bluesky-follow.v1.json",
+  "title": "Fetchlinks Bluesky follow record (contract v1)",
+  "description": "One followed Bluesky account. Follows files are complete snapshots, never deltas.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["did", "handle", "display_name"],
+  "properties": {
+    "did": {
+      "description": "Decentralized identifier; the stable natural key for the account.",
+      "type": "string",
+      "minLength": 1
+    },
+    "handle": {
+      "type": "string",
+      "minLength": 1
+    },
+    "display_name": {
+      "type": ["string", "null"]
+    }
+  }
+}

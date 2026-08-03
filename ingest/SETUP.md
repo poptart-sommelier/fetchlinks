@@ -96,20 +96,19 @@ All non-secret runtime configuration lives in a single TOML file:
 `ingest/data/config/fetchlinks.toml`. Path values may be absolute
 or relative to the TOML file's directory. The schema is:
 
-- `[paths]` — `db`, `log_file`, `log_level` (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`).
-  Optional `control_db` points at the admin-owned catalog DB (`rss_feeds` +
-  `subreddits` identity/flags); when unset it defaults to `db`, so single-host
-  dev and production keep using one physical file. Set it to a separate path
-  only for the two-host (Pi ingest + VM web) split — see
-  `deploy/sync/README.md`.
+- `[paths]` — `log_file`, `log_level` (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`),
+  optional `runtime_dir` (the collector's catalog, resume state, and batch
+  spool; falls back to `FETCHLINKS_RUNTIME_DIR`, then `~/.fetchlinks/runtime`).
+  There is deliberately no database setting here: the database URL reaches the
+  publisher through `FETCHLINKS_DATABASE_URL`, and the collector never sees one.
 - `[ingest]` — `max_post_age_months`, `excluded_url_host_keywords`,
   `excluded_url_or_description_keywords`.
 - `[retention]` — `enabled` (default `true`), optional `max_post_age_months`
-  (falls back to `[ingest].max_post_age_months`), `vacuum_threshold_pages`
-  (default `1000`). Drives the weekly retention job (`retain.py`).
-- `[sources.rss]` — `enabled`, optional `seed_file` (read only when the
-  `rss_feeds` table is empty), optional `export_path` (where
-  `export_rss_feeds.py` writes the DB snapshot; in dev this is the seed
+  (falls back to `[ingest].max_post_age_months`). Drives the weekly retention
+  job (`publish_tool.py retain`).
+- `[sources.rss]` — `enabled`, optional `seed_file` (read only by
+  `publish_tool.py bootstrap-catalog`), optional `export_path` (where
+  `export_rss_feeds.py` writes the catalog snapshot; in dev this is the seed
   file), `request_timeout_seconds` (default `10`). The
   `auto_disable_after_failures` field is still accepted (default `10`) but no
   longer disables feeds — see the "RSS feeds" subsection below.
@@ -133,24 +132,28 @@ Notes:
 
 ### RSS feeds
 
-The `rss_feeds` SQLite table is the source of truth for which feeds get
-polled. Each row tracks the URL, an `enabled` flag, and a `deleted_at`
-tombstone. Per-feed health (etag / last-modified cache headers, consecutive
-failure count, last error, last status) lives in a separate `rss_feed_health`
-table keyed by `normalized_url`; in single-host mode both tables share one
-file and join natively, while the two-host split keeps identity in the
-control DB and health in the data DB. Feeds are **not** auto-disabled on
-failure: the ingest job keeps counting `consecutive_failures` + `last_error`,
-and the web admin surfaces persistently failing feeds for manual removal.
+`catalog.rss_feeds` is the source of truth for which feeds get polled. Each row
+tracks the URL, an `enabled` flag, and a `deleted_at` tombstone. Per-feed health
+(etag / last-modified cache headers, consecutive failure count, last error, last
+status) lives in `content.rss_feed_health`, keyed by `normalized_url`, so the
+admin-owned catalog and the publisher-owned health data stay independently
+writable. Feeds are **not** auto-disabled on failure: the publisher keeps
+counting `consecutive_failures` + `last_error`, and the web admin surfaces
+persistently failing feeds for manual removal.
 
-Three workflows feed rows into the table via `rss_feed_import.py`:
+First-time seeding is a publisher command:
 
 ```bash
 cd ingest
-# First-time bulk seed from a plain-text file (no-op once the table has rows):
-python3 rss_feed_import.py --seed-if-empty data/config/rss_feeds.txt
+export FETCHLINKS_DATABASE_URL='postgresql://...'
+python3 publish_tool.py bootstrap-catalog
+```
 
-# Validate candidate URLs over the network, then INSERT OR IGNORE survivors:
+To grow an already-live catalog, `rss_feed_import.py` validates candidates over
+the network first:
+
+```bash
+# Validate candidate URLs over the network, then insert the survivors:
 python3 rss_feed_import.py --input /tmp/rss-list.txt
 
 # Same but dry-run first; produces /tmp/rss-list.txt.pruned for review.
@@ -158,34 +161,44 @@ python3 rss_feed_import.py --input /tmp/rss-list.txt --dry-run
 python3 rss_feed_import.py --pruned /tmp/rss-list.txt.pruned
 ```
 
+Neither command revives a feed the admin has tombstoned; restoring one is an
+explicit action in the web admin.
+
 Use `--abandoned-days N` to change the cutoff for rejecting feeds with no
 recent posts.
 
-A snapshot of the table is written by `export_rss_feeds.py` to
+A snapshot of the catalog is written by `export_rss_feeds.py` to
 `[sources.rss].export_path` (three sections: active feeds, commented disabled
 feeds with their failure reason, commented tombstoned feeds). In dev that path
-is `data/config/rss_feeds.txt`, so the seed file stays aligned with DB changes
-and can be committed after review.
+is `data/config/rss_feeds.txt`, so the seed file stays aligned with catalog
+changes and can be committed after review.
 
-## 5) Seed the rss_feeds table (first run only)
+## 5) Prepare the database and catalog (first run only)
 
-`fetch_links.py` does **not** read `rss_feeds.txt` directly — RSS feeds live
-in the `rss_feeds` SQLite table, and `[sources.rss].seed_file` in the TOML
-is only consumed by `rss_feed_import.py --seed-if-empty`. If you skip this
-step, ingest will still run, but RSS will contribute zero posts because the
-table is empty. On production this is run once by `deploy/bootstrap.sh`; in
-dev you do it by hand:
+`fetch_links.py` does **not** read `rss_feeds.txt` directly. It reads
+`runtime/catalog/catalog.v1.json`, which the publisher exports from the
+database. `[sources.rss].seed_file` is consumed only by `bootstrap-catalog`.
 
 ```bash
 cd ingest
-python3 rss_feed_import.py --seed-if-empty data/config/rss_feeds.txt
+export FETCHLINKS_DATABASE_URL='postgresql://...'   # owner role
+python3 publish_tool.py migrate
+python3 publish_tool.py bootstrap-catalog
+python3 publish_tool.py sync-catalog
 ```
 
-The command is a no-op once the table has any rows, so it's safe to re-run.
-See section 4's "RSS feeds" subsection for the other `rss_feed_import.py`
-workflows (validated add / dry-run / pruned import).
+`bootstrap-catalog` only ever inserts, so it is safe to re-run; it will not
+re-enable or resurrect anything. See [../db/README.md](../db/README.md) for the
+schema and the role credentials.
 
-## 6) Run the backend
+To exercise collection on a machine that has never talked to a database, build
+a catalog straight from the seed files instead:
+
+```bash
+python3 catalog_tool.py build-from-seeds
+```
+
+## 6) Run the collector
 
 ```bash
 cd ingest
@@ -195,10 +208,16 @@ python3 fetch_links.py
 The default config file is `data/config/fetchlinks.toml`. To use a different
 file, pass `--config /path/to/fetchlinks.toml`.
 
-On first run, the backend initializes the SQLite database automatically if it
-does not exist.
+The collector opens no database. It writes a batch to
+`runtime/outbox/ready/<batch-id>/` and stops there; publishing is a separate
+step:
+
+```bash
+python3 publish_tool.py publish
+```
 
 ## 7) Validate output
 
-- Database location is controlled by `[paths].db` in `fetchlinks.toml`.
+- `python3 publish_tool.py status` reports queue depth and database totals.
+- `python3 spool_tool.py list ready` shows what is waiting to be published.
 - Logs are written to `[paths].log_file` at `[paths].log_level`.

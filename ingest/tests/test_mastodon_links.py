@@ -6,6 +6,9 @@ import requests
 
 import mastodon_links
 from config import MastodonInstance, MastodonSource
+from pipeline.collection import CollectionResult
+from pipeline.contract import CheckpointRecord, utc_now
+from pipeline.state import CollectorState
 
 
 def _instance(
@@ -218,90 +221,111 @@ class FetchTimelinePagesTests(unittest.TestCase):
 
 
 class RunInstanceTests(unittest.TestCase):
-    def test_run_instance_fetches_inserts_and_persists_state(self):
-        instance_config = _instance(instance_url='https://infosec.exchange/', timeline_limit=40)
+    @staticmethod
+    def _state(last_seen_id=None, name='infosec'):
+        state = CollectorState()
+        if last_seen_id:
+            state.set_checkpoint('mastodon', name, cursor=last_seen_id)
+        return state
+
+    def test_run_instance_collects_posts_and_checkpoints(self):
+        instance_config = _instance(instance_url='https://infosec.exchange/',
+                                    timeline_limit=40)
         auth_client = Mock()
-        auth_client.headers = {'Authorization': 'Bearer tok'}
-        statuses = [_status('11', 'https://example.com/one'), _status('12', 'https://example.com/two')]
-        db_path = Path('/tmp/db/fetchlinks.db')
+        auth_client.headers = {'Authorization': 'Bearer token'}
+        statuses = [
+            _status('11', 'https://example.com/one', card_url='',
+                    created_at='2999-01-01T00:00:00.000Z'),
+            _status('12', 'https://example.com/two', card_url='',
+                    created_at='2999-01-01T00:00:00.000Z'),
+        ]
 
-        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client) as auth_cls, \
-             patch.object(mastodon_links.db_utils, 'db_get_mastodon_last_seen_id', return_value='10') as get_state, \
-               patch.object(mastodon_links, '_fetch_timeline_pages', return_value=statuses) as fetch_pages, \
-             patch.object(mastodon_links.db_utils, 'db_insert', return_value=2) as db_insert, \
-             patch.object(mastodon_links.db_utils, 'db_set_mastodon_last_seen_id') as set_state:
-            inserted = mastodon_links._run_instance(instance_config, db_path)
+        with patch.object(mastodon_links, 'MastodonAuth',
+                          return_value=auth_client) as auth_cls, \
+             patch.object(mastodon_links, '_fetch_timeline_pages',
+                          return_value=statuses) as fetch_pages:
+            result = mastodon_links._run_instance(
+                instance_config, self._state(last_seen_id='10'),
+            )
 
-        self.assertEqual(inserted, 2)
-        auth_cls.assert_called_once_with('/tmp/mastodon.json')
-        get_state.assert_called_once_with('infosec', db_path)
-        fetch_pages.assert_called_once()
-        inserted_posts = db_insert.call_args.args[0]
-        self.assertEqual(len(inserted_posts), 2)
-        self.assertEqual(inserted_posts[0].urls[0], 'https://example.com/one')
-        db_insert.assert_called_once_with(inserted_posts, db_path)
-        set_state.assert_called_once_with('infosec', 'https://infosec.exchange', '12', db_path)
+        auth_cls.assert_called_once_with(str(Path('/tmp/mastodon.json')))
+        # Resumes from the checkpoint held in local collector state.
+        self.assertEqual(fetch_pages.call_args.args[2], '10')
+        self.assertEqual(len(result.posts), 2)
+        self.assertEqual(result.posts[0].urls[0], 'https://example.com/one')
+        self.assertEqual(len(result.checkpoints), 1)
+        checkpoint = result.checkpoints[0]
+        self.assertEqual(checkpoint.source_type, 'mastodon')
+        self.assertEqual(checkpoint.source_key, 'infosec')
+        self.assertEqual(checkpoint.cursor, '12')
+        self.assertEqual(checkpoint.source_url, 'https://infosec.exchange')
 
     def test_run_instance_skips_disabled_instance(self):
         with patch.object(mastodon_links, 'MastodonAuth') as auth_cls:
-            inserted = mastodon_links._run_instance(_instance(enabled=False), Path('/tmp/db'))
+            result = mastodon_links._run_instance(_instance(enabled=False),
+                                                  CollectorState())
 
-        self.assertEqual(inserted, 0)
+        self.assertTrue(result.is_empty)
         auth_cls.assert_not_called()
 
-    def test_run_instance_filters_old_posts_before_insert_but_persists_state(self):
+    def test_run_instance_checkpoints_the_highest_id_seen_not_kept(self):
         instance_config = _instance(instance_url='https://infosec.exchange/')
         auth_client = Mock()
-        auth_client.headers = {'Authorization': 'Bearer tok'}
+        auth_client.headers = {}
         statuses = [
-            _status('11', 'https://example.com/old', created_at='2000-01-01T00:00:00.000Z'),
-            _status('12', 'https://example.com/recent', card_url='', created_at='2999-01-01T00:00:00.000Z'),
+            _status('11', 'https://example.com/old',
+                    created_at='2000-01-01T00:00:00.000Z'),
+            _status('12', 'https://example.com/recent', card_url='',
+                    created_at='2999-01-01T00:00:00.000Z'),
         ]
-        db_path = Path('/tmp/db/fetchlinks.db')
 
         with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
-             patch.object(mastodon_links.db_utils, 'db_get_mastodon_last_seen_id', return_value='10'), \
-             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=statuses), \
-             patch.object(mastodon_links.db_utils, 'db_insert', return_value=1) as db_insert, \
-             patch.object(mastodon_links.db_utils, 'db_set_mastodon_last_seen_id') as set_state:
-            inserted = mastodon_links._run_instance(instance_config, db_path, max_post_age_months=3)
+             patch.object(mastodon_links, '_fetch_timeline_pages',
+                          return_value=statuses):
+            result = mastodon_links._run_instance(instance_config, self._state(),
+                                                  max_post_age_months=3)
 
-        self.assertEqual(inserted, 1)
-        inserted_posts = db_insert.call_args.args[0]
-        self.assertEqual(len(inserted_posts), 1)
-        self.assertEqual(inserted_posts[0].urls[0], 'https://example.com/recent')
-        set_state.assert_called_once_with('infosec', 'https://infosec.exchange', '12', db_path)
+        self.assertEqual(len(result.posts), 1)
+        self.assertEqual(result.posts[0].urls[0], 'https://example.com/recent')
+        self.assertEqual(result.checkpoints[0].cursor, '12')
 
-    def test_run_instance_filters_denied_host_keywords_before_insert(self):
+    def test_run_instance_emits_no_checkpoint_when_nothing_was_returned(self):
+        auth_client = Mock()
+        auth_client.headers = {}
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=[]):
+            result = mastodon_links._run_instance(_instance(), self._state('10'))
+
+        self.assertEqual(result.checkpoints, [])
+        self.assertTrue(result.is_empty)
+
+    def test_run_instance_filters_denied_host_keywords(self):
         instance_config = _instance(instance_url='https://infosec.exchange/')
         auth_client = Mock()
-        auth_client.headers = {'Authorization': 'Bearer tok'}
+        auth_client.headers = {}
         statuses = [
-            _status('11', 'https://www.businessinsider.com/story', card_url='', created_at='2999-01-01T00:00:00.000Z'),
-            _status('12', 'https://example.com/recent', card_url='', created_at='2999-01-01T00:00:00.000Z'),
+            _status('11', 'https://www.businessinsider.com/story', card_url='',
+                    created_at='2999-01-01T00:00:00.000Z'),
+            _status('12', 'https://example.com/recent', card_url='',
+                    created_at='2999-01-01T00:00:00.000Z'),
         ]
-        db_path = Path('/tmp/db/fetchlinks.db')
 
         with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
-             patch.object(mastodon_links.db_utils, 'db_get_mastodon_last_seen_id', return_value='10'), \
-             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=statuses), \
-             patch.object(mastodon_links.db_utils, 'db_insert', return_value=1) as db_insert, \
-             patch.object(mastodon_links.db_utils, 'db_set_mastodon_last_seen_id'):
-            inserted = mastodon_links._run_instance(
-                instance_config,
-                db_path,
+             patch.object(mastodon_links, '_fetch_timeline_pages',
+                          return_value=statuses):
+            result = mastodon_links._run_instance(
+                instance_config, self._state(),
                 excluded_url_host_keywords=['insider'],
             )
 
-        self.assertEqual(inserted, 1)
-        inserted_posts = db_insert.call_args.args[0]
-        self.assertEqual(len(inserted_posts), 1)
-        self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
+        self.assertEqual(len(result.posts), 1)
+        self.assertEqual(result.posts[0].urls, ['https://example.com/recent'])
 
-    def test_run_instance_filters_denied_url_or_description_keywords_before_insert(self):
+    def test_run_instance_filters_denied_url_or_description_keywords(self):
         instance_config = _instance(instance_url='https://infosec.exchange/')
         auth_client = Mock()
-        auth_client.headers = {'Authorization': 'Bearer tok'}
+        auth_client.headers = {}
         statuses = [
             _status(
                 '11',
@@ -310,87 +334,107 @@ class RunInstanceTests(unittest.TestCase):
                 created_at='2999-01-01T00:00:00.000Z',
                 content='<p>Politics <a href="https://example.com/story">story</a></p>',
             ),
-            _status('12', 'https://example.com/recent', card_url='', created_at='2999-01-01T00:00:00.000Z'),
+            _status('12', 'https://example.com/recent', card_url='',
+                    created_at='2999-01-01T00:00:00.000Z'),
         ]
-        db_path = Path('/tmp/db/fetchlinks.db')
 
         with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
-             patch.object(mastodon_links.db_utils, 'db_get_mastodon_last_seen_id', return_value='10'), \
-             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=statuses), \
-             patch.object(mastodon_links.db_utils, 'db_insert', return_value=1) as db_insert, \
-             patch.object(mastodon_links.db_utils, 'db_set_mastodon_last_seen_id'):
-            inserted = mastodon_links._run_instance(
-                instance_config,
-                db_path,
+             patch.object(mastodon_links, '_fetch_timeline_pages',
+                          return_value=statuses):
+            result = mastodon_links._run_instance(
+                instance_config, self._state(),
                 excluded_url_or_description_keywords=['politics'],
             )
 
-        self.assertEqual(inserted, 1)
-        inserted_posts = db_insert.call_args.args[0]
-        self.assertEqual(len(inserted_posts), 1)
-        self.assertEqual(inserted_posts[0].urls, ['https://example.com/recent'])
+        self.assertEqual(len(result.posts), 1)
+        self.assertEqual(result.posts[0].urls, ['https://example.com/recent'])
 
 
 class RunTests(unittest.TestCase):
     def test_run_skips_when_disabled(self):
         with patch.object(mastodon_links, '_run_instance') as run_instance:
-            mastodon_links.run(MastodonSource(enabled=False, instances=()), Path('/tmp/db/fetchlinks.db'))
+            result = mastodon_links.run(
+                MastodonSource(enabled=False, instances=()), CollectorState(),
+            )
 
         run_instance.assert_not_called()
+        self.assertTrue(result.is_empty)
 
-    def test_run_processes_each_instance(self):
+    def test_run_merges_every_instance_into_one_result(self):
         infosec = _instance(name='infosec')
         hachyderm = _instance(name='hachyderm', instance_url='https://hachyderm.io')
         config = MastodonSource(enabled=True, instances=(infosec, hachyderm))
-        db_path = Path('/tmp/db/fetchlinks.db')
+        state = CollectorState()
 
-        with patch.object(mastodon_links, '_run_instance', side_effect=[1, 2]) as run_instance:
-            mastodon_links.run(config, db_path)
+        first = CollectionResult()
+        first.add_checkpoints([CheckpointRecord(
+            source_type='mastodon', source_key='infosec', cursor='11',
+            observed_at=utc_now(),
+        )])
+        second = CollectionResult()
+        second.add_checkpoints([CheckpointRecord(
+            source_type='mastodon', source_key='hachyderm', cursor='22',
+            observed_at=utc_now(),
+        )])
 
-        self.assertEqual(run_instance.call_args_list[0].args, (infosec, db_path, 3, [], []))
-        self.assertEqual(run_instance.call_args_list[1].args, (hachyderm, db_path, 3, [], []))
+        with patch.object(mastodon_links, '_run_instance',
+                          side_effect=[first, second]) as run_instance:
+            result = mastodon_links.run(config, state)
+
+        self.assertEqual(run_instance.call_args_list[0].args,
+                         (infosec, state, 3, [], []))
+        self.assertEqual(run_instance.call_args_list[1].args,
+                         (hachyderm, state, 3, [], []))
+        self.assertEqual([cp.source_key for cp in result.checkpoints],
+                         ['infosec', 'hachyderm'])
 
 
 class SyncFollowsTests(unittest.TestCase):
-    def setUp(self):
-        self.db_path = Path('/tmp/db/fetchlinks.db')
-
     def test_skips_when_source_disabled(self):
-        with patch.object(mastodon_links, 'MastodonAuth') as auth_cls, \
-             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows') as replace:
-            mastodon_links.sync_follows(MastodonSource(enabled=False, instances=(_instance(),)), self.db_path)
+        with patch.object(mastodon_links, 'MastodonAuth') as auth_cls:
+            result = mastodon_links.sync_follows(
+                MastodonSource(enabled=False, instances=(_instance(),)),
+            )
+
         auth_cls.assert_not_called()
-        replace.assert_not_called()
+        self.assertEqual(result.mastodon_follows, {})
 
     def test_skips_disabled_instance(self):
         config = MastodonSource(enabled=True, instances=(_instance(enabled=False),))
-        with patch.object(mastodon_links, 'MastodonAuth') as auth_cls, \
-             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows') as replace:
-            mastodon_links.sync_follows(config, self.db_path)
-        auth_cls.assert_not_called()
-        replace.assert_not_called()
+        with patch.object(mastodon_links, 'MastodonAuth') as auth_cls:
+            result = mastodon_links.sync_follows(config)
 
-    def test_resolves_account_then_writes_snapshot(self):
-        instance_config = _instance(name='infosec', instance_url='https://infosec.exchange/')
+        auth_cls.assert_not_called()
+        self.assertEqual(result.mastodon_follows, {})
+
+    def test_resolves_account_then_captures_a_scoped_snapshot(self):
+        instance_config = _instance(name='infosec',
+                                    instance_url='https://infosec.exchange/')
         config = MastodonSource(enabled=True, instances=(instance_config,))
         auth_client = Mock()
-        auth_client.headers = {'Authorization': 'Bearer tok'}
+        auth_client.headers = {}
         accounts = [
-            {'id': '1', 'acct': 'abe', 'display_name': 'Abe', 'url': 'https://infosec.exchange/@abe'},
-            {'id': '2', 'acct': 'cleo', 'display_name': '', 'url': 'https://infosec.exchange/@cleo'},
+            {'id': '1', 'acct': 'abe', 'display_name': 'Abe',
+             'url': 'https://infosec.exchange/@abe'},
+            {'id': '2', 'acct': 'cleo', 'display_name': '',
+             'url': 'https://infosec.exchange/@cleo'},
         ]
 
         with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
-             patch.object(mastodon_links, '_verify_credentials_account_id', return_value='99') as verify, \
-             patch.object(mastodon_links, '_fetch_following_pages', return_value=accounts) as fetch_following, \
-             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows', return_value=2) as replace:
-            mastodon_links.sync_follows(config, self.db_path)
+             patch.object(mastodon_links, '_verify_credentials_account_id',
+                          return_value='99') as verify, \
+             patch.object(mastodon_links, '_fetch_following_pages',
+                          return_value=accounts) as fetch_following:
+            result = mastodon_links.sync_follows(config)
 
         verify.assert_called_once()
         self.assertEqual(fetch_following.call_args.args[2], '99')
-        self.assertEqual(replace.call_args.args[0], 'infosec')
+        # Each instance is its own snapshot scope.
+        self.assertEqual(list(result.mastodon_follows), ['infosec'])
+        snapshot = result.mastodon_follows['infosec']
         self.assertEqual(
-            replace.call_args.args[1],
+            [(record.account_id, record.acct, record.display_name, record.url)
+             for record in snapshot.records],
             [
                 ('1', 'abe', 'Abe', 'https://infosec.exchange/@abe'),
                 ('2', 'cleo', '', 'https://infosec.exchange/@cleo'),
@@ -401,11 +445,15 @@ class SyncFollowsTests(unittest.TestCase):
         config = MastodonSource(enabled=True, instances=(_instance(),))
         auth_client = Mock()
         auth_client.headers = {}
+
         with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
-             patch.object(mastodon_links, '_verify_credentials_account_id', return_value=None), \
-             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows') as replace:
-            mastodon_links.sync_follows(config, self.db_path)
-        replace.assert_not_called()
+             patch.object(mastodon_links, '_verify_credentials_account_id',
+                          return_value=None), \
+             patch.object(mastodon_links, '_fetch_following_pages') as fetch_following:
+            result = mastodon_links.sync_follows(config)
+
+        fetch_following.assert_not_called()
+        self.assertEqual(result.mastodon_follows, {})
 
     def test_failure_for_one_instance_does_not_abort_others(self):
         good = _instance(name='infosec')
@@ -420,13 +468,22 @@ class SyncFollowsTests(unittest.TestCase):
             return '5'
 
         with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
-             patch.object(mastodon_links, '_verify_credentials_account_id', side_effect=verify), \
-             patch.object(mastodon_links, '_fetch_following_pages', return_value=[]), \
-             patch.object(mastodon_links.db_utils, 'db_replace_mastodon_follows', return_value=0) as replace:
-            mastodon_links.sync_follows(config, self.db_path)
+             patch.object(mastodon_links, '_verify_credentials_account_id',
+                          side_effect=verify), \
+             patch.object(mastodon_links, '_fetch_following_pages', return_value=[]):
+            result = mastodon_links.sync_follows(config)
 
-        # infosec still synced despite hachyderm raising.
-        self.assertEqual(replace.call_args.args[0], 'infosec')
+        # infosec still produced a snapshot; the failed instance produced none,
+        # so the publisher leaves its existing list untouched.
+        self.assertEqual(list(result.mastodon_follows), ['infosec'])
+
+
+class DestinationIndependenceTests(unittest.TestCase):
+    def test_module_holds_no_database_imports(self):
+        source = Path(mastodon_links.__file__).read_text(encoding='utf-8')
+        for forbidden in ('db_utils', 'db_setup', 'sqlite3', 'psycopg'):
+            self.assertNotIn(forbidden, source,
+                             f'{forbidden} must not appear in mastodon_links.py')
 
 
 if __name__ == '__main__':

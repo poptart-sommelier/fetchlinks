@@ -1,7 +1,3 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,267 +8,249 @@ import {
   normalizeSubredditName,
   restoreSubreddit,
   softDeleteSubreddit,
-  withWritableSubredditsDatabase,
 } from "./subreddits";
+import { describePostgres, usePostgres } from "./test-support/postgres";
 
-type Fixture = {
-  dbPath: string;
-  cleanup: () => void;
-};
+describe("cleanSubredditName", () => {
+  it("strips an r/ or /r/ prefix", () => {
+    expect(cleanSubredditName("r/programming")).toBe("programming");
+    expect(cleanSubredditName("/r/programming")).toBe("programming");
+    expect(cleanSubredditName("R/Programming")).toBe("Programming");
+  });
 
-function createSubredditsFixture(): Fixture {
-  const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-subs-"));
-  const dbPath = path.join(directory, "fetchlinks.db");
-  const database = new DatabaseSync(dbPath);
-  database.exec(`
-    CREATE TABLE subreddits (
-      subreddit_id    INTEGER PRIMARY KEY,
-      name            TEXT NOT NULL,
-      normalized_name TEXT NOT NULL UNIQUE,
-      enabled         INTEGER NOT NULL DEFAULT 1,
-      added_at        TEXT NOT NULL,
-      deleted_at      TEXT
+  it("strips surrounding whitespace and slashes", () => {
+    expect(cleanSubredditName("  /programming/  ")).toBe("programming");
+  });
+
+  it("preserves case so the display name matches Reddit", () => {
+    expect(cleanSubredditName("r/AskHistorians")).toBe("AskHistorians");
+  });
+});
+
+describe("normalizeSubredditName", () => {
+  it("lowercases the cleaned name", () => {
+    expect(normalizeSubredditName("r/AskHistorians")).toBe("askhistorians");
+  });
+});
+
+describePostgres("subreddit catalog", () => {
+  const pg = usePostgres();
+
+  it("adds a subreddit and reports it as active", async () => {
+    const result = await addSubreddit(pg.sql, "r/Programming");
+
+    expect(result.status).toBe("added");
+    if (result.status !== "added") return;
+    expect(result.subreddit).toMatchObject({
+      name: "Programming",
+      normalizedName: "programming",
+      enabled: true,
+      deletedAt: null,
+      status: "active",
+    });
+  });
+
+  it("reports an existing subreddit rather than inserting a duplicate", async () => {
+    await addSubreddit(pg.sql, "programming");
+    const again = await addSubreddit(pg.sql, "r/PROGRAMMING");
+
+    expect(again.status).toBe("exists");
+    await expect(countSubredditsByStatus(pg.sql)).resolves.toMatchObject({
+      total: 1,
+    });
+  });
+
+  it("rejects a name Reddit would not accept", async () => {
+    await expect(addSubreddit(pg.sql, "")).resolves.toMatchObject({
+      status: "invalid",
+      reason: "Subreddit name is required.",
+    });
+    await expect(addSubreddit(pg.sql, "a")).resolves.toMatchObject({
+      status: "invalid",
+    });
+    await expect(addSubreddit(pg.sql, "has spaces")).resolves.toMatchObject({
+      status: "invalid",
+    });
+    await expect(addSubreddit(pg.sql, "a".repeat(22))).resolves.toMatchObject({
+      status: "invalid",
+    });
+    await expect(countSubredditsByStatus(pg.sql)).resolves.toMatchObject({
+      total: 0,
+    });
+  });
+
+  it("records the supplied timestamp as UTC", async () => {
+    const result = await addSubreddit(
+      pg.sql,
+      "programming",
+      new Date("2026-05-06T07:08:09Z"),
     );
 
-    CREATE TABLE reddit_state (
-      subreddit TEXT PRIMARY KEY,
-      last_seen_fullname TEXT,
-      time_created TEXT
+    expect(result.status).toBe("added");
+    if (result.status !== "added") return;
+    expect(result.subreddit.addedAt).toBe("2026-05-06T07:08:09Z");
+  });
+
+  it("reports the last fetch from the published checkpoint", async () => {
+    await addSubreddit(pg.sql, "programming");
+    await pg.exec(
+      `INSERT INTO content.reddit_state (subreddit, last_seen_fullname, observed_at)
+       VALUES ($1, $2, $3)`,
+      ["programming", "t3_abc", "2026-02-03T04:05:06Z"],
     );
 
-    CREATE TABLE posts (
-      post_id INTEGER PRIMARY KEY,
-      source TEXT,
-      source_type TEXT,
-      date_created TEXT
+    const [subreddit] = await listSubreddits(pg.sql);
+
+    expect(subreddit?.lastFetchedAt).toBe("2026-02-03T04:05:06Z");
+  });
+
+  it("reports the latest matching post and its source url", async () => {
+    await addSubreddit(pg.sql, "Programming");
+    for (const [uniqueId, postedAt] of [
+      ["p1", "2026-01-01T00:00:00Z"],
+      ["p2", "2026-03-01T00:00:00Z"],
+    ] as const) {
+      await pg.exec(
+        `INSERT INTO content.posts (unique_id, source, source_type, posted_at)
+         VALUES ($1, $2, 'reddit', $3)`,
+        [uniqueId, "https://www.reddit.com/r/programming", postedAt],
+      );
+    }
+
+    const [subreddit] = await listSubreddits(pg.sql);
+
+    expect(subreddit?.latestPostAt).toBe("2026-03-01T00:00:00Z");
+    expect(subreddit?.postSource).toBe("https://www.reddit.com/r/programming");
+  });
+
+  it("does not attribute another subreddit's posts", async () => {
+    await addSubreddit(pg.sql, "programming");
+    await pg.exec(
+      `INSERT INTO content.posts (unique_id, source, source_type, posted_at)
+       VALUES ('other', 'https://www.reddit.com/r/rust', 'reddit', '2026-01-01T00:00:00Z')`,
     );
 
-    INSERT INTO subreddits
-      (subreddit_id, name, normalized_name, enabled, added_at, deleted_at)
-    VALUES
-      (1, 'Netsec', 'netsec', 1, '2026-01-01 00:00:00', NULL),
-      (2, 'Python', 'python', 0, '2026-01-02 00:00:00', NULL),
-      (3, 'Golang', 'golang', 0, '2026-01-03 00:00:00', '2026-02-01 00:00:00');
+    const [subreddit] = await listSubreddits(pg.sql);
 
-    INSERT INTO reddit_state (subreddit, last_seen_fullname, time_created)
-    VALUES ('netsec', 't3_abc', '2026-03-01 00:00:00');
-
-    INSERT INTO posts (post_id, source, source_type, date_created)
-    VALUES
-      (1, 'https://www.reddit.com/r/Netsec', 'reddit', '2026-03-02 00:00:00'),
-      (2, 'https://www.reddit.com/r/Netsec', 'reddit', '2026-03-05 00:00:00');
-  `);
-  database.close();
-  return {
-    dbPath,
-    cleanup: () => rmSync(directory, { force: true, recursive: true }),
-  };
-}
-
-describe("normalizeSubredditName / cleanSubredditName", () => {
-  it("strips an r/ prefix and lowercases", () => {
-    expect(normalizeSubredditName("r/NetSec")).toBe("netsec");
-    expect(normalizeSubredditName("/r/NetSec/")).toBe("netsec");
-    expect(normalizeSubredditName("  Python  ")).toBe("python");
+    expect(subreddit?.latestPostAt).toBeNull();
+    expect(subreddit?.postSource).toBeNull();
   });
 
-  it("preserves case when only cleaning", () => {
-    expect(cleanSubredditName("r/NetSec")).toBe("NetSec");
-    expect(cleanSubredditName("/r/Python/")).toBe("Python");
-  });
-});
+  it("soft deletes rather than removing the row", async () => {
+    const added = await addSubreddit(pg.sql, "programming");
+    if (added.status !== "added") throw new Error("expected added");
 
-describe("listSubreddits", () => {
-  it("returns all subreddits with computed status by default", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const subs = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listSubreddits(db),
-      );
-      const byName = Object.fromEntries(
-        subs.map((s) => [s.normalizedName, s.status]),
-      );
-      expect(byName).toEqual({
-        netsec: "active",
-        python: "disabled",
-        golang: "removed",
-      });
-    } finally {
-      fixture.cleanup();
+    await expect(
+      softDeleteSubreddit(pg.sql, added.subreddit.id),
+    ).resolves.toBe(true);
+    await expect(
+      softDeleteSubreddit(pg.sql, added.subreddit.id),
+    ).resolves.toBe(false);
+
+    const [subreddit] = await listSubreddits(pg.sql);
+    expect(subreddit).toMatchObject({ status: "removed", enabled: false });
+  });
+
+  it("restores only a removed subreddit", async () => {
+    const added = await addSubreddit(pg.sql, "programming");
+    if (added.status !== "added") throw new Error("expected added");
+
+    await expect(restoreSubreddit(pg.sql, added.subreddit.id)).resolves.toBe(
+      false,
+    );
+    await softDeleteSubreddit(pg.sql, added.subreddit.id);
+    await expect(restoreSubreddit(pg.sql, added.subreddit.id)).resolves.toBe(
+      true,
+    );
+
+    const [subreddit] = await listSubreddits(pg.sql);
+    expect(subreddit).toMatchObject({ status: "active", deletedAt: null });
+  });
+
+  it("reports false for an unknown subreddit id", async () => {
+    await expect(softDeleteSubreddit(pg.sql, 4242)).resolves.toBe(false);
+    await expect(restoreSubreddit(pg.sql, 4242)).resolves.toBe(false);
+  });
+
+  it("filters by status", async () => {
+    await addSubreddit(pg.sql, "active_sub");
+    const removed = await addSubreddit(pg.sql, "removed_sub");
+    const disabled = await addSubreddit(pg.sql, "disabled_sub");
+    if (removed.status !== "added" || disabled.status !== "added") {
+      throw new Error("expected added");
     }
+    await softDeleteSubreddit(pg.sql, removed.subreddit.id);
+    await pg.exec(
+      "UPDATE catalog.subreddits SET enabled = false WHERE subreddit_id = $1",
+      [disabled.subreddit.id],
+    );
+
+    await expect(
+      listSubreddits(pg.sql, { status: "active" }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      listSubreddits(pg.sql, { status: "disabled" }),
+    ).resolves.toHaveLength(1);
+    await expect(
+      listSubreddits(pg.sql, { status: "removed" }),
+    ).resolves.toHaveLength(1);
+    await expect(listSubreddits(pg.sql)).resolves.toHaveLength(3);
   });
 
-  it("filters by status", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const active = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listSubreddits(db, { status: "active" }),
-      );
-      expect(active.map((s) => s.normalizedName)).toEqual(["netsec"]);
+  it("searches names without regard to case", async () => {
+    await addSubreddit(pg.sql, "AskHistorians");
+    await addSubreddit(pg.sql, "programming");
 
-      const removed = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listSubreddits(db, { status: "removed" }),
-      );
-      expect(removed.map((s) => s.normalizedName)).toEqual(["golang"]);
-    } finally {
-      fixture.cleanup();
-    }
+    const results = await listSubreddits(pg.sql, { q: "HISTOR" });
+
+    expect(results.map((subreddit) => subreddit.name)).toEqual([
+      "AskHistorians",
+    ]);
   });
 
-  it("filters by search substring against name and normalized_name", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const matches = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listSubreddits(db, { q: "PYTH" }),
-      );
-      expect(matches.map((s) => s.normalizedName)).toEqual(["python"]);
-    } finally {
-      fixture.cleanup();
-    }
+  it("treats wildcards in a search as literal characters", async () => {
+    await addSubreddit(pg.sql, "a_b");
+    await addSubreddit(pg.sql, "axb");
+
+    const results = await listSubreddits(pg.sql, { q: "a_b" });
+
+    expect(results.map((subreddit) => subreddit.name)).toEqual(["a_b"]);
   });
 
-  it("joins fetch state and derives newest post + canonical source", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const subs = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listSubreddits(db, { status: "active" }),
-      );
-      const netsec = subs[0];
-      expect(netsec.lastFetchedAt).toBe("2026-03-01 00:00:00");
-      expect(netsec.latestPostAt).toBe("2026-03-05 00:00:00");
-      expect(netsec.postSource).toBe("https://www.reddit.com/r/Netsec");
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
+  it("orders active subreddits before removed ones", async () => {
+    await addSubreddit(pg.sql, "zzz");
+    const removed = await addSubreddit(pg.sql, "aaa");
+    if (removed.status !== "added") throw new Error("expected added");
+    await softDeleteSubreddit(pg.sql, removed.subreddit.id);
 
-describe("countSubredditsByStatus", () => {
-  it("counts active, disabled, removed and total", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const counts = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => countSubredditsByStatus(db),
-      );
-      expect(counts).toEqual({
-        active: 1,
-        disabled: 1,
-        removed: 1,
-        total: 3,
-      });
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
+    const subreddits = await listSubreddits(pg.sql);
 
-describe("addSubreddit", () => {
-  it("adds a new subreddit and stores cleaned + normalized names", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const result = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addSubreddit(db, "r/Rust"),
-      );
-      expect(result.status).toBe("added");
-      if (result.status === "added") {
-        expect(result.subreddit.name).toBe("Rust");
-        expect(result.subreddit.normalizedName).toBe("rust");
-        expect(result.subreddit.status).toBe("active");
-      }
-    } finally {
-      fixture.cleanup();
-    }
+    expect(subreddits.map((subreddit) => subreddit.status)).toEqual([
+      "active",
+      "removed",
+    ]);
   });
 
-  it("reports an existing subreddit without inserting a duplicate", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const result = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addSubreddit(db, "NETSEC"),
-      );
-      expect(result.status).toBe("exists");
-    } finally {
-      fixture.cleanup();
-    }
+  it("counts each status independently", async () => {
+    await addSubreddit(pg.sql, "active_sub");
+    const removed = await addSubreddit(pg.sql, "removed_sub");
+    if (removed.status !== "added") throw new Error("expected added");
+    await softDeleteSubreddit(pg.sql, removed.subreddit.id);
+
+    await expect(countSubredditsByStatus(pg.sql)).resolves.toEqual({
+      active: 1,
+      disabled: 0,
+      removed: 1,
+      total: 2,
+    });
   });
 
-  it("rejects names with invalid characters", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const result = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addSubreddit(db, "not a sub!"),
-      );
-      expect(result.status).toBe("invalid");
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("rejects an empty name", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const result = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => addSubreddit(db, "   "),
-      );
-      expect(result.status).toBe("invalid");
-    } finally {
-      fixture.cleanup();
-    }
-  });
-});
-
-describe("softDeleteSubreddit / restoreSubreddit", () => {
-  it("tombstones an active subreddit then restores it", () => {
-    const fixture = createSubredditsFixture();
-    try {
-      const removed = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => softDeleteSubreddit(db, 1),
-      );
-      expect(removed).toBe(true);
-
-      const afterDelete = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listSubreddits(db, { status: "removed" }),
-      );
-      expect(afterDelete.map((s) => s.normalizedName)).toContain("netsec");
-
-      const restored = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => restoreSubreddit(db, 1),
-      );
-      expect(restored).toBe(true);
-
-      const afterRestore = withWritableSubredditsDatabase(
-        { fetchlinksDbPath: fixture.dbPath },
-        (db) => listSubreddits(db, { status: "active" }),
-      );
-      expect(afterRestore.map((s) => s.normalizedName)).toContain("netsec");
-    } finally {
-      fixture.cleanup();
-    }
-  });
-
-  it("creates the subreddits table on demand for a fresh database", () => {
-    const directory = mkdtempSync(path.join(tmpdir(), "fetchlinks-fresh-"));
-    const dbPath = path.join(directory, "fetchlinks.db");
-    try {
-      const counts = withWritableSubredditsDatabase({ fetchlinksDbPath: dbPath }, (db) =>
-        countSubredditsByStatus(db),
-      );
-      expect(counts.total).toBe(0);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
+  it("returns zeroes rather than nulls for an empty catalog", async () => {
+    await expect(countSubredditsByStatus(pg.sql)).resolves.toEqual({
+      active: 0,
+      disabled: 0,
+      removed: 0,
+      total: 0,
+    });
   });
 });
