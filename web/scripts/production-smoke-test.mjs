@@ -4,11 +4,27 @@
  * Serve the production build against a real PostgreSQL and assert the public
  * page renders a row inserted moments earlier.
  *
- * Requires FETCHLINKS_SMOKE_DATABASE_URL. The application reaches the database
- * through Neon's HTTP driver, which only speaks to a Neon endpoint, so this has
- * to point at a Neon branch — the development branch, never production. That
- * constraint is the value of this check: it is the only one that exercises the
- * real driver, the real connection string and the real build together.
+ * Two connection strings, because the point of the exercise is that they are
+ * not interchangeable:
+ *
+ *   FETCHLINKS_SMOKE_DATABASE_URL      seeds and removes the fixture. Needs
+ *                                      write access to content, so this is the
+ *                                      owner or publisher role.
+ *   FETCHLINKS_SMOKE_WEB_DATABASE_URL  what the application runs with. Must be
+ *                                      the web role.
+ *
+ * Running the app as the owner would pass while proving nothing: a missing
+ * grant on the web role is exactly the failure this is meant to catch, and it
+ * is invisible to any role that can already read everything.
+ *
+ * Both must point at a Neon branch — the development branch, never production —
+ * because the application reaches the database through Neon's HTTP driver,
+ * which only speaks to a Neon endpoint. That constraint is the value of this
+ * check: it is the only one that exercises the real driver, the real
+ * connection string and the real build together.
+ *
+ * The schema is expected to exist already. Migrations belong to
+ * `publish_tool.py migrate` run by the owner, not to a test.
  *
  * The fixture is namespaced with a run id and removed in a finally block, so a
  * shared development branch is left as it was found.
@@ -16,7 +32,7 @@
 
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
@@ -25,14 +41,23 @@ import { Pool } from "pg";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appDirectory = path.resolve(scriptDirectory, "..");
-const migrationsDirectory = path.resolve(appDirectory, "..", "db", "migrations");
 
 const databaseUrl = process.env.FETCHLINKS_SMOKE_DATABASE_URL?.trim();
+const webDatabaseUrl = process.env.FETCHLINKS_SMOKE_WEB_DATABASE_URL?.trim();
 
 if (!databaseUrl) {
   throw new Error(
-    "FETCHLINKS_SMOKE_DATABASE_URL is required. Set it to the Neon development " +
-      "branch connection string (never the production branch).",
+    "FETCHLINKS_SMOKE_DATABASE_URL is required. Set it to a Neon development " +
+      "branch connection string for the owner or publisher role (never the " +
+      "production branch).",
+  );
+}
+
+if (!webDatabaseUrl) {
+  throw new Error(
+    "FETCHLINKS_SMOKE_WEB_DATABASE_URL is required. Set it to the same Neon " +
+      "development branch as the fetchlinks_web role, so the smoke test " +
+      "exercises the privileges the deployed application actually has.",
   );
 }
 
@@ -44,21 +69,31 @@ const pool = new Pool({ connectionString: databaseUrl, max: 2 });
 let productionServer;
 
 try {
-  await applyMigrations(pool);
+  await assertSchemaReady(pool);
   await seedFixture(pool, runId, description);
 
   const port = await getAvailablePort();
   const pageUrl = `http://127.0.0.1:${port}/?q=${runId}`;
-  const command = process.platform === "win32" ? "npm.cmd" : "npm";
+  // Spawn Next's binary with the current Node rather than going through npm:
+  // npm resolves to npm.cmd on Windows, which Node refuses to spawn without a
+  // shell, and a shell would sit between us and the signals used to stop it.
+  const nextBin = path.join(
+    appDirectory,
+    "node_modules",
+    "next",
+    "dist",
+    "bin",
+    "next",
+  );
   const outputChunks = [];
 
   productionServer = spawn(
-    command,
-    ["run", "start", "--", "--hostname", "127.0.0.1", "--port", String(port)],
+    process.execPath,
+    [nextBin, "start", "--hostname", "127.0.0.1", "--port", String(port)],
     {
       cwd: appDirectory,
       detached: process.platform !== "win32",
-      env: { ...process.env, DATABASE_URL: databaseUrl },
+      env: { ...process.env, DATABASE_URL: webDatabaseUrl },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -99,10 +134,19 @@ async function ensureBuildExists() {
   }
 }
 
-async function applyMigrations(pool) {
-  for (const name of ["0001_schemas_and_catalog.sql", "0002_content.sql"]) {
-    await pool.query(
-      await readFile(path.join(migrationsDirectory, name), "utf8"),
+async function assertSchemaReady(pool) {
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS present
+       FROM information_schema.tables
+      WHERE (table_schema, table_name) IN
+            (('catalog', 'rss_feeds'), ('content', 'posts'), ('content', 'post_urls'))`,
+  );
+
+  if (rows[0].present !== 3) {
+    throw new Error(
+      "The smoke database is missing the fetchlinks schema. Apply it with " +
+        "`python3 publish_tool.py migrate` as the owner role before running " +
+        "this test.",
     );
   }
 }

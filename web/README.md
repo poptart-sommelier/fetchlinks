@@ -75,10 +75,21 @@ The Neon driver itself is exercised by the production smoke test.
 
 `npm run validate:production` runs the full validation sequence, then serves the
 production build against a real Neon branch and fetches the rendered home page.
-It needs `FETCHLINKS_SMOKE_DATABASE_URL` set to the **development** branch — it
-inserts a uniquely named post, asserts the page renders it, and deletes it
-again. This is the only check that exercises the real driver, the real
-connection string and the real build together.
+It is the only check that exercises the real driver, the real connection string
+and the real build together.
+
+It needs two connection strings, both pointing at the **development** branch:
+
+- `FETCHLINKS_SMOKE_DATABASE_URL` — owner or publisher role. Inserts a uniquely
+  named post and deletes it again.
+- `FETCHLINKS_SMOKE_WEB_DATABASE_URL` — the `fetchlinks_web` role. What the
+  application itself runs as.
+
+They are deliberately separate. Serving the app as the owner would pass while
+proving nothing, because a missing grant on the web role — the failure this is
+meant to catch — is invisible to a role that can already read everything. The
+schema must already exist; migrations are applied by `publish_tool.py migrate`
+as the owner, not by this test.
 
 To run production mode manually:
 
