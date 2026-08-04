@@ -84,10 +84,11 @@ npm run validate
 The web query tests use the same variable and skip the same way, so a checkout
 with no database still validates.
 
-## Deployment Examples
+## Deployment
 
-`deploy/` still contains the systemd and nginx examples for the previous
-single-host VM deployment. They are superseded by the Neon/Vercel/Pi deployment
-and will be replaced once it has been demonstrated end to end.
+`deploy/` installs the collector and publisher on a Raspberry Pi as three
+systemd timers. See [deploy/README.md](deploy/README.md). The web app deploys
+to Vercel automatically on every push to `master`.
 
-For detailed setup notes, see `ingest/SETUP.md` and `web/README.md`.
+For detailed setup notes, see `ingest/SETUP.md` and `web/README.md`. Agents
+working in this repo should start with [AGENTS.md](AGENTS.md).
