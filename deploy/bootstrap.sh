@@ -265,7 +265,8 @@ cat <<EOF
 Next steps
   1. Put source credentials in ${RUNTIME_DIR}/config/ as reddit.json,
      bluesky.json and mastodon-infosec.json (see ingest/SETUP.md).
-  2. Put the publisher role's Neon URL in ${RUNTIME_DIR}/publisher.env.
+  2. Put the publisher role's DIRECT Neon URL in ${RUNTIME_DIR}/publisher.env
+     (not the pooled one -- see deploy/publisher.env.example for why).
   3. Pull the catalog and run one cycle by hand before trusting the timers:
        systemctl start fetchlinks-publish.service   # syncs the catalog
        systemctl start fetchlinks-collect.service
