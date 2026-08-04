@@ -167,6 +167,27 @@ class LoadConfigTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 app_config.load_config(cfg)
 
+    def test_disabled_mastodon_does_not_require_instance_credentials(self):
+        # A source that is switched off must not be able to stop the collector
+        # starting. Reddit and Bluesky already behaved this way; Mastodon
+        # validated its instances regardless of the parent switch, so a host
+        # with Mastodon deliberately disabled failed to load config at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            missing = tmp_path / 'nowhere' / 'mastodon.json'
+            cfg = _toml(
+                tmp_path,
+                extra=(
+                    '\n[sources.mastodon]\nenabled = false\n'
+                    '[[sources.mastodon.instances]]\nname = "a"\n'
+                    'instance_url = "https://a.example"\n'
+                    f'credential_location = "{missing.as_posix()}"\n'
+                ),
+            )
+            loaded = app_config.load_config(cfg)
+            self.assertFalse(loaded.sources.mastodon.enabled)
+            self.assertFalse(loaded.sources.mastodon.instances[0].enabled)
+
     def test_credential_file_must_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
             cfg = _toml(
