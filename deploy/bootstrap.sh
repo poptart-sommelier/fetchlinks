@@ -129,12 +129,45 @@ log "Preparing ${RUNTIME_DIR}"
 mkdir -p "${RUNTIME_DIR}"/{config,catalog,state,outbox,logs}
 chmod 700 "${RUNTIME_DIR}/config"
 
+setting_names() {
+  # Every "section.key" a file declares, values ignored. Comparing names rather
+  # than content is the point: a deployed file is *supposed* to differ from its
+  # template, because that is where credentials and local choices live. Only a
+  # name the template has and the deployment lacks is interesting.
+  awk '
+    /^[[:space:]]*\[/ {
+      section = $0
+      sub(/[[:space:]]*#.*/, "", section)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", section)
+      next
+    }
+    /^[[:space:]]*[A-Za-z_][A-Za-z0-9_.-]*[[:space:]]*=/ {
+      key = $0
+      sub(/[[:space:]]*=.*/, "", key)
+      gsub(/^[[:space:]]+/, "", key)
+      print section "." key
+    }
+  ' "$1" | sort -u
+}
+
+report_drift() {
+  # A kept file is never overwritten, so a setting added to the template after
+  # install would otherwise never reach the Pi -- and its absence is silent,
+  # because every setting has a default. Name the gap instead.
+  local src=$1 dest=$2 missing
+  missing=$(comm -23 <(setting_names "${src}") <(setting_names "${dest}") | tr '\n' ' ')
+  [[ -z ${missing// /} ]] && return
+  printf '           note: %s adds %s\n' "${src#"${APP_DIR}/"}" "${missing% }"
+  printf '           your copy keeps its own values; add the setting by hand if you want it.\n'
+}
+
 install_once() {
   # Copy a template into place exactly once. Local edits always win, which is
   # what makes re-running this script after a git pull safe.
   local src=$1 dest=$2 mode=$3
   if [[ -e ${dest} ]]; then
     printf '    kept   %s\n' "${dest#"${APP_DIR}/"}"
+    report_drift "${src}" "${dest}"
     return
   fi
   install -m "${mode}" "${src}" "${dest}"
@@ -232,7 +265,8 @@ cat <<EOF
 Next steps
   1. Put source credentials in ${RUNTIME_DIR}/config/ as reddit.json,
      bluesky.json and mastodon-infosec.json (see ingest/SETUP.md).
-  2. Put the publisher role's Neon URL in ${RUNTIME_DIR}/publisher.env.
+  2. Put the publisher role's DIRECT Neon URL in ${RUNTIME_DIR}/publisher.env
+     (not the pooled one -- see deploy/publisher.env.example for why).
   3. Pull the catalog and run one cycle by hand before trusting the timers:
        systemctl start fetchlinks-publish.service   # syncs the catalog
        systemctl start fetchlinks-collect.service
