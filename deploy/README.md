@@ -81,7 +81,11 @@ Then:
 1. Put source credentials in `runtime/config/` as `reddit.json`,
    `bluesky.json` and `mastodon-infosec.json`. See [ingest/SETUP.md](../ingest/SETUP.md)
    for the JSON shape each source expects.
-2. Put the publisher role's pooled Neon URL in `runtime/publisher.env`.
+2. Put the publisher role's **direct** Neon URL in `runtime/publisher.env` —
+   not the pooled one. See [publisher.env.example](publisher.env.example) for
+   why: psycopg3 uses server-side prepared statements, which do not survive
+   PgBouncer in transaction mode. Pooling is for the web app's many
+   short-lived connections, not for one hourly batch.
 3. Re-run `bootstrap.sh` to enable the publisher and retention timers, which it
    leaves disabled while `publisher.env` still holds the placeholder.
 
@@ -91,9 +95,42 @@ Then:
 cd ~/fetchlinks && git pull && ./deploy/bootstrap.sh
 ```
 
-The script never overwrites anything under `runtime/`, so config and
-credentials survive. It also removes units left over from the retired
-single-host and two-host SQLite topologies.
+Nothing updates itself. The catalog syncs from Neon every hour, so feeds and
+subreddits added in the web admin reach the Pi on their own — but code does
+not. That is deliberate: an unattended `git pull` on the one host holding a
+database credential would run anything merged to `master` within the hour.
+
+`git pull` alone is enough for a Python-only change, because each timer run
+starts a fresh process from the working tree. Re-run `bootstrap.sh` when
+dependencies, systemd units, or the config template change; it is idempotent,
+and it also removes units left over from the retired SQLite topologies.
+
+### When the config template changes
+
+`bootstrap.sh` never overwrites anything under `runtime/`, which is what keeps
+your credentials and local choices safe across an update — but it means a
+setting added to `deploy/fetchlinks.pi.toml` after install never reaches
+`runtime/config/fetchlinks.toml`.
+
+That gap is silent, because every setting has a default: the deployment simply
+keeps using the old one. So `bootstrap.sh` compares the setting *names* in each
+template against your copy and reports any the template has and you do not:
+
+```
+    kept   runtime/config/fetchlinks.toml
+           note: deploy/fetchlinks.pi.toml adds [paths].runtime_dir
+           your copy keeps its own values; add the setting by hand if you want it.
+```
+
+Values are never compared — a deployed file is supposed to differ from its
+template. Add the named setting yourself, or if you have no local edits worth
+keeping, delete the file and re-run `bootstrap.sh` to get a fresh copy.
+
+To see the full picture at any time:
+
+```bash
+diff -u deploy/fetchlinks.pi.toml runtime/config/fetchlinks.toml
+```
 
 ## A 32-bit userland wrinkle
 
