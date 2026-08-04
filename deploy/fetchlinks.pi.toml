@@ -36,6 +36,12 @@ enabled = true
 # --- Sources ---------------------------------------------------------------
 # Credential files sit beside this one in runtime/config/, mode 0600. See
 # ingest/SETUP.md for the JSON shape each source expects.
+#
+# RSS needs no credentials and is the bulk of the catalog, so a fresh install
+# is useful immediately. The other three are disabled until their credential
+# files exist: an enabled source with no credentials fails config loading
+# outright, which would stop the whole collection cycle rather than just that
+# source. Drop the JSON in, flip `enabled`, done.
 
 [sources.rss]
 enabled                     = true
@@ -46,17 +52,17 @@ auto_disable_after_failures = 10
 request_timeout_seconds     = 10
 
 [sources.reddit]
-enabled             = true
+enabled             = false
 credential_location = "reddit.json"
 seed_file           = "subreddits.txt"
 
 [sources.bluesky]
-enabled             = true
+enabled             = false
 credential_location = "bluesky.json"
 timeline_limit      = 50
 
 [sources.mastodon]
-enabled = true
+enabled = false
 
 [[sources.mastodon.instances]]
 name                = "infosec"

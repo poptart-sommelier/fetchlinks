@@ -208,7 +208,7 @@ sudo systemctl daemon-reload
 log "Enabling the collector timer"
 sudo systemctl enable --now fetchlinks-collect.timer
 
-if grep -q 'PASSWORD@ep-xxxx-pooler' "${RUNTIME_DIR}/publisher.env"; then
+if grep -q 'PASSWORD@ep-xxxx' "${RUNTIME_DIR}/publisher.env"; then
   warn "runtime/publisher.env still holds the placeholder URL."
   warn "The publisher and retention timers were left disabled. Edit it, then run:"
   warn "  sudo systemctl enable --now fetchlinks-publish.timer fetchlinks-retain.timer"
