@@ -1,0 +1,14 @@
+[Unit]
+Description=Schedule for the Fetchlinks collector
+
+[Timer]
+# Every 30 minutes. Collection touches no database, so its frequency is a
+# freshness choice only and costs nothing on Neon. Batches wait in the spool
+# until the hourly publisher drains them.
+OnCalendar=*:0/30
+RandomizedDelaySec=60
+Persistent=true
+Unit=fetchlinks-collect.service
+
+[Install]
+WantedBy=timers.target

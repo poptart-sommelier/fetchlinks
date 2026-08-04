@@ -1,0 +1,41 @@
+[Unit]
+Description=Fetchlinks publisher (drain the spool, then refresh the catalog)
+Documentation=file://__FETCHLINKS_APP_DIR__/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__FETCHLINKS_USER__
+WorkingDirectory=__FETCHLINKS_APP_DIR__/ingest
+# The only unit that reads the Neon URL.
+EnvironmentFile=__FETCHLINKS_RUNTIME_DIR__/publisher.env
+Environment=FETCHLINKS_RUNTIME_DIR=__FETCHLINKS_RUNTIME_DIR__
+
+# Two commands in one wake window. Neon's compute cannot scale to zero in under
+# five minutes, so anything that touches the database is far cheaper bundled
+# here than given a timer of its own.
+#
+# Draining runs first because it is the job that matters: a stalled catalog
+# sync must not delay or block publishing collected posts. The catalog sync is
+# prefixed with "-" so its failure is tolerated -- the collector falls back to
+# the last-known-good snapshot, which is a stale feed list rather than a
+# stopped collector.
+ExecStart=__FETCHLINKS_APP_DIR__/.venv/bin/python __FETCHLINKS_APP_DIR__/ingest/publish_tool.py --config __FETCHLINKS_RUNTIME_DIR__/config/fetchlinks.toml publish
+ExecStart=-__FETCHLINKS_APP_DIR__/.venv/bin/python __FETCHLINKS_APP_DIR__/ingest/publish_tool.py --config __FETCHLINKS_RUNTIME_DIR__/config/fetchlinks.toml sync-catalog
+
+Nice=10
+TimeoutStartSec=30min
+SyslogIdentifier=fetchlinks-publish
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=__FETCHLINKS_RUNTIME_DIR__
+
+[Install]
+WantedBy=multi-user.target

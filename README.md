@@ -23,12 +23,8 @@ collector on a home Raspberry Pi, so requests to sources originate from a
 residential connection.
 
 For project orientation (goal, architecture, cost, layout, security) see
-[OVERVIEW.md](OVERVIEW.md).
-
-> **Note:** [OVERVIEW.md](OVERVIEW.md) and [deploy/](deploy/) still describe the
-> previous single-host SQLite and two-host rsync topologies. They are replaced
-> wholesale as part of the Neon/Vercel deployment work rather than being
-> migrated piecemeal.
+[OVERVIEW.md](OVERVIEW.md). For deploying and operating the Pi, see
+[deploy/README.md](deploy/README.md).
 
 ## Quick Start
 

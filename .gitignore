@@ -1,6 +1,11 @@
 .venv/
 .venv
 .fetchlinks/
+# Everything mutable on a deployed host: catalog snapshot, collector state,
+# batch spool, logs, runtime config and publisher.env. It lives inside the
+# checkout so the whole install is one directory, and is ignored so that
+# `git pull` can never disturb queued batches or a cursor.
+/runtime/
 .cache/
 .npm/
 **/.cache/
@@ -15,8 +20,7 @@ fetch_links.log
 *.log
 *.log.*
 # db/ now holds the checked-in SQL schema, so ignore database files by
-# extension rather than ignoring the directory.
-*.db
+# extension rather than ignoring the directory.*.db
 *.db-wal
 *.db-shm
 *.sqlite

@@ -1,0 +1,21 @@
+[Unit]
+Description=Schedule for the Fetchlinks publisher
+
+[Timer]
+# Hourly, and this is a cost decision rather than an ops preference. Neon's
+# five-minute scale-to-zero floor means every publish holds the compute awake
+# for at least five minutes, so the cadence sets the duty cycle directly:
+# every 15 minutes is roughly 61 CU-hours a month, every 30 minutes roughly 30,
+# hourly roughly 15, against a 100 CU-hour monthly budget shared with web
+# traffic. Nothing about a link aggregator is time-critical enough to pay more.
+#
+# Offset from the hour so a publish never starts in the same second as a
+# collection and finds a batch half-written; the spool's staging directory
+# makes that safe anyway, but there is no reason to exercise it hourly.
+OnCalendar=*:07
+RandomizedDelaySec=120
+Persistent=true
+Unit=fetchlinks-publish.service
+
+[Install]
+WantedBy=timers.target

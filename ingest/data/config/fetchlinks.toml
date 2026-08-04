@@ -13,14 +13,20 @@ log_level = "INFO"
 # runtime_dir = "~/.fetchlinks/runtime"
 
 [ingest]
-max_post_age_months                  = 3
+# One month. Storage, not taste: Neon Free caps the database at 0.5 GB, and a
+# three-month window across every source plausibly fills it. Collecting posts
+# that retention would delete weeks later is pure waste, so the collection
+# filter and the retention window are deliberately the same number.
+max_post_age_months                  = 1
 excluded_url_host_keywords           = ["businessinsider", "economist.com", "brighttalk.com"]
 excluded_url_or_description_keywords = ["trump", "covid"]
 
 [retention]
 # Pruning weekly via fetchlinks-retain.timer, which runs
 # `publish_tool.py retain`. PostgreSQL autovacuum handles reclamation.
-# max_post_age_months omitted => falls back to [ingest].max_post_age_months.
+# max_post_age_months omitted => falls back to [ingest].max_post_age_months,
+# which is what we want: one window, one number, no way for the collector and
+# the pruner to disagree about what "old" means.
 enabled                 = true
 
 # --- Sources ---------------------------------------------------------------

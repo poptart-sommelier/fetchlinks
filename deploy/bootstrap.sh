@@ -1,1032 +1,240 @@
 #!/usr/bin/env bash
-# Fetchlinks one-shot VM bootstrap / updater.
 #
-# Run this ON the VM, as root, from a fresh Ubuntu 24.04 install:
+# Fetchlinks Raspberry Pi installer.
 #
-#   sudo apt-get update && sudo apt-get install -y git
-#   git clone https://github.com/poptart-sommelier/fetchlinks.git ~/fetchlinks
-#   sudo ~/fetchlinks/deploy/bootstrap.sh
+# Installs the Collector and the Publisher on a Debian-family machine and
+# leaves the whole deployment inside this checkout:
 #
-# Re-running this script later is safe; it acts as the upgrade path
-# (fast-forwards git, rebuilds web, restarts services).
+#   ~/fetchlinks/                 this checkout
+#   ~/fetchlinks/.venv/           Python environment
+#   ~/fetchlinks/runtime/         everything mutable, gitignored
+#     config/                     fetchlinks.toml + source credentials (0600)
+#     catalog/                    catalog snapshot pulled from PostgreSQL
+#     state/                      collector resume state
+#     outbox/                     batch spool
+#     logs/                       collector log
+#     publisher.env               Neon URL, publisher role only (0600)
 #
-# Public TLS / nginx is provisioned by a separate script, deploy/tls.sh.
-# Run it once you have a DNS record pointing at this VM.
+# Run it as your normal login user, not with sudo. It escalates only for the
+# two things that genuinely need root: apt and systemd.
 #
-# Optional environment variables:
-#   FETCHLINKS_APP_DIR  checkout directory to install/update (default: parent of this script's deploy/ dir)
-#   FETCHLINKS_REPO_URL git URL to clone/pull (default: poptart-sommelier/fetchlinks)
-#   FETCHLINKS_REPO_REF branch/tag to deploy   (default: master)
-#   FETCHLINKS_ROLE     which role to provision: all | web | ingest (default: all)
-#                       - all:    single-host (web + ingest + retain + export); one DB file.
-#                       - web:    VM web GUI; control.db canonical here; reads a pushed data.db.
-#                       - ingest: home Pi; runs the sync cycle (pull control.db, ingest, retain, push data.db).
+#   ./deploy/bootstrap.sh
+#
+# Idempotent: re-run it after `git pull` to reinstall dependencies and refresh
+# the units. It never overwrites anything under runtime/.
+#
+# There is no web server here. The web GUI runs on Vercel and the database on
+# Neon; this host only collects and publishes.
 
 set -euo pipefail
 
-# ---- config -----------------------------------------------------------------
+log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-DEFAULT_APP_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
+# --- context ---------------------------------------------------------------
 
-APP_USER="fetchlinks"
-APP_GROUP="fetchlinks"
-APP_DIR="$(realpath -m "${FETCHLINKS_APP_DIR:-${DEFAULT_APP_DIR}}")"
+[[ ${EUID} -ne 0 ]] || die "run this as your normal user, not root or sudo. It calls sudo itself where needed."
+
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_USER="$(id -un)"
+RUNTIME_DIR="${APP_DIR}/runtime"
 VENV_DIR="${APP_DIR}/.venv"
-INGEST_DIR="${APP_DIR}/ingest"
-WEB_DIR="${APP_DIR}/web"
-# State (the rss_feeds.txt snapshot) and build caches live inside the checkout
-# so the whole project is self-contained in one directory. Override with
-# FETCHLINKS_STATE_DIR / FETCHLINKS_CACHE_DIR for FHS-style system layouts.
-STATE_DIR="${FETCHLINKS_STATE_DIR:-${APP_DIR}/ingest/data/state}"
-CONFIG_FILE="${INGEST_DIR}/data/config/fetchlinks.toml"
-RSS_FEEDS_FILE="${INGEST_DIR}/data/config/rss_feeds.txt"
-SUBREDDITS_FILE="${INGEST_DIR}/data/config/subreddits.txt"
-WEB_ENV_FILE="${WEB_DIR}/.env.production"
-SYNC_ENV_FILE="${APP_DIR}/deploy/sync/fetchlinks-sync.env"
-SYNC_ENV_EXAMPLE="${APP_DIR}/deploy/sync/fetchlinks-sync.env.example"
-CACHE_DIR="${FETCHLINKS_CACHE_DIR:-${APP_DIR}/.cache}"
-NODE_MAJOR=24
-PYTHON_BIN="/usr/bin/python3.12"
+PYTHON_BIN="${VENV_DIR}/bin/python"
 
-REPO_URL="${FETCHLINKS_REPO_URL:-https://github.com/poptart-sommelier/fetchlinks.git}"
-REPO_REF="${FETCHLINKS_REPO_REF:-master}"
+[[ -d ${APP_DIR}/ingest ]] || die "no ingest/ directory under ${APP_DIR}; is this a Fetchlinks checkout?"
+command -v systemctl >/dev/null || die "systemd is required"
+command -v sudo >/dev/null || die "sudo is required"
 
-ROLE="${FETCHLINKS_ROLE:-all}"
-case "${ROLE}" in
-    all|web|ingest) ;;
-    *) echo "FETCHLINKS_ROLE must be one of: all, web, ingest (got '${ROLE}')." >&2; exit 1 ;;
+log "Installing Fetchlinks in ${APP_DIR} for user ${APP_USER}"
+
+# The unit files reference the venv and runtime by absolute path, and systemd
+# resolves nothing for us. Refuse a path systemd cannot express rather than
+# installing units that fail at first trigger with a confusing message.
+case ${APP_DIR} in
+  *[[:space:]]*) die "the checkout path contains whitespace, which systemd unit paths cannot express: ${APP_DIR}" ;;
 esac
 
-role_has_web()    { [[ "${ROLE}" == "all" || "${ROLE}" == "web" ]]; }
-role_has_ingest() { [[ "${ROLE}" == "all" || "${ROLE}" == "ingest" ]]; }
-
-log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
-warn() { printf '\n\033[1;33m!!\033[0m %s\n' "$*" >&2; }
-die()  { printf '\n\033[1;31m!!\033[0m %s\n' "$*" >&2; exit 1; }
-
-sed_escape_replacement() {
-    printf '%s' "$1" | sed 's/[\\&|]/\\&/g'
-}
-
-render_systemd_unit() {
-    local source_path="$1"
-    local target_path="$2"
-    local app_dir_escaped=""
-    local state_dir_escaped=""
-
-    app_dir_escaped="$(sed_escape_replacement "${APP_DIR}")"
-    state_dir_escaped="$(sed_escape_replacement "${STATE_DIR}")"
-
-    sed \
-        -e "s|__FETCHLINKS_APP_DIR__|${app_dir_escaped}|g" \
-        -e "s|__FETCHLINKS_STATE_DIR__|${state_dir_escaped}|g" \
-        "${source_path}" >"${target_path}"
-    chmod 0644 "${target_path}"
-}
-
-grant_app_user_checkout_access() {
-    local dir="${APP_DIR}"
-    local parent_dirs=()
-    local index=0
-
-    if sudo -u "${APP_USER}" test -x "${APP_DIR}"; then
-        return 0
-    fi
-
-    while [[ "${dir}" != "/" ]]; do
-        dir="$(dirname -- "${dir}")"
-        [[ "${dir}" == "/" ]] && break
-        parent_dirs+=("${dir}")
-    done
-
-    log "Granting ${APP_USER} traversal access to checkout parent directories"
-    for ((index = ${#parent_dirs[@]} - 1; index >= 0; index--)); do
-        setfacl -m "u:${APP_USER}:x" "${parent_dirs[${index}]}" || \
-            die "Unable to grant ${APP_USER} execute access on ${parent_dirs[${index}]}"
-    done
-
-    if ! sudo -u "${APP_USER}" test -x "${APP_DIR}"; then
-        die "${APP_USER} still cannot access ${APP_DIR}. Check parent directory permissions and ACL support on this filesystem."
-    fi
-}
-
-GENERATED_ADMIN_PASSWORD=""
-declare -a SKIPPED_CREDENTIAL_SOURCES=()
-declare -a VALIDATION_FAILED_SOURCES=()
-declare -a TEMP_FILES=()
-
-cleanup_temp_files() {
-    local temp_file=""
-    for temp_file in "${TEMP_FILES[@]}"; do
-        rm -f "${temp_file}"
-    done
-}
-
-trap cleanup_temp_files EXIT
-trap 'cleanup_temp_files; exit 130' INT TERM
-
-prompt_yes_no() {
-    local prompt="$1"
-    local default_answer="${2:-y}"
-    local answer=""
-    local suffix="[Y/n]"
-
-    if [[ "${default_answer}" == "n" ]]; then
-        suffix="[y/N]"
-    fi
-
-    while true; do
-        read -r -p "${prompt} ${suffix} " answer
-        answer="${answer:-${default_answer}}"
-        case "${answer,,}" in
-            y|yes) return 0 ;;
-            n|no)  return 1 ;;
-            *)     printf 'Please answer yes or no.\n' ;;
-        esac
-    done
-}
-
-json_object_is_valid() {
-    "${PYTHON_BIN}" -c 'import json, sys; value = json.loads(sys.stdin.read()); sys.exit(0 if isinstance(value, dict) else 1)' <<<"$1" >/dev/null 2>&1
-}
-
-read_json_or_path_input() {
-    local prompt="$1"
-    local value=""
-    local next_line=""
-    local trimmed=""
-
-    printf '%s' "${prompt}" >&2
-    IFS= read -r value || true
-
-    trimmed="${value#"${value%%[![:space:]]*}"}"
-    if [[ "${trimmed}" == \{* ]] && ! json_object_is_valid "${value}"; then
-        printf 'JSON is not complete yet. Paste remaining lines; bootstrap continues once the JSON object parses. Enter EOF to stop input.\n' >&2
-        while true; do
-            printf 'json> ' >&2
-            IFS= read -r next_line || true
-            [[ "${next_line}" == "EOF" ]] && break
-            value+=$'\n'"${next_line}"
-            json_object_is_valid "${value}" && break
-        done
-    fi
-
-    printf '%s' "${value}"
-}
-
-resolve_existing_input_path() {
-    local input_path="$1"
-    "${PYTHON_BIN}" - "${input_path}" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1]).expanduser()
-if path.is_file():
-    print(path)
-    raise SystemExit(0)
-raise SystemExit(1)
-PY
-}
-
-install_credential_input() {
-    local label="$1"
-    local target_path="$2"
-    local input_value="$3"
-    local source_path=""
-    local target_dir=""
-    local temp_json=""
-    local trimmed="${input_value#"${input_value%%[![:space:]]*}"}"
-
-    if [[ -z "${input_value//[[:space:]]/}" ]]; then
-        warn "Skipped ${label}; no credential input was provided."
-        SKIPPED_CREDENTIAL_SOURCES+=("${label}")
-        return 1
-    fi
-
-    target_dir="$(dirname "${target_path}")"
-    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0700 "${target_dir}"
-
-    if [[ "${trimmed}" != \{* ]] && source_path="$(resolve_existing_input_path "${input_value}" 2>/dev/null)"; then
-        install -o "${APP_USER}" -g "${APP_GROUP}" -m 0600 "${source_path}" "${target_path}"
-        return 0
-    fi
-
-    temp_json="$(mktemp)"
-    printf '%s\n' "${input_value}" >"${temp_json}"
-    if ! "${PYTHON_BIN}" - "${temp_json}" "${target_path}" <<'PY'
-from pathlib import Path
-import json
-import sys
-
-input_path = Path(sys.argv[1])
-target_path = Path(sys.argv[2])
-
-try:
-    value = json.loads(input_path.read_text(encoding='utf-8'))
-except json.JSONDecodeError as exc:
-    print(f'Invalid JSON: {exc}', file=sys.stderr)
-    raise SystemExit(1)
-
-if not isinstance(value, dict):
-    print('Credential JSON must be an object.', file=sys.stderr)
-    raise SystemExit(1)
-
-target_path.write_text(json.dumps(value, indent=2, sort_keys=True) + '\n', encoding='utf-8')
-PY
-    then
-        rm -f "${temp_json}"
-        warn "Skipped ${label}; input was neither a readable path nor a valid JSON object. For multi-line JSON, paste it and then enter EOF on its own line."
-        SKIPPED_CREDENTIAL_SOURCES+=("${label}")
-        return 1
-    fi
-
-    rm -f "${temp_json}"
-    chown "${APP_USER}:${APP_GROUP}" "${target_path}"
-    chmod 0600 "${target_path}"
-}
-
-list_enabled_credential_targets() {
-    APP_HOME="${APP_DIR}" "${PYTHON_BIN}" - "${CONFIG_FILE}" <<'PY'
-from pathlib import Path
-import os
-import sys
-import tomllib
-
-config_path = Path(sys.argv[1])
-base = config_path.resolve().parent
-app_home = Path(os.environ['APP_HOME'])
-
-def as_bool(value, default):
-    return bool(default if value is None else value)
-
-def resolve_path(value):
-    if not isinstance(value, str) or not value.strip():
-        return None
-    if value == '~':
-        path = app_home
-    elif value.startswith('~/'):
-        path = app_home / value[2:]
-    else:
-        path = Path(value).expanduser()
-    if not path.is_absolute():
-        path = (base / path).resolve()
-    return path
-
-with config_path.open('rb') as handle:
-    raw = tomllib.load(handle)
-
-sources = raw.get('sources', {})
-
-reddit = sources.get('reddit') or {}
-if as_bool(reddit.get('enabled'), True):
-    path = resolve_path(reddit.get('credential_location'))
-    if path:
-        print(f'Reddit|{path}')
-
-bluesky = sources.get('bluesky') or {}
-if as_bool(bluesky.get('enabled'), False):
-    path = resolve_path(bluesky.get('credential_location'))
-    if path:
-        print(f'Bluesky|{path}')
-
-mastodon = sources.get('mastodon') or {}
-if as_bool(mastodon.get('enabled'), False):
-    for instance in mastodon.get('instances') or []:
-        if not as_bool(instance.get('enabled'), True):
-            continue
-        name = instance.get('name') or 'default'
-        path = resolve_path(instance.get('credential_location'))
-        if path:
-            print(f'Mastodon {name}|{path}')
-PY
-}
-
-configure_missing_credentials() {
-    local source_label=""
-    local credential_path=""
-    local credential_input=""
-    local credential_entry=""
-    local missing_entries=()
-
-    log "Checking ingest credentials"
-    while IFS='|' read -r source_label credential_path; do
-        [[ -z "${source_label}" ]] && continue
-        if [[ -f "${credential_path}" ]]; then
-            printf '  ok - %s credentials exist at %s\n' "${source_label}" "${credential_path}"
-            continue
-        fi
-
-        warn "Missing ${source_label} credentials at ${credential_path}."
-        missing_entries+=("${source_label}|${credential_path}")
-    done < <(list_enabled_credential_targets)
-
-    if [[ "${#missing_entries[@]}" -eq 0 ]]; then
-        return 0
-    fi
-
-    if ! prompt_yes_no "Configure missing ingest credentials now?" "y"; then
-        for credential_entry in "${missing_entries[@]}"; do
-            IFS='|' read -r source_label credential_path <<<"${credential_entry}"
-            SKIPPED_CREDENTIAL_SOURCES+=("${source_label}")
-        done
-        return 0
-    fi
-
-    for credential_entry in "${missing_entries[@]}"; do
-        IFS='|' read -r source_label credential_path <<<"${credential_entry}"
-        if prompt_yes_no "Configure ${source_label} credentials now?" "y"; then
-            credential_input="$(read_json_or_path_input "${source_label} JSON or path [${credential_path}] (blank skips; use a file path to avoid showing secrets): ")"
-            install_credential_input "${source_label}" "${credential_path}" "${credential_input}" || true
-        else
-            SKIPPED_CREDENTIAL_SOURCES+=("${source_label}")
-        fi
-    done
-}
-
-generate_admin_password() {
-    "${PYTHON_BIN}" -c 'import secrets; print(secrets.token_urlsafe(24))'
-}
-
-set_web_env_admin() {
-    local admin_user="$1"
-    local admin_pass="$2"
-    "${PYTHON_BIN}" - "${WEB_ENV_FILE}" "${admin_user}" "${admin_pass}" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-updates = {
-    'FETCHLINKS_ADMIN_USER': sys.argv[2],
-    'FETCHLINKS_ADMIN_PASS': sys.argv[3],
-}
-
-lines = path.read_text(encoding='utf-8').splitlines() if path.exists() else []
-seen = set()
-out = []
-
-for line in lines:
-    stripped = line.strip()
-    if stripped and not stripped.startswith('#') and '=' in line:
-        key = line.split('=', 1)[0].strip()
-        if key in updates:
-            out.append(f'{key}={updates[key]}')
-            seen.add(key)
-            continue
-    out.append(line)
-
-for key, value in updates.items():
-    if key not in seen:
-        out.append(f'{key}={value}')
-
-path.write_text('\n'.join(out) + '\n', encoding='utf-8')
-PY
-    chown "${APP_USER}:${APP_GROUP}" "${WEB_ENV_FILE}"
-    chmod 0600 "${WEB_ENV_FILE}"
-}
-
-configure_web_admin_if_missing() {
-    local admin_user=""
-    local admin_pass=""
-    local generated_password=""
-    local app_dir_escaped=""
-
-    if [[ -f "${WEB_ENV_FILE}" ]]; then
-        printf '  ok - web environment exists at %s\n' "${WEB_ENV_FILE}"
-        return 0
-    fi
-
-    log "Configuring web admin credentials"
-    app_dir_escaped="$(sed_escape_replacement "${APP_DIR}")"
-    sed "s|__FETCHLINKS_APP_DIR__|${app_dir_escaped}|g" \
-        "${WEB_DIR}/.env.production.example" >"${WEB_ENV_FILE}"
-    chown "${APP_USER}:${APP_GROUP}" "${WEB_ENV_FILE}"
-    chmod 0600 "${WEB_ENV_FILE}"
-
-    read -r -p "Admin username [admin]: " admin_user
-    admin_user="${admin_user:-admin}"
-
-    generated_password="$(generate_admin_password)"
-    printf 'Admin password [press Enter to generate a strong password, or type one]: '
-    IFS= read -r -s admin_pass || true
-    printf '\n'
-    if [[ -z "${admin_pass}" ]]; then
-        admin_pass="${generated_password}"
-        GENERATED_ADMIN_PASSWORD="${generated_password}"
-    fi
-
-    set_web_env_admin "${admin_user}" "${admin_pass}"
-}
-
-configure_sync_env_if_missing() {
-    local app_dir_escaped=""
-    local vm_ssh=""
-
-    if [[ -f "${SYNC_ENV_FILE}" ]]; then
-        printf '  ok - sync environment exists at %s\n' "${SYNC_ENV_FILE}"
-        return 0
-    fi
-
-    if [[ ! -f "${SYNC_ENV_EXAMPLE}" ]]; then
-        warn "Missing ${SYNC_ENV_EXAMPLE}; cannot render the sync environment."
-        return 0
-    fi
-
-    log "Configuring Pi sync environment"
-    app_dir_escaped="$(sed_escape_replacement "${APP_DIR}")"
-    sed "s|__FETCHLINKS_APP_DIR__|${app_dir_escaped}|g" \
-        "${SYNC_ENV_EXAMPLE}" >"${SYNC_ENV_FILE}"
-
-    read -r -p "VM sync SSH target (user@host) [leave blank to edit ${SYNC_ENV_FILE} later]: " vm_ssh
-    if [[ -n "${vm_ssh//[[:space:]]/}" ]]; then
-        "${PYTHON_BIN}" - "${SYNC_ENV_FILE}" "${vm_ssh}" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-target = sys.argv[2].strip()
-lines = path.read_text(encoding='utf-8').splitlines()
-out = []
-seen = False
-for line in lines:
-    if line.startswith('FETCHLINKS_VM_SSH='):
-        out.append(f'FETCHLINKS_VM_SSH={target}')
-        seen = True
-    else:
-        out.append(line)
-if not seen:
-    out.append(f'FETCHLINKS_VM_SSH={target}')
-path.write_text('\n'.join(out) + '\n', encoding='utf-8')
-PY
-    else
-        warn "FETCHLINKS_VM_SSH left unset; edit ${SYNC_ENV_FILE} before enabling the sync timer."
-    fi
-
-    chown "${APP_USER}:${APP_GROUP}" "${SYNC_ENV_FILE}"
-    chmod 0600 "${SYNC_ENV_FILE}"
-}
-
-list_enabled_ingest_sources() {
-    "${PYTHON_BIN}" - "${CONFIG_FILE}" <<'PY'
-from pathlib import Path
-import sys
-import tomllib
-
-config_path = Path(sys.argv[1])
-
-def as_bool(value, default):
-    return bool(default if value is None else value)
-
-with config_path.open('rb') as handle:
-    raw = tomllib.load(handle)
-
-sources = raw.get('sources', {})
-
-rss = sources.get('rss') or {}
-if as_bool(rss.get('enabled'), True):
-    print('rss|RSS')
-
-reddit = sources.get('reddit') or {}
-if as_bool(reddit.get('enabled'), True):
-    print('reddit|Reddit')
-
-bluesky = sources.get('bluesky') or {}
-if as_bool(bluesky.get('enabled'), False):
-    print('bluesky|Bluesky')
-
-mastodon = sources.get('mastodon') or {}
-if as_bool(mastodon.get('enabled'), False):
-    for instance in mastodon.get('instances') or []:
-        if as_bool(instance.get('enabled'), True):
-            name = instance.get('name') or 'default'
-            print(f'mastodon:{name}|Mastodon {name}')
-PY
-}
-
-write_single_source_config() {
-    local source_key="$1"
-    local output_path="$2"
-    "${PYTHON_BIN}" - "${CONFIG_FILE}" "${source_key}" "${output_path}" <<'PY'
-from pathlib import Path
-import json
-import sys
-import tomllib
-
-config_path = Path(sys.argv[1])
-source_key = sys.argv[2]
-output_path = Path(sys.argv[3])
-
-with config_path.open('rb') as handle:
-    raw = tomllib.load(handle)
-
-sources = raw.setdefault('sources', {})
-for name, default in (('rss', True), ('reddit', True), ('bluesky', False), ('mastodon', False)):
-    section = sources.setdefault(name, {})
-    section['enabled'] = name == source_key.split(':', 1)[0]
-
-mastodon = sources.get('mastodon') or {}
-for instance in mastodon.get('instances') or []:
-    instance['enabled'] = source_key == f"mastodon:{instance.get('name') or 'default'}"
-
-def format_value(value):
-    if isinstance(value, bool):
-        return 'true' if value else 'false'
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, str):
-        return json.dumps(value)
-    if isinstance(value, list):
-        return '[' + ', '.join(format_value(item) for item in value) + ']'
-    raise TypeError(f'Unsupported TOML value: {value!r}')
-
-def write_table(lines, header, table):
-    if not isinstance(table, dict):
-        return
-    lines.append(f'[{header}]')
-    for key, value in table.items():
-        if isinstance(value, dict) or value is None:
-            continue
-        if isinstance(value, list) and any(isinstance(item, dict) for item in value):
-            continue
-        lines.append(f'{key} = {format_value(value)}')
-    lines.append('')
-
-lines = []
-for top_level in ('paths', 'ingest', 'retention'):
-    write_table(lines, top_level, raw.get(top_level, {}))
-
-for source in ('rss', 'reddit', 'bluesky', 'mastodon'):
-    write_table(lines, f'sources.{source}', sources.get(source, {}))
-
-for instance in (sources.get('mastodon') or {}).get('instances') or []:
-    lines.append('[[sources.mastodon.instances]]')
-    for key, value in instance.items():
-        if value is None:
-            continue
-        lines.append(f'{key} = {format_value(value)}')
-    lines.append('')
-
-output_path.write_text('\n'.join(lines), encoding='utf-8')
-PY
-    chmod 0644 "${output_path}"
-}
-
-write_reddit_seed_config() {
-    local output_path="$1"
-    local credential_path="$2"
-    "${PYTHON_BIN}" - "${CONFIG_FILE}" "${output_path}" "${credential_path}" <<'PY'
-from pathlib import Path
-import json
-import sys
-import tomllib
-
-config_path = Path(sys.argv[1])
-output_path = Path(sys.argv[2])
-credential_path = sys.argv[3]
-
-with config_path.open('rb') as handle:
-    raw = tomllib.load(handle)
-
-sources = raw.setdefault('sources', {})
-for name in ('rss', 'bluesky', 'mastodon'):
-    sources.setdefault(name, {})['enabled'] = False
-reddit = sources.setdefault('reddit', {})
-reddit['enabled'] = True
-reddit['credential_location'] = credential_path
-
-def format_value(value):
-    if isinstance(value, bool):
-        return 'true' if value else 'false'
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, str):
-        return json.dumps(value)
-    if isinstance(value, list):
-        return '[' + ', '.join(format_value(item) for item in value) + ']'
-    raise TypeError(f'Unsupported TOML value: {value!r}')
-
-def write_table(lines, header, table):
-    if not isinstance(table, dict):
-        return
-    lines.append(f'[{header}]')
-    for key, value in table.items():
-        if isinstance(value, dict) or value is None:
-            continue
-        if isinstance(value, list) and any(isinstance(item, dict) for item in value):
-            continue
-        lines.append(f'{key} = {format_value(value)}')
-    lines.append('')
-
-lines = []
-for top_level in ('paths', 'ingest', 'retention'):
-    write_table(lines, top_level, raw.get(top_level, {}))
-for source in ('rss', 'reddit', 'bluesky', 'mastodon'):
-    write_table(lines, f'sources.{source}', sources.get(source, {}))
-for instance in (sources.get('mastodon') or {}).get('instances') or []:
-    lines.append('[[sources.mastodon.instances]]')
-    for key, value in instance.items():
-        if value is None:
-            continue
-        lines.append(f'{key} = {format_value(value)}')
-    lines.append('')
-
-output_path.write_text('\n'.join(lines), encoding='utf-8')
-PY
-    chmod 0644 "${output_path}"
-}
-
-seed_source_tables() {
-    local rss_seed_config=""
-    local reddit_seed_config=""
-    local reddit_placeholder=""
-
-    rss_seed_config="$(mktemp "${CONFIG_FILE}.rss-seed.XXXXXX")"
-    TEMP_FILES+=("${rss_seed_config}")
-    write_single_source_config "rss" "${rss_seed_config}"
-    log "Seeding rss_feeds table from ${RSS_FEEDS_FILE} if empty"
-    sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
-        "${INGEST_DIR}/rss_feed_import.py" \
-        --config "${rss_seed_config}" \
-        --seed-if-empty "${RSS_FEEDS_FILE}" || \
-        warn "rss_feeds seed step reported a failure; check the output above."
-    rm -f "${rss_seed_config}"
-
-    reddit_seed_config="$(mktemp "${CONFIG_FILE}.reddit-seed.XXXXXX")"
-    reddit_placeholder="$(mktemp)"
-    TEMP_FILES+=("${reddit_seed_config}" "${reddit_placeholder}")
-    printf '{"reddit": {}}\n' >"${reddit_placeholder}"
-    chmod 0644 "${reddit_placeholder}"
-    write_reddit_seed_config "${reddit_seed_config}" "${reddit_placeholder}"
-    log "Seeding subreddits table from ${SUBREDDITS_FILE} if empty"
-    sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
-        "${INGEST_DIR}/subreddit_import.py" \
-        --config "${reddit_seed_config}" \
-        --seed-if-empty || \
-        warn "subreddits seed step reported a failure; check the output above."
-    rm -f "${reddit_seed_config}" "${reddit_placeholder}"
-}
-
-validate_rss_seed() {
-    "${PYTHON_BIN}" - "${CONFIG_FILE}" <<'PY'
-from pathlib import Path
-import sqlite3
-import sys
-import tomllib
-
-config_path = Path(sys.argv[1])
-base = config_path.resolve().parent
-with config_path.open('rb') as handle:
-    raw = tomllib.load(handle)
-
-db_value = raw.get('paths', {}).get('db')
-if not isinstance(db_value, str) or not db_value.strip():
-    print('missing [paths].db', file=sys.stderr)
-    raise SystemExit(1)
-
-db_path = Path(db_value)
-if not db_path.is_absolute():
-    db_path = (base / db_path).resolve()
-
-with sqlite3.connect(db_path) as db:
-    count = db.execute('SELECT COUNT(*) FROM rss_feeds').fetchone()[0]
-
-print(count)
-raise SystemExit(0 if count > 0 else 1)
-PY
-}
-
-validate_ingest_sources() {
-    local source_key=""
-    local source_label=""
-    local temp_config=""
-    local temp_output=""
-    local found_source=0
-    local rss_count=""
-
-    log "Validating enabled ingest sources"
-    while IFS='|' read -r source_key source_label; do
-        [[ -z "${source_key}" ]] && continue
-        found_source=1
-
-        if [[ "${source_key}" == "rss" ]]; then
-            if rss_count="$(validate_rss_seed 2>/dev/null)"; then
-                printf '  ok - %s (%s feed rows seeded)\n' "${source_label}" "${rss_count}"
-            else
-                VALIDATION_FAILED_SOURCES+=("${source_label}")
-                warn "${source_label} failed validation; rss_feeds table is empty or unreadable."
-            fi
-            continue
-        fi
-
-        temp_config="$(mktemp "${CONFIG_FILE}.validate.XXXXXX")"
-        temp_output="$(mktemp)"
-        TEMP_FILES+=("${temp_config}" "${temp_output}")
-        write_single_source_config "${source_key}" "${temp_config}"
-
-        if sudo -u "${APP_USER}" "${VENV_DIR}/bin/python" \
-            "${INGEST_DIR}/fetch_links.py" --config "${temp_config}" \
-            >"${temp_output}" 2>&1; then
-            printf '  ok - %s\n' "${source_label}"
-        else
-            VALIDATION_FAILED_SOURCES+=("${source_label}")
-            warn "${source_label} failed validation. Recent output:"
-            tail -n 20 "${temp_output}" >&2 || true
-        fi
-
-        rm -f "${temp_config}" "${temp_output}"
-    done < <(list_enabled_ingest_sources)
-
-    if [[ "${found_source}" -eq 0 ]]; then
-        warn "No enabled ingest sources found to validate."
-    fi
-}
-
-# ---- sanity -----------------------------------------------------------------
-
-if [[ $EUID -ne 0 ]]; then
-    echo "Run as root (sudo $0)." >&2
-    exit 1
-fi
-
-if ! grep -q '^ID=ubuntu' /etc/os-release; then
-    warn "Not Ubuntu; tested only on Ubuntu 24.04. Continuing anyway."
-fi
-
-if [[ ! -t 0 ]]; then
-    die "bootstrap.sh must be run from an interactive terminal because first install may prompt for credentials and admin setup."
-fi
-
-case "${APP_DIR}" in
-    /|/home|/root|/opt|/usr|/var)
-        die "Refusing to use broad install directory: ${APP_DIR}"
-        ;;
+# --- packages --------------------------------------------------------------
+
+DPKG_ARCH="$(dpkg --print-architecture 2>/dev/null || echo unknown)"
+
+log "Installing system packages (dpkg architecture: ${DPKG_ARCH})"
+sudo apt-get update -qq
+sudo apt-get install -y -qq \
+  ca-certificates \
+  git \
+  python3 \
+  python3-venv \
+  python3-dev
+
+# Raspberry Pi OS ships a 64-bit kernel with a 32-bit userland, so `uname -m`
+# says aarch64 while dpkg says armhf and Python's wheel tags say armv8l.
+# psycopg-binary publishes no 32-bit ARM wheels, so `psycopg[binary]` cannot
+# resolve at all there. The fix is the pure-Python implementation against the
+# system libpq.
+#
+# This cannot be expressed as a PEP 508 marker in requirements.txt:
+# `platform_machine` comes from uname and therefore reports aarch64 on this
+# machine, which would select exactly the wheel that does not exist. Hence the
+# explicit branch here.
+NEEDS_SYSTEM_LIBPQ=0
+case ${DPKG_ARCH} in
+  armhf|armel|i386)
+    NEEDS_SYSTEM_LIBPQ=1
+    log "32-bit userland detected; using pure-Python psycopg with the system libpq"
+    sudo apt-get install -y -qq libpq5
+    ;;
 esac
 
-if [[ "${APP_DIR}" =~ [[:space:]] ]]; then
-    die "Install directory must not contain whitespace: ${APP_DIR}"
-fi
+# --- python environment ----------------------------------------------------
 
-# ---- swap -------------------------------------------------------------------
-# A 2 GB VM (B1ms) has little/no swap by default, and `next build` can spike
-# memory enough to OOM. Ensure a swap file exists before the web build.
-# Only the web role builds Next.js, so skip this for the ingest-only Pi.
-
-SWAP_FILE="/swapfile"
-SWAP_SIZE="2G"
-
-if ! role_has_web; then
-    log "Ingest-only role; skipping web build swap file"
-elif ! swapon --show --noheadings | grep -q "${SWAP_FILE}"; then
-    log "Setting up ${SWAP_SIZE} swap file at ${SWAP_FILE}"
-    if [[ ! -f "${SWAP_FILE}" ]]; then
-        fallocate -l "${SWAP_SIZE}" "${SWAP_FILE}" || \
-            dd if=/dev/zero of="${SWAP_FILE}" bs=1M count=2048
-    fi
-    chmod 600 "${SWAP_FILE}"
-    if ! file "${SWAP_FILE}" 2>/dev/null | grep -q 'swap file'; then
-        mkswap "${SWAP_FILE}" >/dev/null
-    fi
-    swapon "${SWAP_FILE}"
-    if ! grep -q "^${SWAP_FILE} " /etc/fstab; then
-        echo "${SWAP_FILE} none swap sw 0 0" >>/etc/fstab
-    fi
+if [[ ! -x ${PYTHON_BIN} ]]; then
+  log "Creating the virtual environment"
+  python3 -m venv "${VENV_DIR}"
 else
-    log "Swap already active at ${SWAP_FILE}; skipping"
+  log "Reusing the existing virtual environment"
 fi
 
-# ---- apt + base packages ----------------------------------------------------
+log "Installing Python dependencies"
+"${PYTHON_BIN}" -m pip install --quiet --upgrade pip
 
-log "Updating apt and installing base packages"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y \
-    git curl ca-certificates sqlite3 ufw unattended-upgrades acl \
-    python3.12 python3.12-venv python3.12-dev \
-    build-essential libffi-dev libssl-dev
+REQUIREMENTS="${APP_DIR}/ingest/requirements.txt"
+SCRATCH="$(mktemp -d)"
+trap 'rm -rf "${SCRATCH}"' EXIT
 
-# The ingest role ships data.db to the VM over rsync each cycle.
-if role_has_ingest; then
-    apt-get install -y rsync
+if [[ ${NEEDS_SYSTEM_LIBPQ} -eq 1 ]]; then
+  # Swap the binary extra for the plain package. Everything else is untouched,
+  # so the deployed dependency set stays in step with the checked-in one.
+  sed -e 's/^psycopg\[binary\]$/psycopg/' "${REQUIREMENTS}" > "${SCRATCH}/requirements.txt"
+  REQUIREMENTS="${SCRATCH}/requirements.txt"
 fi
 
-# NodeSource for current Node major (web role only builds/runs Next.js)
-if role_has_web; then
-    if ! command -v node >/dev/null || [[ "$(node -v 2>/dev/null)" != v${NODE_MAJOR}.* ]]; then
-        log "Installing Node.js ${NODE_MAJOR}.x from NodeSource"
-        curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
-        apt-get install -y nodejs
-    fi
+"${PYTHON_BIN}" -m pip install --quiet --upgrade -r "${REQUIREMENTS}"
+
+# psycopg fails at import, not at connect, when it can find no libpq. Catching
+# that here turns a confusing hourly unit failure into an install-time error.
+if ! "${PYTHON_BIN}" -c 'import psycopg' 2>/dev/null; then
+  die "psycopg imported no working libpq implementation. On a 32-bit userland, install libpq5."
 fi
 
-# ---- unattended-upgrades ----------------------------------------------------
+# --- runtime layout --------------------------------------------------------
 
-log "Enabling unattended-upgrades schedule"
-cat >/etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Unattended-Upgrade "1";
-APT::Periodic::AutocleanInterval "7";
-EOF
+log "Preparing ${RUNTIME_DIR}"
+mkdir -p "${RUNTIME_DIR}"/{config,catalog,state,outbox,logs}
+chmod 700 "${RUNTIME_DIR}/config"
 
-# ---- user, group, directories ----------------------------------------------
+install_once() {
+  # Copy a template into place exactly once. Local edits always win, which is
+  # what makes re-running this script after a git pull safe.
+  local src=$1 dest=$2 mode=$3
+  if [[ -e ${dest} ]]; then
+    printf '    kept   %s\n' "${dest#"${APP_DIR}/"}"
+    return
+  fi
+  install -m "${mode}" "${src}" "${dest}"
+  printf '    wrote  %s\n' "${dest#"${APP_DIR}/"}"
+}
 
-log "Ensuring ${APP_USER} user and app directory"
-getent group  "${APP_GROUP}" >/dev/null || groupadd --system "${APP_GROUP}"
-getent passwd "${APP_USER}"  >/dev/null || useradd  --system --gid "${APP_GROUP}" \
-    --home-dir "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
-usermod --home "${APP_DIR}" "${APP_USER}"
+install_once "${APP_DIR}/deploy/fetchlinks.pi.toml"  "${RUNTIME_DIR}/config/fetchlinks.toml" 0600
+install_once "${APP_DIR}/deploy/publisher.env.example" "${RUNTIME_DIR}/publisher.env"        0600
 
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}"
-chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
-grant_app_user_checkout_access
+# Seed lists are only consulted by `publish_tool.py bootstrap-catalog` against
+# an empty database. Copied so a rebuild can seed from scratch without the
+# checkout being the source of truth afterwards.
+for seed in rss_feeds.txt subreddits.txt; do
+  if [[ -f ${APP_DIR}/ingest/data/config/${seed} ]]; then
+    install_once "${APP_DIR}/ingest/data/config/${seed}" "${RUNTIME_DIR}/config/${seed}" 0600
+  fi
+done
 
-# ---- firewall ---------------------------------------------------------------
+# Credentials may have been dropped in by hand; make sure none of them are
+# world-readable regardless of how they arrived.
+shopt -s nullglob
+for cred in "${RUNTIME_DIR}"/config/*.json; do
+  chmod 600 "${cred}"
+done
+shopt -u nullglob
 
-log "Configuring ufw"
-ufw --force default deny incoming  >/dev/null
-ufw --force default allow outgoing >/dev/null
-ufw allow 22/tcp >/dev/null
-# Only the web role serves HTTP(S); the ingest Pi needs no inbound web ports.
-if role_has_web; then
-    for port in 80 443; do ufw allow "${port}/tcp" >/dev/null; done
-fi
-ufw --force enable >/dev/null
+# --- systemd units ---------------------------------------------------------
 
-# ---- repo -------------------------------------------------------------------
+log "Installing systemd units"
+UNIT_SRC="${APP_DIR}/deploy/systemd"
+UNITS=(
+  fetchlinks-collect.service fetchlinks-collect.timer
+  fetchlinks-publish.service fetchlinks-publish.timer
+  fetchlinks-retain.service  fetchlinks-retain.timer
+)
 
-log "Syncing repository (${REPO_URL} @ ${REPO_REF})"
-if [[ -d "${APP_DIR}/.git" ]]; then
-    sudo -u "${APP_USER}" git -C "${APP_DIR}" fetch origin "${REPO_REF}"
-    sudo -u "${APP_USER}" git -C "${APP_DIR}" merge --ff-only "origin/${REPO_REF}"
+render_dir="${SCRATCH}/units"
+mkdir -p "${render_dir}"
+
+for unit in "${UNITS[@]}"; do
+  sed \
+    -e "s|__FETCHLINKS_APP_DIR__|${APP_DIR}|g" \
+    -e "s|__FETCHLINKS_RUNTIME_DIR__|${RUNTIME_DIR}|g" \
+    -e "s|__FETCHLINKS_USER__|${APP_USER}|g" \
+    "${UNIT_SRC}/${unit}" > "${render_dir}/${unit}"
+  # A leftover placeholder means a unit gained a token this script does not
+  # know about. Fail here rather than at 03:12 on a Sunday.
+  if grep -q '__FETCHLINKS_' "${render_dir}/${unit}"; then
+    die "unsubstituted placeholder in ${unit}"
+  fi
+done
+
+sudo install -m 0644 -t /etc/systemd/system "${render_dir}"/*.service "${render_dir}"/*.timer
+sudo systemctl daemon-reload
+
+# Remove units from the retired single-host and two-host SQLite topologies, so
+# an upgraded machine does not keep an old timer running against a database
+# that no longer exists.
+for stale in fetchlinks-web.service fetchlinks-ingest.service fetchlinks-ingest.timer \
+             fetchlinks-sync.service fetchlinks-sync.timer \
+             fetchlinks-export-rss-feeds.service fetchlinks-export-rss-feeds.timer; do
+  if [[ -e /etc/systemd/system/${stale} ]]; then
+    log "Removing retired unit ${stale}"
+    sudo systemctl disable --now "${stale}" >/dev/null 2>&1 || true
+    sudo rm -f "/etc/systemd/system/${stale}"
+  fi
+done
+sudo systemctl daemon-reload
+
+# --- timers ----------------------------------------------------------------
+
+# The collector is safe to enable unconditionally: it needs no database and no
+# credential beyond whatever sources are configured. The publisher is not, so
+# it stays disabled until publisher.env holds a real URL. Enabling it with the
+# placeholder would produce an hourly failing unit and nothing else.
+log "Enabling the collector timer"
+sudo systemctl enable --now fetchlinks-collect.timer
+
+if grep -q 'PASSWORD@ep-xxxx-pooler' "${RUNTIME_DIR}/publisher.env"; then
+  warn "runtime/publisher.env still holds the placeholder URL."
+  warn "The publisher and retention timers were left disabled. Edit it, then run:"
+  warn "  sudo systemctl enable --now fetchlinks-publish.timer fetchlinks-retain.timer"
 else
-    if [[ -d "${APP_DIR}" ]] && [[ -z "$(ls -A "${APP_DIR}")" ]]; then
-        sudo -u "${APP_USER}" git clone --branch "${REPO_REF}" "${REPO_URL}" "${APP_DIR}"
-    else
-        echo "${APP_DIR} exists but is not a git checkout. Move it aside or clone the repo there first." >&2
-        exit 1
-    fi
+  log "Enabling the publisher and retention timers"
+  sudo systemctl enable --now fetchlinks-publish.timer fetchlinks-retain.timer
 fi
 
-chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/db"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/data/logs"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${INGEST_DIR}/data/config"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${STATE_DIR}"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${CACHE_DIR}/pip"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${CACHE_DIR}/npm"
+# --- report ----------------------------------------------------------------
 
-# ---- first-install interactive setup ----------------------------------------
-
-# Ingest credentials live wherever ingest runs (the Pi, or single-host).
-if role_has_ingest; then
-    configure_missing_credentials
-fi
-# Web admin credentials live on the web host.
-if role_has_web; then
-    configure_web_admin_if_missing
-fi
-# The Pi needs the sync environment (VM target) for its push/pull cycle.
-if [[ "${ROLE}" == "ingest" ]]; then
-    configure_sync_env_if_missing
-fi
-
-# ---- python venv + ingest deps ---------------------------------------------
-# Needed by every role: the web host runs the seed/export Python helpers, and
-# the ingest host runs the fetch/retain jobs.
-
-log "Building Python venv and installing ingest requirements"
-if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
-    sudo -u "${APP_USER}" "${PYTHON_BIN}" -m venv "${VENV_DIR}"
-fi
-sudo -u "${APP_USER}" "${VENV_DIR}/bin/pip" install --upgrade pip >/dev/null
-sudo -u "${APP_USER}" env PIP_CACHE_DIR="${CACHE_DIR}/pip" \
-    "${VENV_DIR}/bin/pip" install -r "${INGEST_DIR}/requirements.txt"
-
-# ---- web build --------------------------------------------------------------
-
-if role_has_web; then
-    log "Building Next.js web app"
-    sudo -u "${APP_USER}" env npm_config_cache="${CACHE_DIR}/npm" \
-        bash -c "cd '${WEB_DIR}' && npm ci && npm run build"
-fi
-
-# ---- systemd units ----------------------------------------------------------
-
-log "Installing systemd units (role: ${ROLE})"
-
-if role_has_web; then
-    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-web.service"              /etc/systemd/system/fetchlinks-web.service
-    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.service" /etc/systemd/system/fetchlinks-export-rss-feeds.service
-    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-export-rss-feeds.timer"      /etc/systemd/system/
-fi
-
-# Single-host runs the standalone ingest + retain timers directly.
-if [[ "${ROLE}" == "all" ]]; then
-    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-ingest.service"           /etc/systemd/system/fetchlinks-ingest.service
-    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-ingest.timer"                /etc/systemd/system/
-    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-retain.service"           /etc/systemd/system/fetchlinks-retain.service
-    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-retain.timer"                /etc/systemd/system/
-fi
-
-# The Pi runs ingest + retention inside the one-shot sync cycle.
-if [[ "${ROLE}" == "ingest" ]]; then
-    render_systemd_unit "${APP_DIR}/deploy/systemd/fetchlinks-sync.service"             /etc/systemd/system/fetchlinks-sync.service
-    install -m 0644 "${APP_DIR}/deploy/systemd/fetchlinks-sync.timer"                  /etc/systemd/system/
-fi
-
-systemctl daemon-reload
-
-if role_has_web; then
-    systemctl enable --now fetchlinks-web.service
-    systemctl enable --now fetchlinks-export-rss-feeds.timer
-    systemctl restart   fetchlinks-export-rss-feeds.timer
-    systemctl restart   fetchlinks-web.service
-fi
-if [[ "${ROLE}" == "all" ]]; then
-    systemctl enable --now fetchlinks-ingest.timer
-    systemctl enable --now fetchlinks-retain.timer
-fi
-if [[ "${ROLE}" == "ingest" ]]; then
-    systemctl enable --now fetchlinks-sync.timer
-fi
-
-# ---- one-time source table seeds. These use temporary seed-only configs so
-# missing network credentials do not block no-network seed imports.
-# control.db (feed/subreddit identity) is canonical on the web host.
-if role_has_web; then
-    seed_source_tables
-
-    log "Exporting rss_feeds table back to ${RSS_FEEDS_FILE}"
-    systemctl start fetchlinks-export-rss-feeds.service || \
-        warn "rss_feeds export step reported a failure; check the journal."
-fi
-
-# Validate ingest sources wherever ingest actually runs.
-if role_has_ingest; then
-    validate_ingest_sources
-fi
-
-# nginx + TLS are provisioned separately by deploy/tls.sh.
-
-
-# ---- final summary ----------------------------------------------------------
-
-log "Done. Status:"
-if role_has_web; then
-    systemctl --no-pager --lines=0 status fetchlinks-web.service                  || true
-    systemctl --no-pager --lines=0 status fetchlinks-export-rss-feeds.timer       || true
-fi
-if [[ "${ROLE}" == "all" ]]; then
-    systemctl --no-pager --lines=0 status fetchlinks-ingest.timer                 || true
-    systemctl --no-pager --lines=0 status fetchlinks-retain.timer                 || true
-fi
-if [[ "${ROLE}" == "ingest" ]]; then
-    systemctl --no-pager --lines=0 status fetchlinks-sync.timer                   || true
-fi
+log "Installed. Current state:"
+systemctl list-timers --all 'fetchlinks-*' --no-pager || true
 
 cat <<EOF
 
-------------------------------------------------------------
-Bootstrap finished (role: ${ROLE}).
+Next steps
+  1. Put source credentials in ${RUNTIME_DIR}/config/ as reddit.json,
+     bluesky.json and mastodon-infosec.json (see ingest/SETUP.md).
+  2. Put the publisher role's Neon URL in ${RUNTIME_DIR}/publisher.env.
+  3. Pull the catalog and run one cycle by hand before trusting the timers:
+       systemctl start fetchlinks-publish.service   # syncs the catalog
+       systemctl start fetchlinks-collect.service
+       ${PYTHON_BIN} ${APP_DIR}/ingest/publish_tool.py \\
+         --config ${RUNTIME_DIR}/config/fetchlinks.toml status
+
+Logs
+  journalctl -u fetchlinks-collect.service -n 50
+  journalctl -u fetchlinks-publish.service -n 50
 EOF
-
-if role_has_web; then
-    cat <<EOF
-
-Optional next step: provision nginx + TLS once DNS points at this VM:
-  sudo FETCHLINKS_DOMAIN=fetchlinks.example.com \
-       FETCHLINKS_EMAIL=you@example.com \
-       ${APP_DIR}/deploy/tls.sh
-EOF
-fi
-
-if [[ "${ROLE}" == "ingest" ]]; then
-    cat <<EOF
-
-Ingest (Pi) role next steps:
-  1. Ensure ${SYNC_ENV_FILE} has FETCHLINKS_VM_SSH set (and key path).
-  2. Set distinct [paths].db and [paths].control_db in ${CONFIG_FILE}.
-  3. Add this Pi's SSH public key to the VM, rsync-restricted — see
-     ${APP_DIR}/deploy/sync/authorized_keys.example.
-  4. Trigger one cycle: systemctl start fetchlinks-sync.service
-EOF
-fi
-
-cat <<EOF
-------------------------------------------------------------
-EOF
-
-if [[ -n "${GENERATED_ADMIN_PASSWORD}" ]]; then
-    cat <<EOF
-
-Generated web admin password (shown once):
-  ${GENERATED_ADMIN_PASSWORD}
-EOF
-fi
-
-if [[ "${#SKIPPED_CREDENTIAL_SOURCES[@]}" -gt 0 ]]; then
-    warn "Skipped credentials for: ${SKIPPED_CREDENTIAL_SOURCES[*]}. Those sources remain enabled and may fail until credentials are added."
-fi
-
-if [[ "${#VALIDATION_FAILED_SOURCES[@]}" -gt 0 ]]; then
-    warn "Install completed, but these sources failed validation: ${VALIDATION_FAILED_SOURCES[*]}."
-fi
