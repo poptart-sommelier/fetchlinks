@@ -1,181 +1,187 @@
 # Fetchlinks overview
 
-Fetchlinks ingests links shared on RSS, Reddit, Bluesky, and Mastodon into
-SQLite and serves them through a server-rendered Next.js web app. It runs on a
-single small Ubuntu VM by default, with the smallest possible operational
-surface; ingest can optionally be split onto a home Raspberry Pi (see
-Architecture below).
+Fetchlinks collects links shared on RSS, Reddit, Bluesky and Mastodon, stores
+them in PostgreSQL, and serves them through a server-rendered Next.js web app.
 
-For how to deploy and operate it on a VM, see [deploy/README.md](deploy/README.md).
-For forward-looking work and history, see `PLAN.md` (local, untracked).
+It runs on managed services with one deliberate exception. The web app is on
+Vercel and the database on Neon, both free tier. Collection stays on a
+Raspberry Pi at home, because several hundred RSS hosts throttle or block
+datacentre IP ranges and a residential connection is not subject to that.
 
-## Goal
-
-Deploy Fetchlinks on a single Ubuntu 24.04 VM with the smallest possible
-operational surface:
-
-- Stand up a fresh VM in Azure (manual, a few clicks, once or twice a year).
-- SSH in, run **one script**, get a working system. Run a second, separate
-  script when DNS exists and you want public TLS.
-- Re-run either script to update or recover from drift.
-
-No Docker. No Ansible. No container registry. No managed database.
+For deploying and operating the Pi, see [deploy/README.md](deploy/README.md).
 
 ## Architecture
 
-Fetchlinks runs in one of two topologies. **Single-host** (the default) keeps
-everything on one VM with one SQLite file. The **two-host split** moves ingest
-to a home Raspberry Pi (residential IP, to escape Azure-IP RSS throttling)
-while the web GUI stays on the VM; the two sides share two SQLite files, one
-writer each. The split is opt-in — leaving `[paths].control_db` unset collapses
-back to a single physical file.
-
-### Single-host (default)
-
 ```text
-Azure VM (Ubuntu 24.04 LTS, B1ms, East US)
-  ├─ nginx + certbot                            host TLS reverse proxy (optional, via tls.sh)
-  ├─ Node.js 24                                 runs `next start`
-  ├─ Python 3.12 + venv at <checkout>/.venv
-  ├─ <checkout>                            git checkout + runtime home
-  ├─ <checkout>/ingest/db/fetchlinks.db    SQLite (WAL)
-  ├─ <checkout>/ingest/data/config/        fetchlinks.toml + rss_feeds.txt
-  ├─ <checkout>/ingest/data/logs/          ingest logs
-  ├─ <checkout>/web/.env.production        web env + admin Basic auth
-  ├─ systemd: fetchlinks-web.service            127.0.0.1:3000 (Next.js)
-  ├─ systemd: fetchlinks-ingest.{service,timer} oneshot Python ingest, every 30 min
-  ├─ systemd: fetchlinks-retain.{service,timer} weekly retention + conditional VACUUM
-  └─ systemd: fetchlinks-export-rss-feeds.{service,timer} 5-minute DB → rss_feeds.txt snapshot
+Raspberry Pi (home, residential IP)          Neon (eu-west-2)          Vercel (lhr1)
+  fetchlinks-collect.timer  30 min             PostgreSQL 18             Next.js
+    fetch_links.py                               catalog.*                 public pages
+      RSS / Reddit / Bluesky / Mastodon          content.*                 /admin/* (Basic auth)
+      └─> runtime/outbox/   batch spool
+  fetchlinks-publish.timer  hourly
+    publish_tool.py publish       ───────────>  insert batches
+    publish_tool.py sync-catalog  <───────────   export catalog snapshot
+  fetchlinks-retain.timer   weekly
+    publish_tool.py retain        ───────────>  delete posts past one month
 ```
 
-Request path: `Internet -> nginx:443 (TLS) -> 127.0.0.1:3000 -> SQLite`
-Ingest path:  `timer -> venv python fetch_links.py -> SQLite`
-Admin path:   `Internet -> nginx:443 -> /admin/* -> HTTP Basic -> SQLite (read-write)`
+Read path: `Internet -> Vercel (lhr1) -> Neon HTTP driver -> PostgreSQL`
+Write path: `Pi -> psycopg over TLS -> PostgreSQL`
+Admin path: `Internet -> Vercel -> /admin/* -> HTTP Basic -> PostgreSQL`
 
-### Two-host split (opt-in)
+## The collector/publisher split
 
-Two SQLite files, one writer each:
+This is the central design decision, and everything else follows from it.
 
-- **control.db (VM-owned)** — feed/subreddit *identity + on/off*. The web admin
-  writes it; the Pi only reads a pulled copy.
-- **data.db (Pi-owned)** — everything ingest produces: posts, per-feed health,
-  follows snapshots, ingest cursors. The Pi writes it; the web only reads it.
+**Collector** — `ingest/fetch_links.py` and the source modules. Reads config,
+credentials, a catalog snapshot and its own resume state, all local files.
+Fetches from every enabled source and writes one validated batch to the spool.
+It contains no SQL, no table names, no driver import and no database
+configuration.
 
-Cross-file relations key on natural keys (`normalized_url`, `normalized_name`,
-post `unique_id_string`, Bluesky `did`) — never autoincrement ids, which don't
-match across separate files. The web admin opens control.db read-write and
-`ATTACH`es a read-only data.db so membership + health show as one row.
+**Publisher** — `ingest/publish_tool.py` and `ingest/publisher/`. The only code
+that opens a database. Drains queued batches, exports the catalog snapshot the
+Collector reads, applies migrations and enforces retention.
 
-```text
-Home Pi (ingest role)                         Azure VM (web role)
-  fetchlinks-sync.timer (30 min)                fetchlinks-web.service (Next.js)
-    1. rsync pull  control.db  <───────────────  control.db (canonical; admin writes)
-    2. fetch_links.py  -> data.db
-    3. retain.py       -> data.db (Pi only)
-    4. sqlite3 VACUUM INTO snapshot
-    5. rsync push  data.db     ───────────────>  data.db (replica; atomic rename; web reads)
-```
+They meet at a versioned on-disk batch contract (`ingest/pipeline/`, schemas in
+`ingest/schemas/`), not at a function call. That buys three things:
 
-Transport is **Pi-initiated SSH/rsync** — no inbound to the home network and no
-new service on the VM. The VM restricts the Pi's key to rsync within one
-directory (see `deploy/sync/authorized_keys.example`). The web opens data.db
-per request read-only, so an atomic rename swap needs no web restart. A
-one-cycle lag is acceptable: adding/removing a feed is instant (read from
-control.db), and its health columns fill in on the next data.db ship.
-Retention runs **only on the Pi** because the VM's data.db is a pure replica.
-Auto-disable-on-failure is dropped (the Pi can't write VM-owned `enabled`);
-the Pi counts `consecutive_failures` + `last_error` and the admin surfaces
-failing feeds for manual removal.
+- The Pi holds no database credential in the process that contacts several
+  hundred untrusted websites. The boundary is enforced by which systemd unit
+  reads `publisher.env`, not by convention.
+- A database outage costs nothing. Batches queue on disk and drain later. The
+  collector never stops and never loses work.
+- Collection is portable. It runs anywhere with a filesystem; the destination
+  is somebody else's problem.
 
-See [deploy/sync/README.md](deploy/sync/README.md) for setup.
+Publishing is idempotent. Replaying a batch produces no duplicate posts,
+no repeated health increments and no checkpoint regression, so a crash between
+"inserted" and "recorded as published" is safe to retry.
 
-Public site is read-only; the `/admin` route is an index of admin
-sub-pages (currently just `/admin/feeds` for the RSS feed table). All
-`/admin/*` routes open the DB read-write to manage their respective
-state. Auth is HTTP Basic via env vars
-(`FETCHLINKS_ADMIN_USER` / `FETCHLINKS_ADMIN_PASS`) read by `web/src/proxy.ts`.
+## Schemas and roles
 
-## Cost target
+Three schemas, and the split matters:
 
-| Item | Approx GBP/mo |
-|---|---|
-| B1ms VM (East US) | £11.62 |
-| Standard SSD (~32 GB) | ~£2.50 |
-| Static IP | ~£2.75 |
-| **Total** | **~£17/mo (~$21 USD)** |
+- **`catalog`** — feed and subreddit identity, and their on/off state. Owned by
+  the web admin. The Publisher reads it and exports it to the Pi.
+- **`content`** — everything collection produces: posts, URLs, feed health,
+  source checkpoints, follows snapshots, and the published-batch ledger.
+- **`app`** — schema migration bookkeeping.
+
+Two runtime roles, neither of which is the database owner and neither of which
+can perform DDL:
+
+- `fetchlinks_web` — used by Vercel. Reads everything; writes only the catalog
+  tables the admin UI manages.
+- `fetchlinks_publisher` — used by the Pi. Writes `content`, reads `catalog`.
+
+Migrations live in `db/migrations/` and are applied by the owner role, never by
+a running service.
+
+## Cost
+
+| Item | GBP/mo |
+| --- | --- |
+| Vercel Hobby | £0 |
+| Neon Free | £0 |
+| Raspberry Pi (already owned, ~3 W) | ~£0.60 electricity |
+
+Two free-tier limits actually bind, and both shaped the design:
+
+- **Compute: 100 CU-hours/month.** Neon cannot scale to zero in under five
+  minutes, so every wake costs at least five minutes. Cadence, not query
+  volume, decides the bill. Hourly publishing lands near 15 CU-hours; every 15
+  minutes would be about 61. The catalog sync shares the publisher's wake for
+  the same reason.
+- **Storage: 0.5 GB.** Retention is the only control over it, which is why the
+  post window is one month rather than three.
 
 ## Repository layout
 
 ```text
-deploy/
-├── README.md                          how to deploy + operate on a VM
-├── bootstrap.sh                       app + services + firewall installer / updater (FETCHLINKS_ROLE=all|web|ingest)
-├── tls.sh                             nginx + Let's Encrypt provisioner (separate, idempotent)
-├── nginx/fetchlinks-web.conf.example  nginx site template (rendered by tls.sh)
-├── sync/                              two-host (Pi ingest + VM web) sync layer
-│   ├── README.md                      two-host setup + cycle docs
-│   ├── fetchlinks-sync.sh             Pi cycle: pull control.db, ingest, retain, snapshot, push data.db
-│   ├── fetchlinks-sync.env.example    sync service environment (VM target, paths)
-│   └── authorized_keys.example        VM-side rsync-restricted SSH key
-└── systemd/
-    ├── fetchlinks-web.service                         Next.js webapp (web role)
-    ├── fetchlinks-ingest.{service,timer}              ingest, every 30 min (single-host)
-    ├── fetchlinks-retain.{service,timer}              retention, weekly (single-host)
-    ├── fetchlinks-export-rss-feeds.{service,timer}    feed snapshot, every 5 min (web role)
-    └── fetchlinks-sync.{service,timer}                Pi sync cycle, every 30 min (ingest role)
+db/migrations/                     PostgreSQL schema, applied by the owner role
+deploy/                            Raspberry Pi installer and systemd units
+├── bootstrap.sh                   idempotent installer; also the upgrade path
+├── fetchlinks.pi.toml             collector config template
+├── publisher.env.example          Neon URL template (publisher role)
+└── systemd/                       collect / publish / retain units and timers
 
-ingest/                                Python ingest package + tests
-  ├── data/config/fetchlinks.toml      runtime config used in dev + production
-  ├── data/config/rss_feeds.txt        seed file + 5-minute DB snapshot
-  └── db/fetchlinks.db                 SQLite DB (single-host; two-host uses control.db + data.db)
-web/                                   Next.js webapp (TypeScript, vitest)
-  ├── .env.production.example          production web env template
-  ├── src/app/page.tsx                 public posts listing
-  ├── src/app/admin/page.tsx           admin index (links to sub-pages)
-  ├── src/app/admin/feeds/             admin UI for the rss_feeds table
-  ├── src/server/                      DB helpers, config loader
-  └── src/proxy.ts                     /admin/* HTTP Basic gate (Next 16 proxy convention)
+ingest/                            Python, collector + publisher
+├── fetch_links.py                 collector entry point; no database
+├── publish_tool.py                publisher CLI: migrate, bootstrap-catalog,
+│                                  sync-catalog, publish, retain, status
+├── spool_tool.py                  inspect the batch spool without a database
+├── pipeline/                      batch contract, spool, catalog, state
+├── publisher/                     connection, migrations, insertion, retention
+├── schemas/                       versioned batch JSON Schemas
+└── data/config/                   development config and seed lists
+
+web/                               Next.js, TypeScript, vitest
+├── src/app/page.tsx               public posts listing
+├── src/app/admin/                 admin index and the feeds table
+├── src/server/sql.ts              SqlClient port: Neon HTTP driver or pg
+└── src/proxy.ts                   /admin/* HTTP Basic gate
 ```
+
+`web/src/server/sql.ts` exists because Neon's HTTP driver suits Vercel but only
+speaks to Neon. Tests drive identical SQL through `pg` against a real
+PostgreSQL instance. That leaves a thin adapter untested and buys real-database
+coverage of every query, which is the better trade.
+
+## Runtime layout on the Pi
+
+Everything lives in one directory, with all mutable state under a single
+gitignored `runtime/`:
+
+```text
+~/fetchlinks/                 the checkout
+├── .venv/
+└── runtime/
+    ├── config/               fetchlinks.toml + source credentials (0600)
+    ├── catalog/              catalog snapshot exported by the publisher
+    ├── state/                collector resume state
+    ├── outbox/               batch spool
+    ├── logs/
+    └── publisher.env         Neon URL (0600)
+```
+
+Because `runtime/` is gitignored, `git pull` can never disturb a queued batch
+or roll back a cursor.
 
 ## Security
 
-- SSH: key-only (Azure default), root login disabled (Ubuntu default).
-- Firewall: `ufw` deny inbound. The web role allows 22/80/443; the ingest Pi
-  allows only 22 (and initiates all sync outbound). The Pi's SSH key on the VM
-  is restricted to rsync within a single directory (`restrict` + rrsync).
-- Services run as `fetchlinks`, never root.
-- API credentials live wherever `ingest/data/config/fetchlinks.toml` points;
-  bootstrap can install missing enabled-source credential files during first
-  setup. Web admin credentials live in ignored `web/.env.production`.
-- Web admin (`/admin/*`) is gated by HTTP Basic against
-  `FETCHLINKS_ADMIN_USER` / `FETCHLINKS_ADMIN_PASS` in
-  `<checkout>/web/.env.production`. Constant-time credential compare. If either
-  var is unset, `/admin/*` returns 503 instead of granting access.
-- TLS via certbot with auto-renewal timer.
-- Security updates via `unattended-upgrades`.
+- The Pi accepts no inbound connections beyond SSH and runs no web server.
+- The collector unit has no `EnvironmentFile`, so the database URL is absent
+  from the process that fetches from untrusted sites.
+- Neither runtime role can perform DDL or write outside its own surface. This
+  is asserted against a real instance, not assumed.
+- Source credentials are `0600` under `runtime/config/`, never in the repo.
+- `/admin/*` is gated by HTTP Basic with a constant-time compare. If either
+  credential variable is unset the route returns 503 rather than opening.
+- Vercel preview deployments are pinned to a separate Neon branch, so a preview
+  cannot read or write production data.
+- TLS to the database is enforced by the connection string.
+
+## Operations
+
+No backups and no alerting, both deliberate.
+
+Posts are a one-month rolling window that deletes itself, and losing all of
+them is an accepted outcome, so nothing is backed up. The one irreplaceable
+asset — the curated feed list — is exported to the Pi on every publish as a
+side effect of normal operation.
+
+No new articles on the site is the symptom of every failure that matters:
+collection stopped, publishing stopped, or the database filled and started
+refusing writes. Monitoring would only restate what the front page shows.
+Services log to journald; `publish_tool.py status` reports the queue and the
+database on demand.
 
 ## Local development
 
-- `npm run dev` in `web/` (or the **Webapp: Dev Server** VS Code task —
-  sets `FETCHLINKS_DB`, `FETCHLINKS_ADMIN_USER`, `FETCHLINKS_ADMIN_PASS`).
-- Host Python venv for ingest, run via the **Ingest: Run** task.
-- `npm run validate` in `web/` for lint + typecheck + tests + build.
-- `pytest` (under `.venv`) for the Python suite.
-
-## Baseline facts
-
-- Reddit, Bluesky, Mastodon, and RSS are implemented, but Fetchlinks has not yet
-  been deployed in production. Credentialed sources need config entries and
-  matching external files.
-- When the current SQLite topology is run, the DB is the runtime source of truth
-  for posts, URLs, and `rss_feeds`.
-  In the two-host split, feed/subreddit identity + on/off live in VM-owned
-  control.db and everything ingest produces (posts, health, follows, cursors)
-  lives in Pi-owned data.db, joined on natural keys.
-  `rss_feeds.txt` is seed input on first install and is then refreshed from
-  the DB every 5 minutes for review, backup, and occasional repo commits.
-- `bootstrap.sh` is idempotent and is also the upgrade path. There is no
-  separate "deploy" or "release" script.
-- The web app is server-rendered, forms-only (no client JS), opens the DB
-  read-only on the public pages and read-write on `/admin/*`. SQLite is
-  in WAL mode; concurrent ingest writes don't block reads.
+- `npm run dev` in `web/`; `npm run validate` for lint, typecheck, tests and
+  build.
+- Web tests need a real PostgreSQL instance — see [web/README.md](web/README.md).
+- Python: `python -m unittest discover -s tests -t .` from `ingest/`.
+- The collector runs against a local spool with no database at all, which is
+  the quickest way to exercise a source end to end.

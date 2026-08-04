@@ -1,9 +1,12 @@
 [Unit]
-Description=Run Fetchlinks retention weekly
-Requires=fetchlinks-retain.service
+Description=Weekly schedule for Fetchlinks retention
 
 [Timer]
-OnCalendar=Sun 03:30
+# Retention is the only control over database size now that nothing is backed
+# up, and Neon's free tier stops at 0.5 GB. Weekly is ample for a one-month
+# window; Persistent=true means a Pi that was off on Sunday prunes on boot
+# rather than skipping a week.
+OnCalendar=Sun 03:12
 RandomizedDelaySec=10min
 Persistent=true
 Unit=fetchlinks-retain.service

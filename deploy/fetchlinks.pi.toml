@@ -1,0 +1,79 @@
+# Fetchlinks runtime configuration -- deployed host template.
+#
+# bootstrap.sh copies this to runtime/config/fetchlinks.toml on first install
+# and never overwrites it afterwards, so local edits survive every update.
+#
+# Relative paths resolve against this file's directory, which after install is
+# ~/fetchlinks/runtime/config. That is why everything below is a bare filename:
+# the whole deployment is one directory and nothing needs an absolute path.
+#
+# This file belongs to the Collector. It holds source credentials and no
+# database URL. The Neon URL lives in runtime/publisher.env, which only the
+# publisher and retention units read.
+
+[paths]
+log_file  = "../logs/fetch_links.log"
+log_level = "INFO"
+# Relative to this file, so this resolves to ~/fetchlinks/runtime.
+#
+# Set here rather than left to the systemd units alone. RuntimeLayout resolves
+# an explicit config value first, then FETCHLINKS_RUNTIME_DIR, then a default
+# of ~/.fetchlinks/runtime. With this omitted, only the units knew where the
+# spool was, so running publish_tool.py or the collector by hand silently
+# operated on a different, empty spool -- which looks exactly like "nothing is
+# being collected". Config is the single answer both the services and a human
+# at a terminal get.
+runtime_dir = ".."
+
+[ingest]
+# One month. Storage, not taste: Neon Free caps the database at 0.5 GB, and a
+# three-month window across every source plausibly fills it. Collecting posts
+# that retention would delete weeks later is pure waste, so the collection
+# filter and the retention window are deliberately the same number.
+max_post_age_months                  = 1
+excluded_url_host_keywords           = ["businessinsider", "economist.com", "brighttalk.com"]
+excluded_url_or_description_keywords = ["trump", "covid"]
+
+[retention]
+# Pruned weekly by fetchlinks-retain.timer. PostgreSQL autovacuum reclaims the
+# space. max_post_age_months omitted => inherits [ingest].max_post_age_months,
+# so the collector and the pruner cannot disagree about what "old" means.
+enabled = true
+
+# --- Sources ---------------------------------------------------------------
+# Credential files sit beside this one in runtime/config/, mode 0600. See
+# ingest/SETUP.md for the JSON shape each source expects.
+#
+# RSS needs no credentials and is the bulk of the catalog, so a fresh install
+# is useful immediately. The other three are disabled until their credential
+# files exist: an enabled source with no credentials fails config loading
+# outright, which would stop the whole collection cycle rather than just that
+# source. Drop the JSON in, flip `enabled`, done.
+
+[sources.rss]
+enabled                     = true
+# Only read by `publish_tool.py bootstrap-catalog`, on an empty database.
+seed_file                   = "rss_feeds.txt"
+export_path                 = "rss_feeds.txt"
+auto_disable_after_failures = 10
+request_timeout_seconds     = 10
+
+[sources.reddit]
+enabled             = false
+credential_location = "reddit.json"
+seed_file           = "subreddits.txt"
+
+[sources.bluesky]
+enabled             = false
+credential_location = "bluesky.json"
+timeline_limit      = 50
+
+[sources.mastodon]
+enabled = false
+
+[[sources.mastodon.instances]]
+name                = "infosec"
+instance_url        = "https://infosec.exchange"
+credential_location = "mastodon-infosec.json"
+timeline            = "home"
+timeline_limit      = 40

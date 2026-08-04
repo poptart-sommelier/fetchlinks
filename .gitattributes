@@ -1,0 +1,6 @@
+# Shell scripts and systemd units are consumed on Linux. Force LF regardless of
+# the checkout platform, so a script authored on Windows cannot arrive on the Pi
+# with carriage returns and fail with an unreadable "\r: command not found".
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf

@@ -1,0 +1,32 @@
+[Unit]
+Description=Fetchlinks collector (one-shot, no database)
+Documentation=file://__FETCHLINKS_APP_DIR__/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__FETCHLINKS_USER__
+WorkingDirectory=__FETCHLINKS_APP_DIR__/ingest
+# The collector's whole reason for existing is that it holds no database
+# credential. Deliberately no EnvironmentFile: publisher.env is not readable
+# from here, so a mistake in this unit cannot leak the Neon URL into a process
+# that talks to 719 third-party websites.
+Environment=FETCHLINKS_RUNTIME_DIR=__FETCHLINKS_RUNTIME_DIR__
+ExecStart=__FETCHLINKS_APP_DIR__/.venv/bin/python __FETCHLINKS_APP_DIR__/ingest/fetch_links.py --config __FETCHLINKS_RUNTIME_DIR__/config/fetchlinks.toml
+Nice=10
+TimeoutStartSec=30min
+SyslogIdentifier=fetchlinks-collect
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# One writable path: everything mutable lives under runtime/.
+ReadWritePaths=__FETCHLINKS_RUNTIME_DIR__
+
+[Install]
+WantedBy=multi-user.target

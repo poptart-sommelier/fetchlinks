@@ -379,7 +379,13 @@ def _build_mastodon(section: dict | None, base: Path, *,
         if not isinstance(raw, dict):
             raise ValueError('[[sources.mastodon.instances]] entries must be tables')
 
-        instance_enabled = bool(raw.get('enabled', True))
+        # An instance cannot be more enabled than the source that contains it.
+        # Without this, disabling [sources.mastodon] still demanded every
+        # instance's credential file at config-load time, so a host that had
+        # deliberately turned Mastodon off could not start at all -- and the
+        # failure was a missing-file error naming a source nobody had asked to
+        # run. Reddit and Bluesky already behaved this way.
+        instance_enabled = enabled and bool(raw.get('enabled', True))
         name = raw.get('name')
         if not isinstance(name, str) or not name.strip():
             raise ValueError('Mastodon instance requires a non-empty name')

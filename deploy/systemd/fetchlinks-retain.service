@@ -1,14 +1,16 @@
 [Unit]
-Description=Fetchlinks retention (prune old posts, optional VACUUM)
+Description=Fetchlinks retention (delete posts past the age limit)
+Documentation=file://__FETCHLINKS_APP_DIR__/deploy/README.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=fetchlinks
-Group=fetchlinks
+User=__FETCHLINKS_USER__
 WorkingDirectory=__FETCHLINKS_APP_DIR__/ingest
-ExecStart=__FETCHLINKS_APP_DIR__/.venv/bin/python __FETCHLINKS_APP_DIR__/ingest/retain.py --config __FETCHLINKS_APP_DIR__/ingest/data/config/fetchlinks.toml
+EnvironmentFile=__FETCHLINKS_RUNTIME_DIR__/publisher.env
+Environment=FETCHLINKS_RUNTIME_DIR=__FETCHLINKS_RUNTIME_DIR__
+ExecStart=__FETCHLINKS_APP_DIR__/.venv/bin/python __FETCHLINKS_APP_DIR__/ingest/publish_tool.py --config __FETCHLINKS_RUNTIME_DIR__/config/fetchlinks.toml retain
 Nice=10
 TimeoutStartSec=30min
 SyslogIdentifier=fetchlinks-retain
@@ -17,7 +19,10 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=false
-ReadWritePaths=__FETCHLINKS_APP_DIR__/ingest
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=__FETCHLINKS_RUNTIME_DIR__
 
 [Install]
 WantedBy=multi-user.target
