@@ -436,6 +436,23 @@ class ClaimedBatch:
     # -- resolution ---------------------------------------------------------
 
     def mark_published(self) -> None:
+        """Archive a batch whose content is committed at the destination.
+
+        If the archive already holds this batch id, the archive step has
+        already run and only the local cleanup was left outstanding. Batch
+        directories are immutable and ids are unique, so the archived copy is
+        this batch; the redundant working copy is discarded rather than left
+        in ``processing`` to stop the drain on every subsequent run.
+        """
+        destination = self._spool.batch_path(STAGE_PUBLISHED, self.batch_id)
+        if destination.exists():
+            if self._resolved:
+                raise SpoolError(f'Batch {self.batch_id} has already been resolved')
+            atomic.remove_directory(self.path)
+            self.path = destination
+            self._resolved = True
+            logger.info('Batch %s was already archived; discarded the working copy', self.batch_id)
+            return
         self._resolve(STAGE_PUBLISHED)
         logger.info('Archived published batch %s', self.batch_id)
 

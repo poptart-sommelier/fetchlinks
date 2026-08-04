@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import shutil
 import tempfile
 import unittest
 from datetime import UTC
@@ -492,6 +493,26 @@ class ResolutionTests(_SpoolCase):
         batch = self.spool.claim_next()
         batch.mark_published()
         self.assertTrue((batch.path / 'posts.ndjson').is_file())
+
+    def test_archiving_a_batch_the_archive_already_holds_completes_quietly(self):
+        # A publisher that commits, archives, and then dies before clearing its
+        # working copy leaves the same id in both `processing` and `published`.
+        # Refusing to archive would strand that batch and stop the drain on
+        # every later run, so the redundant working copy is discarded instead.
+        batch_id = self.write_batch(posts=[make_post('a')]).batch_id
+        self.spool.claim_next().mark_published()
+        shutil.copytree(
+            self.spool.batch_path(STAGE_PUBLISHED, batch_id),
+            self.spool.batch_path(STAGE_PROCESSING, batch_id),
+        )
+
+        stranded = self.spool.claim_next()
+        self.assertEqual(stranded.batch_id, batch_id)
+        stranded.mark_published()
+
+        self.assertEqual(self.spool.batch_ids(STAGE_PROCESSING), [])
+        self.assertEqual(self.spool.batch_ids(STAGE_PUBLISHED), [batch_id])
+        self.assertTrue((stranded.path / 'posts.ndjson').is_file())
 
 
 class ReplayTests(_SpoolCase):
