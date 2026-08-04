@@ -14,9 +14,16 @@
 [paths]
 log_file  = "../logs/fetch_links.log"
 log_level = "INFO"
-# runtime_dir is deliberately omitted. The systemd units set
-# FETCHLINKS_RUNTIME_DIR, so the spool location is visible in the unit file
-# rather than buried in config.
+# Relative to this file, so this resolves to ~/fetchlinks/runtime.
+#
+# Set here rather than left to the systemd units alone. RuntimeLayout resolves
+# an explicit config value first, then FETCHLINKS_RUNTIME_DIR, then a default
+# of ~/.fetchlinks/runtime. With this omitted, only the units knew where the
+# spool was, so running publish_tool.py or the collector by hand silently
+# operated on a different, empty spool -- which looks exactly like "nothing is
+# being collected". Config is the single answer both the services and a human
+# at a terminal get.
+runtime_dir = ".."
 
 [ingest]
 # One month. Storage, not taste: Neon Free caps the database at 0.5 GB, and a

@@ -59,6 +59,11 @@ esac
 
 DPKG_ARCH="$(dpkg --print-architecture 2>/dev/null || echo unknown)"
 
+# This script is routinely run over a non-interactive SSH session, where
+# debconf prints several paragraphs about being unable to find a terminal
+# before falling back to exactly this frontend anyway.
+export DEBIAN_FRONTEND=noninteractive
+
 log "Installing system packages (dpkg architecture: ${DPKG_ARCH})"
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
