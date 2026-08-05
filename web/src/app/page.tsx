@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Fragment } from "react";
 
+import { formatRelative } from "../lib/format-relative";
 import { safeExternalHref } from "../lib/safe-external-href";
 import type {
   PostPage,
@@ -73,14 +75,28 @@ export async function loadLatestPosts({
 
   try {
     const sql = getSqlClient(env);
+    const requested = await getPosts(sql, {
+      ...activeFilters,
+      page,
+      pageSize: POSTS_PER_PAGE,
+    });
+
+    // A hand-typed ?page= past the end otherwise renders "Page 999 of 50" over
+    // an empty list, with a Previous link into more emptiness. Land on the last
+    // real page instead. The second query only happens on that dead path.
+    const lastPage = Math.max(requested.totalPages, 1);
+    const resolved =
+      page > lastPage && requested.totalPosts > 0
+        ? await getPosts(sql, {
+            ...activeFilters,
+            page: lastPage,
+            pageSize: POSTS_PER_PAGE,
+          })
+        : requested;
 
     return {
       status: "ready",
-      page: await getPosts(sql, {
-        ...activeFilters,
-        page,
-        pageSize: POSTS_PER_PAGE,
-      }),
+      page: resolved,
       filters: activeFilters,
     };
   } catch {
@@ -91,7 +107,7 @@ export async function loadLatestPosts({
 export function LatestPostsView({ result }: { result: LatestPostsResult }) {
   if (result.status === "error") {
     return (
-      <main className="shell">
+      <main className="shell shell-reading">
         <PageHeader />
         <section className="state state-error" role="alert">
           <h2>Posts are unavailable</h2>
@@ -104,7 +120,7 @@ export function LatestPostsView({ result }: { result: LatestPostsResult }) {
   const { page } = result;
 
   return (
-    <main className="shell">
+    <main className="shell shell-reading">
       <PageHeader filters={result.filters} page={page} />
       <FilterBar filters={result.filters} />
       {page.posts.length === 0 ? (
@@ -141,9 +157,9 @@ function PageHeader({
     <header className="page-header">
       <div className="page-title">
         <p className="eyebrow">
-          Fetchlinks
+          <Link href="/">Fetchlinks</Link>
         </p>
-        <h1>Latest posts</h1>
+        <h1>{describeFilters(filters) ?? "Latest posts"}</h1>
       </div>
       {page ? (
         <p
@@ -156,6 +172,27 @@ function PageHeader({
       ) : null}
     </header>
   );
+}
+
+/**
+ * What the reader is currently looking at, for the page heading. Without this
+ * a filtered view still announces itself as "Latest posts" and the only clue
+ * that a filter is applied is the match count.
+ */
+function describeFilters(filters: ActiveFilters): string | undefined {
+  if (filters.author) {
+    return filters.author;
+  }
+
+  if (filters.source) {
+    return formatUrlLabel(filters.source);
+  }
+
+  if (filters.sourceType) {
+    return filters.sourceType;
+  }
+
+  return filters.q ? `Results for “${filters.q}”` : undefined;
 }
 
 function FilterBar({ filters }: { filters: ActiveFilters }) {
@@ -205,29 +242,68 @@ function PostListItem({
   filters: ActiveFilters;
   post: PostSummary;
 }) {
+  const primary = pickPrimaryLink(post);
+  const extraUrls = post.urls.filter((url) => url.id !== primary?.urlId);
   const directHref = safeExternalHref(post.directLink);
+  const showDirectLink = directHref !== null && directHref !== primary?.href;
+  const title = post.description ?? "Untitled post";
+  const absoluteDate = formatPostDate(post.dateCreated);
+  const sourceHost = getHostname(post.source);
+  // The feed and the article it links to usually live on the same host, so
+  // showing both just prints the domain twice. Only worth the space when the
+  // post sends you somewhere other than where it came from.
+  const targetHost =
+    primary?.hostname && primary.hostname !== sourceHost
+      ? primary.hostname
+      : undefined;
 
   return (
     <article className="post-item">
-      <header className="post-heading">
-        <div className="post-meta">
-          <SourceLabel currentQ={filters.q} post={post} />
-        </div>
-        <time className="post-date" dateTime={post.dateCreated}>
-          {formatPostDate(post.dateCreated)}
+      <h2 className="post-title">
+        {primary ? (
+          <a
+            href={primary.href}
+            rel="noreferrer"
+            target="_blank"
+            title={primary.title}
+          >
+            {title}
+          </a>
+        ) : (
+          title
+        )}
+      </h2>
+      <div className="post-meta">
+        <SourceLabel currentQ={filters.q} post={post} />
+        <span aria-hidden="true" className="post-meta-separator">
+          ·
+        </span>
+        <time
+          className="post-date"
+          dateTime={post.dateCreated}
+          title={absoluteDate}
+        >
+          {formatRelative(post.dateCreated) ?? absoluteDate}
         </time>
-      </header>
-      <h2>{post.description ?? "Untitled post"}</h2>
-      {post.urls.length > 0 || directHref ? (
+        {targetHost ? (
+          <>
+            <span aria-hidden="true" className="post-meta-separator">
+              ·
+            </span>
+            <span className="post-target-host">{targetHost}</span>
+          </>
+        ) : null}
+      </div>
+      {extraUrls.length > 0 || showDirectLink ? (
         <div className="post-links">
-          {post.urls.length > 0 ? (
-            <ul className="post-link-list" aria-label="Post links">
-              {post.urls.map((url) => (
+          {extraUrls.length > 0 ? (
+            <ul className="post-link-list" aria-label="Other links in this post">
+              {extraUrls.map((url) => (
                 <PostLinkRow key={url.id} url={url} />
               ))}
             </ul>
           ) : null}
-          {directHref ? (
+          {showDirectLink ? (
             <a
               className="post-source-action"
               href={directHref}
@@ -243,6 +319,59 @@ function PostListItem({
   );
 }
 
+type PrimaryLink = {
+  href: string;
+  hostname: string | undefined;
+  title: string;
+  urlId?: number;
+};
+
+/**
+ * The link the headline should open: the post's first usable URL, falling back
+ * to its permalink at the source. Everything else is demoted to the list below,
+ * which in practice is almost always empty.
+ */
+function pickPrimaryLink(post: PostSummary): PrimaryLink | undefined {
+  for (const url of post.urls) {
+    const href = safeExternalHref(url.href);
+
+    if (href) {
+      return {
+        href,
+        hostname: getHostname(href),
+        title: describeUrl(url),
+        urlId: url.id,
+      };
+    }
+  }
+
+  const directHref = safeExternalHref(post.directLink);
+
+  return directHref
+    ? { href: directHref, hostname: getHostname(directHref), title: directHref }
+    : undefined;
+}
+
+function describeUrl(url: PostUrl) {
+  return url.href !== url.originalUrl
+    ? `${url.href} (via ${url.originalUrl})`
+    : url.href;
+}
+
+function getHostname(value: string | null | undefined): string | undefined {
+  const safe = safeExternalHref(value);
+
+  if (!safe) {
+    return undefined;
+  }
+
+  try {
+    return new URL(safe).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
 function SourceLabel({
   currentQ,
   post,
@@ -254,23 +383,24 @@ function SourceLabel({
   const filterHref = buildSourceFilterHref(descriptor, currentQ);
   const title = descriptor.tooltip ?? post.source;
 
-  const content = (
-    <>
-      <span className="post-source-type">{descriptor.typeLabel}</span>
-      {descriptor.middle ? (
-        <>
-          <span className="post-source-sep">·</span>
-          <span className="post-source-mid">{descriptor.middle}</span>
-        </>
-      ) : null}
-      {descriptor.author ? (
-        <>
-          <span className="post-source-sep">·</span>
-          <span className="post-source-author">{descriptor.author}</span>
-        </>
-      ) : null}
-    </>
-  );
+  const parts = [
+    descriptor.typeLabel
+      ? { className: "post-source-type", text: descriptor.typeLabel }
+      : undefined,
+    descriptor.name
+      ? { className: "post-source-mid", text: descriptor.name }
+      : undefined,
+    descriptor.author
+      ? { className: "post-source-author", text: descriptor.author }
+      : undefined,
+  ].filter((part) => part !== undefined);
+
+  const content = parts.map((part, index) => (
+    <Fragment key={part.className}>
+      {index > 0 ? <span className="post-source-sep">·</span> : null}
+      <span className={part.className}>{part.text}</span>
+    </Fragment>
+  ));
 
   if (filterHref) {
     return (
@@ -290,10 +420,7 @@ function SourceLabel({
 function PostLinkRow({ url }: { url: PostUrl }) {
   const href = safeExternalHref(url.href);
   const { hostname, pathLabel } = splitUrlForDisplay(url.href);
-  const usesUnshortenedUrl = url.href !== url.originalUrl;
-  const title = usesUnshortenedUrl
-    ? `${url.href} (via ${url.originalUrl})`
-    : url.href;
+  const title = describeUrl(url);
 
   const content = (
     <>
@@ -400,8 +527,8 @@ function buildPageHref(page: number, filters: ActiveFilters) {
 }
 
 type SourceDescriptor = {
-  typeLabel: string;
-  middle?: string;
+  typeLabel?: string;
+  name?: string;
   author?: string;
   filter?: {
     sourceType?: SourceType;
@@ -437,17 +564,21 @@ function getSourceDescriptor(post: PostSummary): SourceDescriptor {
   }
 
   if (post.sourceType === "rss") {
+    // A publication name is prose, not a type token, so it renders as a name
+    // and the `rss` marker is dropped: the other sources all announce
+    // themselves, so an unmarked source is an RSS feed. The feed URL is
+    // plumbing a reader never needs, and survives as the tooltip.
+    const name = author ?? formatUrlLabel(post.source);
+
     return {
-      typeLabel: "rss",
-      middle: formatUrlLabel(post.source),
-      author,
+      name,
       filter: { sourceType: "rss", source: post.source },
-      tooltip: post.source,
+      tooltip: post.source ? `${name} — ${post.source}` : name,
     };
   }
 
   return {
-    typeLabel: formatUrlLabel(post.source),
+    name: formatUrlLabel(post.source),
     author,
     filter: post.source ? { source: post.source } : undefined,
     tooltip: post.source,

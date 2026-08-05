@@ -12,8 +12,48 @@
   --accent-soft: #e2f1eb;
   --link: #0b5d7e;
   --link-hover: #084865;
+  --visited: #6b5a86;
   --danger: #a23b3b;
   --focus: #b66a00;
+  --on-accent: #ffffff;
+  --control-height: 38px;
+  color-scheme: light;
+}
+
+/* Touch targets need to be bigger than mouse targets, and that depends on the
+   input device rather than the screen width -- a touchscreen laptop is wide
+   and still needs the room. */
+@media (pointer: coarse) {
+  :root {
+    --control-height: 44px;
+  }
+}
+
+/* The whole theme is these variables, so honouring the OS preference is a
+   matter of restating them rather than auditing every rule. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #14171a;
+    --foreground: #e6e9e6;
+    --muted: #9aa5a0;
+    --subtle: #232a2c;
+    --panel: #1b2023;
+    --panel-alt: #212729;
+    --border: #333c3f;
+    --border-strong: #4a5559;
+    --accent: #4bbfa2;
+    --accent-strong: #7fd8c0;
+    --accent-soft: #1d3733;
+    --link: #6fc3e8;
+    --link-hover: #a3dbf3;
+    --visited: #b9a6dd;
+    --danger: #e58080;
+    --focus: #f0a730;
+    /* The dark accent is a light mint, so the text sitting on it has to go
+       dark rather than stay white. */
+    --on-accent: #0d1a17;
+    color-scheme: dark;
+  }
 }
 
 html {
@@ -60,6 +100,13 @@ select {
   width: min(1180px, 100%);
   margin: 0 auto;
   padding: 24px;
+}
+
+/* The post list is prose, not a table: 1180px of it is a very long line for an
+   18px headline. The admin pages keep the wide shell because their rows really
+   do need the room. */
+.shell-reading {
+  width: min(820px, 100%);
 }
 
 .page-header {
@@ -195,11 +242,11 @@ p {
 
 .search-form-field input {
   width: 100%;
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--panel);
   color: var(--foreground);
   text-overflow: ellipsis;
 }
@@ -207,7 +254,7 @@ p {
 .search-form-btn,
 .clear-filters {
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   padding: 0 16px;
@@ -220,7 +267,7 @@ p {
 .search-form-btn {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   cursor: pointer;
 }
 
@@ -322,25 +369,25 @@ p {
 
 .add-form-field input {
   width: 100%;
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--panel);
   color: var(--foreground);
   text-overflow: ellipsis;
 }
 
 .add-form-btn {
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   padding: 0 16px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -382,17 +429,11 @@ p {
   background: var(--panel-alt);
 }
 
-.post-heading {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .post-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  align-items: baseline;
+  gap: 2px 6px;
   min-width: 0;
   color: var(--muted);
   font-size: 13px;
@@ -400,16 +441,21 @@ p {
 }
 
 .post-date {
-  flex-shrink: 0;
-  margin-left: auto;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
   white-space: nowrap;
 }
 
+.post-target-host {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .post-meta-separator {
-  color: var(--border);
+  color: var(--border-strong);
 }
 
 .status-pill {
@@ -746,7 +792,7 @@ a.post-source:hover .post-source-type {
 
 .pagination a {
   display: inline-flex;
-  min-height: 32px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   border: 1px solid var(--accent);
@@ -758,7 +804,7 @@ a.post-source:hover .post-source-type {
 
 .pagination a:hover {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
 }
 
 .post-item h2 {
@@ -769,6 +815,21 @@ a.post-source:hover .post-source-type {
      break opportunity in it. Nothing clips overflow any more, so it has to be
      breakable here rather than pushing the card wide. */
   word-break: break-word;
+}
+
+.post-title a {
+  display: block;
+  color: var(--link);
+}
+
+.post-title a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+/* The one piece of state that matters on a feed you re-read every hour. */
+.post-title a:visited {
+  color: var(--visited);
 }
 
 .post-links {
@@ -892,11 +953,11 @@ a.post-source:hover .post-source-type {
 
 .filter-search input {
   width: 100%;
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--panel);
   color: var(--foreground);
   text-overflow: ellipsis;
 }
@@ -909,14 +970,14 @@ a.post-source:hover .post-source-type {
 
 .filter-actions button {
   display: inline-flex;
-  min-height: 36px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   padding: 0 16px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   font: inherit;
   font-size: 14px;
   font-weight: 700;
@@ -958,7 +1019,7 @@ a.post-source:hover .post-source-type {
 
 .pagination span[aria-disabled="true"] {
   display: inline-flex;
-  min-height: 32px;
+  min-height: var(--control-height);
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border);
@@ -1009,17 +1070,19 @@ a.post-source:hover .post-source-type {
     padding: 14px;
   }
 
-  .post-heading {
-    display: grid;
-  }
-
   .post-source {
     max-width: 100%;
     white-space: normal;
   }
 
+  /* Feed titles are arbitrary text and some run to a full sentence. On a phone
+     that turns the one-line byline into three, so a long name is clipped
+     rather than allowed to outweigh the headline it belongs to. */
   .post-source-mid {
     max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .pagination {
