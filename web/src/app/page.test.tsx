@@ -5,26 +5,64 @@ import type { PostPage } from "../models/read-models";
 import { LatestPostsView, loadLatestPosts } from "./page";
 
 describe("Home", () => {
-  it("renders posts with the source label, extracted URL rows, and pagination links", () => {
+  it("links the headline to the post's first URL and dates it relatively", () => {
     const markup = renderToStaticMarkup(<LatestPostsView result={createReadyResult()} />);
 
     expect(markup).toContain("Latest posts");
-    expect(markup).toContain("Newest post");
     expect(markup).toContain("Grace");
     expect(markup).toContain("reddit/test");
     expect(markup).toContain('href="/?source_type=reddit&amp;author=Grace"');
-    expect(markup).toContain("Apr 28, 2026, 10:00 AM");
-    expect(markup).toContain('aria-label="Post links"');
-    expect(markup).toContain('class="post-link-list"');
-    expect(markup).toContain('class="post-link-row"');
-    expect(markup).toContain('class="post-link-host"');
-    expect(markup).toContain('class="post-link-path"');
-    expect(markup).toContain('class="post-source-action"');
-    expect(markup).toContain("source");
+
+    // The headline itself is the link, rather than a URL row beneath it.
+    expect(markup).toContain(
+      '<h2 class="post-title"><a href="https://example.com/direct-b" rel="noreferrer" target="_blank" title="https://example.com/direct-b">Newest post</a></h2>',
+    );
+
+    // The absolute timestamp stays reachable as the tooltip.
+    expect(markup).toContain('title="Apr 28, 2026, 10:00 AM"');
+    expect(markup).toContain("2026-04-28T10:00:00Z");
+
+    // The post links to example.com but came from reddit.com, so the target
+    // host earns its place in the metadata line.
+    expect(markup).toContain('class="post-target-host">example.com<');
+
+    // The remaining URL is demoted; the one the headline uses is not repeated.
+    expect(markup).toContain('aria-label="Other links in this post"');
     expect(markup).toContain('href="https://example.com/unshortened-b"');
-    expect(markup).toContain('href="https://example.com/direct-b"');
-    expect(markup).not.toContain(">link 1<");
+    expect(markup).not.toContain('class="post-link-row"><a href="https://example.com/direct-b"');
+
+    expect(markup).toContain('class="post-source-action"');
+    expect(markup).toContain('href="https://example.com/source-post"');
     expect(markup).toContain('href="/?page=2"');
+  });
+
+  it("omits the target host when the post links back to its own source", () => {
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        result={createReadyResult({
+          page: createPostPage({ posts: [createRssPost()] }),
+        })}
+      />,
+    );
+
+    // Feed and article share example.com, so printing the domain again is noise.
+    expect(markup).not.toContain("post-target-host");
+  });
+
+  it("drops the single link list when the headline already covers it", () => {
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        result={createReadyResult({
+          page: createPostPage({ posts: [createRssPost()] }),
+        })}
+      />,
+    );
+
+    expect(markup).toContain(
+      '<h2 class="post-title"><a href="https://example.com/a" rel="noreferrer" target="_blank" title="https://example.com/a">First RSS post</a></h2>',
+    );
+    expect(markup).not.toContain("post-link-list");
+    expect(markup).not.toContain("post-link-row");
   });
 
   it("renders a search-only filter bar and preserves filters in pagination links", () => {
@@ -50,7 +88,7 @@ describe("Home", () => {
     );
   });
 
-  it("renders the RSS source label as a filter linking by source_type and source", () => {
+  it("names the publication rather than repeating the feed URL and the type", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView
         result={createReadyResult({
@@ -61,11 +99,31 @@ describe("Home", () => {
       />,
     );
 
-    expect(markup).toContain(">rss<");
-    expect(markup).toContain("example.com/blog");
+    // "rss · example.com/blog · Ada" collapses to the one part a reader needs,
+    // rendered as a name rather than as a lowercase type token.
+    expect(markup).toContain('<span class="post-source-mid">Ada</span>');
+    expect(markup).not.toContain(">rss<");
+    expect(markup).not.toContain("post-source-type");
+    expect(markup).toContain('title="Ada — https://example.com/blog"');
     expect(markup).toContain(
       'href="/?source_type=rss&amp;source=https%3A%2F%2Fexample.com%2Fblog"',
     );
+  });
+
+  it("heads a filtered view with what is being filtered to", () => {
+    const bySource = renderToStaticMarkup(
+      <LatestPostsView
+        result={createReadyResult({ filters: { source: "https://example.com/blog" } })}
+      />,
+    );
+    const byQuery = renderToStaticMarkup(
+      <LatestPostsView result={createReadyResult({ filters: { q: "AI" } })} />,
+    );
+
+    expect(bySource).toContain("<h1>example.com/blog</h1>");
+    expect(bySource).not.toContain("<h1>Latest posts</h1>");
+    expect(byQuery).toContain("Results for");
+    expect(byQuery).toContain("AI");
   });
 
   it("renders an empty state when no posts exist", () => {
