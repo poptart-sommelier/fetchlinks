@@ -20,12 +20,6 @@ html {
   height: 100%;
 }
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
 body {
   min-height: 100%;
   display: flex;
@@ -374,6 +368,13 @@ p {
 .post-item {
   display: grid;
   gap: 8px;
+  /* A grid item's automatic minimum size is its min-content width, so this
+     refuses to shrink below the longest unbroken string it contains -- and the
+     link paths below are deliberately `nowrap`, which makes that a whole URL.
+     Without this the card is as wide as its longest link on every screen, and
+     the phone layout overflows by a factor of five. Every flex or grid
+     ancestor between here and .post-link-path needs the same release. */
+  min-width: 0;
 }
 
 .post-item:hover {
@@ -761,7 +762,13 @@ a.post-source:hover .post-source-type {
 }
 
 .post-item h2 {
-  max-width: 82ch;
+  /* 82ch is a reading-measure cap for wide screens; it must not become a
+     floor on a phone, where it is twice the viewport. */
+  max-width: min(82ch, 100%);
+  /* A title is arbitrary text from a feed and is sometimes a bare URL with no
+     break opportunity in it. Nothing clips overflow any more, so it has to be
+     breakable here rather than pushing the card wide. */
+  word-break: break-word;
 }
 
 .post-links {
@@ -773,6 +780,7 @@ a.post-source:hover .post-source-type {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.4;
+  min-width: 0;
 }
 
 .post-link-list {
@@ -782,6 +790,7 @@ a.post-source:hover .post-source-type {
   list-style: none;
   padding: 0;
   margin: 0;
+  min-width: 0;
 }
 
 .post-link-row {
