@@ -1,6 +1,15 @@
 # Setup
 
-These instructions configure and run the Fetchlinks ingest app on Linux.
+These instructions configure and run the Fetchlinks ingest app from a checkout —
+a development machine, or any box where you are running the collector by hand.
+
+**They are not the instructions for the Raspberry Pi.** The deployment keeps
+everything in one directory under `~/fetchlinks/`, installs its own config from
+a template, and reads credentials from `~/fetchlinks/runtime/config/` rather
+than from the paths below. See [../deploy/README.md](../deploy/README.md) for
+that, and use `deploy/bootstrap.sh` rather than following this file. The two
+differ only in *where* the files live; the JSON shapes documented here are the
+same on both.
 
 ## 1) Create and activate virtual environment
 
@@ -21,6 +30,12 @@ pip install -r ingest/requirements.txt
 ```
 
 ## 3) Configure credentials
+
+Credentials are JSON, one file per source, readable only by you. On a checkout
+they live in `~/.fetchlinks/`; **on the Pi the same files live in
+`~/fetchlinks/runtime/config/`** alongside `fetchlinks.toml`, because the
+deployment is one self-contained directory. Only the directory differs — the
+file names and JSON shapes below are identical on both.
 
 Create a credential directory:
 
@@ -99,6 +114,7 @@ or relative to the TOML file's directory. The schema is:
 - `[paths]` — `log_file`, `log_level` (`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`),
   optional `runtime_dir` (the collector's catalog, resume state, and batch
   spool; falls back to `FETCHLINKS_RUNTIME_DIR`, then `~/.fetchlinks/runtime`).
+  The Pi sets `runtime_dir` explicitly so it never relies on that fallback.
   There is deliberately no database setting here: the database URL reaches the
   publisher through `FETCHLINKS_DATABASE_URL`, and the collector never sees one.
 - `[ingest]` — `max_post_age_months`, `excluded_url_host_keywords`,
@@ -122,7 +138,9 @@ or relative to the TOML file's directory. The schema is:
 Notes:
 
 - Each `credential_location` must point at an existing readable JSON file
-  (paths starting with `~` are expanded).
+  (paths starting with `~` are expanded). A relative path resolves against the
+  TOML file's own directory, which is what lets the deployed config on the Pi
+  refer to its credentials as bare filenames like `"reddit.json"`.
 - `excluded_url_host_keywords` are case-insensitive substring matches against
   the URL hostname only. `"insider"` blocks `www.businessinsider.com`;
   `"businessinsider.com"` blocks that domain and its subdomains.
