@@ -86,11 +86,22 @@ def normalize_url(url: str, base: str = '') -> str:
     if not url:
         return ''
 
-    # Resolve relative forms against the feed/site base when we have one.
-    if base and (url.startswith('//') or url.startswith('/') or not urlsplit(url).scheme):
-        url = urljoin(base, url)
+    # Every URL here came out of somebody else's post or feed, so some of them
+    # are not URLs at all. urlsplit raises on a few shapes rather than
+    # returning something empty -- an unbalanced bracket is read as a malformed
+    # IPv6 literal -- and one of those in one post used to abort the entire
+    # collection cycle for every source. Anything unparseable is simply not a
+    # URL we can use.
+    try:
+        # Resolve relative forms against the feed/site base when we have one.
+        if base and (url.startswith('//') or url.startswith('/')
+                     or not urlsplit(url).scheme):
+            url = urljoin(base, url)
 
-    parts = urlsplit(url)
+        parts = urlsplit(url)
+    except ValueError:
+        return ''
+
     if parts.scheme not in ('http', 'https') or not parts.netloc:
         return ''
     return url
