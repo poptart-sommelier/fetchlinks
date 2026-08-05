@@ -1,6 +1,6 @@
 import unittest
 
-from utils import RssPost, normalize_url
+from utils import Post, RssPost, normalize_url
 
 
 class NormalizeUrlTests(unittest.TestCase):
@@ -35,6 +35,32 @@ class NormalizeUrlTests(unittest.TestCase):
     def test_drops_non_http_scheme(self):
         self.assertEqual(normalize_url('ftp://example.com/x'), '')
         self.assertEqual(normalize_url('javascript:alert(1)'), '')
+
+    def test_drops_urls_that_urlsplit_refuses_to_parse(self):
+        # An unbalanced bracket in the netloc is read as a malformed IPv6
+        # literal and urlsplit raises rather than returning empty parts. One of
+        # these in one Bluesky post used to abort the whole collection cycle,
+        # for every source, on every run -- the cursor never advanced past it.
+        for hostile in (
+            'https://[example.com/x',
+            'https://exa[mple.com/x',
+            'http://[::1junk]/x',
+        ):
+            with self.subTest(url=hostile):
+                self.assertEqual(normalize_url(hostile), '')
+
+    def test_drops_unparseable_relative_url_resolved_against_base(self):
+        # The same failure is reachable through the urljoin path.
+        self.assertEqual(
+            normalize_url('//[bad/path', base='https://example.com/feed.xml'),
+            '',
+        )
+
+    def test_post_skips_unparseable_url_but_keeps_the_rest(self):
+        post = Post()
+        post.add_url('https://[example.com/x')
+        post.add_url('https://example.com/good')
+        self.assertEqual(post.urls, ['https://example.com/good'])
 
     def test_strips_whitespace(self):
         self.assertEqual(

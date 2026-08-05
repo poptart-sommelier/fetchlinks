@@ -111,8 +111,10 @@ run anywhere while the storing half stays specific to one destination.
 
 ### Runtime directory
 
-Kept outside the checkout so deploying or rolling back code never disturbs
-queued batches or resume state:
+Gitignored, so deploying or rolling back code never disturbs queued batches or
+resume state. On the Pi it sits at `~/fetchlinks/runtime/`, inside the checkout
+but invisible to git, which is what keeps the whole deployment in one directory
+while still making `git pull` safe:
 
 ```text
 runtime/
