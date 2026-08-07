@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   addRssFeed,
+  countRssFeeds,
   countRssFeedsByStatus,
   listRssFeeds,
+  listRssFeedsPage,
   normalizeFeedUrl,
   restoreRssFeed,
   softDeleteRssFeed,
@@ -341,5 +343,109 @@ describePostgres("rss feed catalog", () => {
       errors: 0,
       total: 0,
     });
+  });
+
+  async function addFeeds(count: number): Promise<void> {
+    for (let index = 0; index < count; index += 1) {
+      // Zero-padded so lexical order matches numeric order and the assertions
+      // below can name an exact page of results.
+      const label = String(index).padStart(2, "0");
+      await addRssFeed(pg.sql, `https://feed${label}.example/feed`);
+    }
+  }
+
+  it("splits the catalog into pages in the list order", async () => {
+    await addFeeds(5);
+
+    const page = await listRssFeedsPage(pg.sql, {}, 2, 2);
+
+    expect(page.feeds.map((feed) => feed.normalizedUrl)).toEqual([
+      "https://feed02.example/feed",
+      "https://feed03.example/feed",
+    ]);
+    expect(page).toMatchObject({
+      page: 2,
+      pageSize: 2,
+      totalFeeds: 5,
+      totalPages: 3,
+      hasPreviousPage: true,
+      hasNextPage: true,
+    });
+  });
+
+  it("clamps a page beyond the end back to the last page", async () => {
+    await addFeeds(3);
+
+    const page = await listRssFeedsPage(pg.sql, {}, 99, 2);
+
+    expect(page.page).toBe(2);
+    expect(page.hasNextPage).toBe(false);
+    expect(page.feeds.map((feed) => feed.normalizedUrl)).toEqual([
+      "https://feed02.example/feed",
+    ]);
+  });
+
+  it("clamps a page below one back to the first page", async () => {
+    await addFeeds(3);
+
+    const page = await listRssFeedsPage(pg.sql, {}, 0, 2);
+
+    expect(page.page).toBe(1);
+    expect(page.hasPreviousPage).toBe(false);
+  });
+
+  // An empty catalog must still report one page, or the pager renders
+  // "Page 1 of 0".
+  it("reports a single empty page for an empty catalog", async () => {
+    const page = await listRssFeedsPage(pg.sql, {}, 1, 2);
+
+    expect(page).toMatchObject({
+      feeds: [],
+      page: 1,
+      totalFeeds: 0,
+      totalPages: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    });
+  });
+
+  // The total is what the pager divides by, so a total that ignored the
+  // filters would offer pages that render empty.
+  it("counts and pages only the rows matching the filters", async () => {
+    await addFeeds(4);
+    const removed = await addRssFeed(pg.sql, "https://feed99.example/feed");
+    if (removed.status !== "added") throw new Error("expected added");
+    await softDeleteRssFeed(pg.sql, removed.feed.id);
+
+    await expect(countRssFeeds(pg.sql, { status: "active" })).resolves.toBe(4);
+    await expect(countRssFeeds(pg.sql, { status: "removed" })).resolves.toBe(1);
+    await expect(countRssFeeds(pg.sql, { q: "feed0" })).resolves.toBe(4);
+
+    const page = await listRssFeedsPage(pg.sql, { status: "removed" }, 1, 2);
+    expect(page.totalFeeds).toBe(1);
+    expect(page.totalPages).toBe(1);
+    expect(page.feeds.map((feed) => feed.normalizedUrl)).toEqual([
+      "https://feed99.example/feed",
+    ]);
+  });
+
+  // The search pattern and the limit/offset share one placeholder sequence, so
+  // a mis-ordered append would bind the wrong value to the wrong slot.
+  it("keeps a search filter intact alongside limit and offset", async () => {
+    await addFeeds(4);
+    await addRssFeed(pg.sql, "https://other.example/feed");
+
+    const page = await listRssFeedsPage(pg.sql, { q: "feed0" }, 2, 3);
+
+    expect(page.totalFeeds).toBe(4);
+    expect(page.feeds.map((feed) => feed.normalizedUrl)).toEqual([
+      "https://feed03.example/feed",
+    ]);
+  });
+
+  it("leaves the unpaginated list returning every row", async () => {
+    await addFeeds(3);
+
+    await expect(listRssFeeds(pg.sql)).resolves.toHaveLength(3);
   });
 });

@@ -526,10 +526,30 @@ p {
   display: block;
 }
 
+.feed-action-btn-view {
+  gap: 6px;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.feed-action-btn-view svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .feed-action-btn-view:hover {
   color: var(--accent-strong);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.feed-action-btn-disabled,
+.feed-action-btn-disabled:hover {
+  border-color: var(--border);
+  background: var(--subtle);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .feed-action-btn-danger {
@@ -593,10 +613,13 @@ p {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+  justify-content: space-between;
 }
 
+/* Lets the chips take the slack so the actions sit at the right edge on every
+   row. margin-left: auto did the same job but dragged the actions onto their
+   own line as soon as the chips wrapped, which is what made rows look ragged. */
 .feed-row-actions {
-  margin-left: auto;
   flex: 0 0 auto;
 }
 
@@ -676,6 +699,8 @@ p {
   flex-wrap: wrap;
   gap: 6px 10px;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .feed-stat {
