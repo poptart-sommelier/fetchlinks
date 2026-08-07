@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/flightdeck/:path*"],
 };
 
 const REALM = "Fetchlinks admin";

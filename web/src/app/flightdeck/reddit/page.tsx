@@ -102,7 +102,7 @@ export function AdminRedditView({ result }: { result: LoadResult }) {
       <header className="page-header">
         <div className="page-title">
           <p className="eyebrow">
-            <Link href="/admin">&larr; Admin</Link>
+            <Link href="/flightdeck">&larr; Admin</Link>
           </p>
           <h1>Subreddits</h1>
         </div>
@@ -110,13 +110,13 @@ export function AdminRedditView({ result }: { result: LoadResult }) {
           <CountTile
             count={counts.active}
             label="active"
-            href="/admin/reddit?status=active"
+            href="/flightdeck/reddit?status=active"
             tone="ok"
           />
           <CountTile
             count={counts.removed}
             label={counts.removed === 1 ? "removed" : "removed"}
-            href="/admin/reddit?status=removed"
+            href="/flightdeck/reddit?status=removed"
             tone="muted"
           />
         </div>
@@ -139,7 +139,7 @@ export function AdminRedditView({ result }: { result: LoadResult }) {
 
       {addFeedback ? <AddFeedbackBanner feedback={addFeedback} /> : null}
 
-      <form action="/admin/reddit" aria-label="Search subreddits" className="search-form" method="get">
+      <form action="/flightdeck/reddit" aria-label="Search subreddits" className="search-form" method="get">
         <label className="search-form-field">
           <span>Search</span>
           <input
@@ -156,7 +156,7 @@ export function AdminRedditView({ result }: { result: LoadResult }) {
           Search
         </button>
         {filters.status !== "all" || filters.q ? (
-          <Link className="clear-filters" href="/admin/reddit">
+          <Link className="clear-filters" href="/flightdeck/reddit">
             Clear
           </Link>
         ) : null}
@@ -471,7 +471,7 @@ function buildRedditHref(
     params.set(key, value);
   }
   const query = params.toString();
-  return query ? `/admin/reddit?${query}` : "/admin/reddit";
+  return query ? `/flightdeck/reddit?${query}` : "/flightdeck/reddit";
 }
 
 function AddFeedbackBanner({ feedback }: { feedback: AddFeedback }) {
