@@ -39,14 +39,26 @@ team of ten is pure cost here.
 ## plan.md is the source of truth
 
 `plan.md` in the repo root holds the numbered architecture decisions and the
-phase order. It outranks your own reasoning: where it contradicts what seems
-sensible now, the decision wins until it is explicitly revisited.
+outstanding work. It outranks your own reasoning: where it contradicts what
+seems sensible now, the decision wins until it is explicitly revisited.
 
 It is **gitignored**, so a fresh clone will not have it. If it is missing, say
 so rather than guessing at the decisions it holds.
 
 Write back to it when work settles a question. A decision discovered and not
 recorded is one that gets re-litigated in a month.
+
+**Keep `plan.md` to outstanding work only.** When something is finished, move
+its section out to `plan_done.md` rather than marking it DONE in place. A plan
+that lists mostly finished work stops being readable as a plan, and the answer
+to "what needs doing?" should be visible without scrolling past a year of
+history.
+
+Move the *reasoning*, not a one-line summary. `plan_done.md` exists because the
+why behind a change is not recoverable from the code, and several entries there
+were learned by breaking something first. Consult it before changing anything
+that looks arbitrary — the odds are good it is load-bearing and the note says
+why. Both files are gitignored.
 
 ## Invariants that must not be quietly undone
 
