@@ -162,6 +162,10 @@ or roll back a cursor.
   path find nothing. This is noise reduction and not a security control: the
   name is visible in this public repository, and HTTP Basic remains the thing
   actually standing in the way.
+- A Vercel WAF rule rate limits that path to 10 requests per minute per IP and
+  denies beyond it, so the shared credential cannot be guessed at request speed.
+  The rule lives in the Vercel dashboard and is therefore invisible here; it is
+  recorded so its absence after a project rebuild is noticed.
 - Vercel preview deployments are pinned to a separate Neon branch, so a preview
   cannot read or write production data.
 - TLS to the database is enforced by the connection string.
