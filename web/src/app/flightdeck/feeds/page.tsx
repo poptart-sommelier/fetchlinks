@@ -258,12 +258,12 @@ function FeedRow({
               <ConfirmRemove feedId={feed.id} filters={filters} />
             ) : (
               <Link
-                aria-label="Remove feed"
-                className="feed-action-btn feed-action-btn-icon"
+                className="feed-action-btn feed-action-btn-remove"
                 href={buildFeedsHref(filters, { confirm_remove: String(feed.id) })}
                 title="Remove feed"
               >
                 <TrashIcon />
+                Remove feed
               </Link>
             )
           ) : null}

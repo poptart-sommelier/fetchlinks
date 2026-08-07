@@ -550,6 +550,26 @@ p {
   background: color-mix(in srgb, var(--accent) 10%, var(--panel));
 }
 
+/* Labelled rather than a bare icon, like the view control beside it. It only
+   opens the confirm step, so it stays muted until hover rather than wearing
+   danger colours for an action that has not been asked for yet. */
+.feed-action-btn-remove {
+  gap: 6px;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.feed-action-btn-remove svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.feed-action-btn-remove:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+}
+
 .feed-action-btn-disabled,
 .feed-action-btn-disabled:hover {
   border-color: var(--border);
