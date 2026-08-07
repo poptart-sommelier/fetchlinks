@@ -103,7 +103,7 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
       <header className="page-header">
         <div className="page-title">
           <p className="eyebrow">
-            <Link href="/admin">&larr; Admin</Link>
+            <Link href="/flightdeck">&larr; Admin</Link>
           </p>
           <h1>RSS feeds</h1>
         </div>
@@ -111,13 +111,13 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
           <CountTile
             count={counts.active}
             label={counts.active === 1 ? "active" : "active"}
-            href="/admin/feeds?status=active"
+            href="/flightdeck/feeds?status=active"
             tone="ok"
           />
           <CountTile
             count={counts.errors}
             label={counts.errors === 1 ? "error" : "errors"}
-            href="/admin/feeds?errors=1"
+            href="/flightdeck/feeds?errors=1"
             tone={counts.errors > 0 ? "error" : "muted"}
           />
         </div>
@@ -140,7 +140,7 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
 
       {addFeedback ? <AddFeedbackBanner feedback={addFeedback} /> : null}
 
-      <form action="/admin/feeds" aria-label="Search feeds" className="search-form" method="get">
+      <form action="/flightdeck/feeds" aria-label="Search feeds" className="search-form" method="get">
         <label className="search-form-field">
           <span>Search</span>
           <input
@@ -158,7 +158,7 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
           Search
         </button>
         {filters.status !== "all" || filters.q || filters.errors ? (
-          <Link className="clear-filters" href="/admin/feeds">
+          <Link className="clear-filters" href="/flightdeck/feeds">
             Clear
           </Link>
         ) : null}
@@ -567,7 +567,7 @@ function buildFeedsHref(
     params.set(key, value);
   }
   const query = params.toString();
-  return query ? `/admin/feeds?${query}` : "/admin/feeds";
+  return query ? `/flightdeck/feeds?${query}` : "/flightdeck/feeds";
 }
 
 function AddFeedbackBanner({ feedback }: { feedback: AddFeedback }) {

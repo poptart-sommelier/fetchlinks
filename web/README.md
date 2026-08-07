@@ -31,7 +31,7 @@ catalog, so the soft delete the admin UI performs is the only delete available
 to it.
 
 To enable the admin UI, also set `FETCHLINKS_ADMIN_USER` and
-`FETCHLINKS_ADMIN_PASS`. Requests to `/admin/*` are gated by HTTP Basic auth
+`FETCHLINKS_ADMIN_PASS`. Requests to `/flightdeck/*` are gated by HTTP Basic auth
 against those values. If either is unset, the admin routes return HTTP 503.
 
 ## Commands

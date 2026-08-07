@@ -16,7 +16,7 @@ For deploying and operating the Pi, see [deploy/README.md](deploy/README.md).
 Raspberry Pi (home, residential IP)          Neon (eu-west-2)          Vercel (lhr1)
   fetchlinks-collect.timer  30 min             PostgreSQL 18             Next.js
     fetch_links.py                               catalog.*                 public pages
-      RSS / Reddit / Bluesky / Mastodon          content.*                 /admin/* (Basic auth)
+      RSS / Reddit / Bluesky / Mastodon          content.*                 /flightdeck/* (Basic auth)
       └─> runtime/outbox/   batch spool
   fetchlinks-publish.timer  hourly
     publish_tool.py publish       ───────────>  insert batches
@@ -27,7 +27,7 @@ Raspberry Pi (home, residential IP)          Neon (eu-west-2)          Vercel (l
 
 Read path: `Internet -> Vercel (lhr1) -> Neon HTTP driver -> PostgreSQL`
 Write path: `Pi -> psycopg over TLS -> PostgreSQL`
-Admin path: `Internet -> Vercel -> /admin/* -> HTTP Basic -> PostgreSQL`
+Admin path: `Internet -> Vercel -> /flightdeck/* -> HTTP Basic -> PostgreSQL`
 
 ## The collector/publisher split
 
@@ -118,9 +118,9 @@ ingest/                            Python, collector + publisher
 
 web/                               Next.js, TypeScript, vitest
 ├── src/app/page.tsx               public posts listing
-├── src/app/admin/                 admin index and the feeds table
+├── src/app/flightdeck/            admin index and the feeds table
 ├── src/server/sql.ts              SqlClient port: Neon HTTP driver or pg
-└── src/proxy.ts                   /admin/* HTTP Basic gate
+└── src/proxy.ts                   /flightdeck/* HTTP Basic gate
 ```
 
 `web/src/server/sql.ts` exists because Neon's HTTP driver suits Vercel but only
@@ -156,8 +156,12 @@ or roll back a cursor.
 - Neither runtime role can perform DDL or write outside its own surface. This
   is asserted against a real instance, not assumed.
 - Source credentials are `0600` under `runtime/config/`, never in the repo.
-- `/admin/*` is gated by HTTP Basic with a constant-time compare. If either
+- `/flightdeck/*` is gated by HTTP Basic with a constant-time compare. If either
   credential variable is unset the route returns 503 rather than opening.
+- The admin route is not called `/admin` so that drive-by scanners probing that
+  path find nothing. This is noise reduction and not a security control: the
+  name is visible in this public repository, and HTTP Basic remains the thing
+  actually standing in the way.
 - Vercel preview deployments are pinned to a separate Neon branch, so a preview
   cannot read or write production data.
 - TLS to the database is enforced by the connection string.

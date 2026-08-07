@@ -11,25 +11,25 @@ type AdminSection = {
 
 const SECTIONS: AdminSection[] = [
   {
-    href: "/admin/feeds",
+    href: "/flightdeck/feeds",
     title: "RSS feeds",
     description: "Add, search, and remove RSS feed subscriptions.",
     status: "available",
   },
   {
-    href: "/admin/reddit",
+    href: "/flightdeck/reddit",
     title: "Reddit",
     description: "Add, search, and remove subreddit subscriptions.",
     status: "available",
   },
   {
-    href: "/admin/bluesky",
+    href: "/flightdeck/bluesky",
     title: "Bluesky",
     description: "Read-only view of the accounts this credential follows.",
     status: "available",
   },
   {
-    href: "/admin/mastodon",
+    href: "/flightdeck/mastodon",
     title: "Mastodon",
     description: "Read-only view of the accounts each instance follows.",
     status: "available",

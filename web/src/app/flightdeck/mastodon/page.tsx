@@ -4,28 +4,28 @@ import Link from "next/link";
 
 import { formatRelative } from "../../../lib/format-relative";
 import { safeExternalHref } from "../../../lib/safe-external-href";
-import type { BlueskyFollow } from "../../../models/bluesky-follows";
+import type { MastodonFollow } from "../../../models/mastodon-follows";
 import { getSqlClient } from "../../../server/sql";
-import { getBlueskyFollows } from "../../../server/bluesky";
+import { getMastodonFollows } from "../../../server/mastodon";
 
 type LoadResult =
   | {
       status: "ready";
-      follows: BlueskyFollow[];
+      follows: MastodonFollow[];
       lastSyncedAt: string | null;
     }
   | { status: "error" };
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminBlueskyPage() {
+export default async function AdminMastodonPage() {
   const result = await loadFollows();
-  return <AdminBlueskyView result={result} />;
+  return <AdminMastodonView result={result} />;
 }
 
 async function loadFollows(): Promise<LoadResult> {
   try {
-    const snapshot = await getBlueskyFollows(getSqlClient(process.env));
+    const snapshot = await getMastodonFollows(getSqlClient(process.env));
     return {
       status: "ready" as const,
       follows: snapshot.follows,
@@ -36,18 +36,18 @@ async function loadFollows(): Promise<LoadResult> {
   }
 }
 
-export function AdminBlueskyView({ result }: { result: LoadResult }) {
+export function AdminMastodonView({ result }: { result: LoadResult }) {
   if (result.status === "error") {
     return (
       <main className="shell">
         <header className="page-header">
           <div className="page-title">
             <p className="eyebrow">Fetchlinks admin</p>
-            <h1>Bluesky</h1>
+            <h1>Mastodon</h1>
           </div>
         </header>
         <section className="state state-error" role="alert">
-          <h2>Bluesky follows are unavailable</h2>
+          <h2>Mastodon follows are unavailable</h2>
           <p>The database could not be opened. Check the server configuration.</p>
         </section>
       </main>
@@ -56,17 +56,18 @@ export function AdminBlueskyView({ result }: { result: LoadResult }) {
 
   const { follows, lastSyncedAt } = result;
   const syncedLabel = formatRelative(lastSyncedAt);
+  const groups = groupByInstance(follows);
 
   return (
     <main className="shell">
       <header className="page-header">
         <div className="page-title">
           <p className="eyebrow">
-            <Link href="/admin">&larr; Admin</Link>
+            <Link href="/flightdeck">&larr; Admin</Link>
           </p>
-          <h1>Bluesky</h1>
+          <h1>Mastodon</h1>
         </div>
-        <div className="feed-counts-tile" aria-label="Bluesky totals">
+        <div className="feed-counts-tile" aria-label="Mastodon totals">
           <span className="count-tile count-tile-ok">
             <strong>{follows.length.toLocaleString("en-US")}</strong>
             <span>following</span>
@@ -75,7 +76,7 @@ export function AdminBlueskyView({ result }: { result: LoadResult }) {
       </header>
 
       <p className="admin-readonly-note">
-        Read-only mirror of the accounts this Bluesky credential follows. The
+        Read-only mirror of the accounts each Mastodon credential follows. The
         list is refreshed by the ingest job
         {syncedLabel ? (
           <>
@@ -90,20 +91,51 @@ export function AdminBlueskyView({ result }: { result: LoadResult }) {
       {follows.length === 0 ? (
         <section className="state">
           <h2>No follows</h2>
-          <p>The ingest job has not recorded any Bluesky follows yet.</p>
+          <p>The ingest job has not recorded any Mastodon follows yet.</p>
         </section>
       ) : (
-        <section className="post-list" aria-label="Bluesky follows">
-          {follows.map((follow) => (
-            <FollowRow key={follow.did} follow={follow} />
-          ))}
-        </section>
+        groups.map((group) => (
+          <section
+            key={group.instanceName}
+            className="post-list"
+            aria-label={`Mastodon follows on ${group.instanceName}`}
+          >
+            <h2 className="feed-group-heading">{group.instanceName}</h2>
+            {group.follows.map((follow) => (
+              <FollowRow
+                key={`${follow.instanceName}:${follow.accountId}`}
+                follow={follow}
+              />
+            ))}
+          </section>
+        ))
       )}
     </main>
   );
 }
 
-function FollowRow({ follow }: { follow: BlueskyFollow }) {
+type InstanceGroup = {
+  instanceName: string;
+  follows: MastodonFollow[];
+};
+
+function groupByInstance(follows: MastodonFollow[]): InstanceGroup[] {
+  const groups = new Map<string, MastodonFollow[]>();
+  for (const follow of follows) {
+    const existing = groups.get(follow.instanceName);
+    if (existing) {
+      existing.push(follow);
+    } else {
+      groups.set(follow.instanceName, [follow]);
+    }
+  }
+  return Array.from(groups, ([instanceName, instanceFollows]) => ({
+    instanceName,
+    follows: instanceFollows,
+  }));
+}
+
+function FollowRow({ follow }: { follow: MastodonFollow }) {
   return (
     <article className="post-item feed-row feed-row-healthy">
       <header className="feed-row-header">
@@ -111,7 +143,7 @@ function FollowRow({ follow }: { follow: BlueskyFollow }) {
       </header>
       <div className="feed-row-footer">
         <FollowStats follow={follow} />
-        <nav aria-label="Bluesky follow actions" className="post-links feed-row-actions">
+        <nav aria-label="Mastodon follow actions" className="post-links feed-row-actions">
           {follow.postSource ? <ViewPostsLink source={follow.postSource} /> : null}
         </nav>
       </div>
@@ -119,17 +151,17 @@ function FollowRow({ follow }: { follow: BlueskyFollow }) {
   );
 }
 
-function FollowNameLink({ follow }: { follow: BlueskyFollow }) {
-  const url = `https://bsky.app/profile/${follow.handle}`;
-  const href = safeExternalHref(url);
+function FollowNameLink({ follow }: { follow: MastodonFollow }) {
+  const url = follow.url ?? "";
+  const href = url ? safeExternalHref(url) : null;
   const label = (
     <span className="feed-url-host">
-      {follow.displayName ? `${follow.displayName} ` : ""}@{follow.handle}
+      {follow.displayName ? `${follow.displayName} ` : ""}@{follow.acct}
     </span>
   );
   if (!href) {
     return (
-      <span className="post-source feed-row-url" title={url}>
+      <span className="post-source feed-row-url" title={url || undefined}>
         {label}
       </span>
     );
@@ -147,7 +179,7 @@ function FollowNameLink({ follow }: { follow: BlueskyFollow }) {
   );
 }
 
-function FollowStats({ follow }: { follow: BlueskyFollow }) {
+function FollowStats({ follow }: { follow: MastodonFollow }) {
   const items: ReactNode[] = [];
 
   const postLabel = formatRelative(follow.latestPostAt);

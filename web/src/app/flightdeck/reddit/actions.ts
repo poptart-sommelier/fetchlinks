@@ -10,7 +10,7 @@ import {
   softDeleteSubreddit,
 } from "../../../server/subreddits";
 
-const ADMIN_PATH = "/admin/reddit";
+const ADMIN_PATH = "/flightdeck/reddit";
 
 function parseSubredditId(value: FormDataEntryValue | null): number {
   const parsed = Number(value);

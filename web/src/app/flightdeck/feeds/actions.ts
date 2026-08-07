@@ -10,7 +10,7 @@ import {
   softDeleteRssFeed,
 } from "../../../server/feeds";
 
-const ADMIN_PATH = "/admin/feeds";
+const ADMIN_PATH = "/flightdeck/feeds";
 
 function parseFeedId(value: FormDataEntryValue | null): number {
   const parsed = Number(value);
