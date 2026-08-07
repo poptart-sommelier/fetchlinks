@@ -23,4 +23,6 @@ export type RssFeedListFilters = {
   status?: RssFeedStatus | "all";
   q?: string;
   errors?: boolean;
+  limit?: number;
+  offset?: number;
 };

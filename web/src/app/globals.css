@@ -526,10 +526,56 @@ p {
   display: block;
 }
 
+/* .post-source sets a 6px gap to space a source name from its type badge, and
+   it wins on order alone. Here the two spans are the host and path of one URL,
+   so any gap saws it in half. */
+.post-source.feed-row-url {
+  column-gap: 0;
+}
+
+.feed-action-btn-view {
+  gap: 6px;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent-strong);
+}
+
+.feed-action-btn-view svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .feed-action-btn-view:hover {
   color: var(--accent-strong);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+/* Labelled rather than a bare icon, like the view control beside it. It only
+   opens the confirm step, so it stays muted until hover rather than wearing
+   danger colours for an action that has not been asked for yet. */
+.feed-action-btn-remove {
+  gap: 6px;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.feed-action-btn-remove svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.feed-action-btn-remove:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+}
+
+.feed-action-btn-disabled,
+.feed-action-btn-disabled:hover {
+  border-color: var(--border);
+  background: var(--subtle);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .feed-action-btn-danger {
@@ -593,10 +639,16 @@ p {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+  justify-content: space-between;
 }
 
+/* Not .post-links: that stacks its children in a column and rules them off with
+   a border, which is right for the public list and wrong for a row of buttons. */
 .feed-row-actions {
-  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
 }
 
@@ -676,6 +728,8 @@ p {
   flex-wrap: wrap;
   gap: 6px 10px;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .feed-stat {

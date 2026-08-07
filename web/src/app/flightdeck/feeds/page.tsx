@@ -7,8 +7,9 @@ import { safeExternalHref } from "../../../lib/safe-external-href";
 import type { RssFeed, RssFeedStatus } from "../../../models/rss-feeds";
 import {
   countRssFeedsByStatus,
-  listRssFeeds,
+  listRssFeedsPage,
   type RssFeedCounts,
+  type RssFeedPage,
 } from "../../../server/feeds";
 import { getSqlClient } from "../../../server/sql";
 import {
@@ -26,7 +27,7 @@ type AdminFeedsPageProps = {
 type LoadResult =
   | {
       status: "ready";
-      feeds: RssFeed[];
+      page: RssFeedPage;
       counts: RssFeedCounts;
       filters: ActiveFilters;
       addFeedback: AddFeedback | null;
@@ -38,6 +39,7 @@ type ActiveFilters = {
   status: RssFeedStatus | "all";
   q?: string;
   errors: boolean;
+  page: number;
 };
 
 type AddFeedback =
@@ -46,6 +48,10 @@ type AddFeedback =
   | { kind: "invalid"; reason: string; url?: string };
 
 export const dynamic = "force-dynamic";
+
+// Matches the public list. 719 feeds in one response is 2.3 MB of HTML and
+// slow enough to time out an in-browser evaluation.
+const FEEDS_PER_PAGE = 50;
 
 export default async function AdminFeedsPage({
   searchParams,
@@ -67,7 +73,7 @@ async function loadFeeds(
     const sql = getSqlClient(process.env);
     return {
       status: "ready" as const,
-      feeds: await listRssFeeds(sql, filters),
+      page: await listRssFeedsPage(sql, filters, filters.page, FEEDS_PER_PAGE),
       counts: await countRssFeedsByStatus(sql),
       filters,
       addFeedback,
@@ -96,7 +102,8 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
     );
   }
 
-  const { feeds, counts, filters, addFeedback, confirmRemoveId } = result;
+  const { page, counts, filters, addFeedback, confirmRemoveId } = result;
+  const feeds = page.feeds;
 
   return (
     <main className="shell">
@@ -170,18 +177,54 @@ export function AdminFeedsView({ result }: { result: LoadResult }) {
           <p>No rows match the current filters.</p>
         </section>
       ) : (
-        <section className="post-list" aria-label="RSS feeds">
-          {feeds.map((feed) => (
-            <FeedRow
-              key={feed.id}
-              feed={feed}
-              filters={filters}
-              confirmRemove={confirmRemoveId === feed.id}
-            />
-          ))}
-        </section>
+        <>
+          <section className="post-list" aria-label="RSS feeds">
+            {feeds.map((feed) => (
+              <FeedRow
+                key={feed.id}
+                feed={feed}
+                filters={filters}
+                confirmRemove={confirmRemoveId === feed.id}
+              />
+            ))}
+          </section>
+          <FeedsPagination filters={filters} page={page} />
+        </>
       )}
     </main>
+  );
+}
+
+function FeedsPagination({
+  filters,
+  page,
+}: {
+  filters: ActiveFilters;
+  page: RssFeedPage;
+}) {
+  if (page.totalPages <= 1) return null;
+
+  return (
+    <nav className="pagination" aria-label="Feeds pagination">
+      {page.hasPreviousPage ? (
+        <Link href={buildFeedsHref({ ...filters, page: page.page - 1 })}>
+          Previous
+        </Link>
+      ) : (
+        <span aria-disabled="true">Previous</span>
+      )}
+      <span>
+        Page {page.page.toLocaleString("en-US")} of{" "}
+        {page.totalPages.toLocaleString("en-US")}
+      </span>
+      {page.hasNextPage ? (
+        <Link href={buildFeedsHref({ ...filters, page: page.page + 1 })}>
+          Next
+        </Link>
+      ) : (
+        <span aria-disabled="true">Next</span>
+      )}
+    </nav>
   );
 }
 
@@ -206,21 +249,21 @@ function FeedRow({
       </header>
       <div className="feed-row-footer">
         <FeedStats feed={feed} />
-        <nav aria-label="Feed actions" className="post-links feed-row-actions">
-          {feed.status !== "removed" && feed.siteLink && !confirmRemove ? (
-            <ViewPostsLink siteLink={feed.siteLink} />
+        <nav aria-label="Feed actions" className="feed-row-actions">
+          {feed.status !== "removed" && !confirmRemove ? (
+            <ViewPostsControl siteLink={feed.siteLink} />
           ) : null}
           {feed.status !== "removed" ? (
             confirmRemove ? (
               <ConfirmRemove feedId={feed.id} filters={filters} />
             ) : (
               <Link
-                aria-label="Remove feed"
-                className="feed-action-btn feed-action-btn-icon"
+                className="feed-action-btn feed-action-btn-remove"
                 href={buildFeedsHref(filters, { confirm_remove: String(feed.id) })}
                 title="Remove feed"
               >
                 <TrashIcon />
+                Remove feed
               </Link>
             )
           ) : null}
@@ -331,7 +374,16 @@ function FeedStats({ feed }: { feed: RssFeed }) {
     );
   }
 
-  if (items.length === 0) return null;
+  // Always render the container, even when empty: the footer relies on having
+  // exactly two children to keep the actions pinned right, and a row with no
+  // stats otherwise collapses to a different shape than its neighbours.
+  if (items.length === 0) {
+    items.push(
+      <span key="never" className="feed-stat">
+        Never fetched
+      </span>,
+    );
+  }
   return <div className="feed-stats">{items}</div>;
 }
 
@@ -488,15 +540,32 @@ function TrashIcon() {
   );
 }
 
-function ViewPostsLink({ siteLink }: { siteLink: string }) {
+// The primary action on this page: the reason to look at a feed is almost
+// always to see what it produced. A feed only gains a site link after a
+// successful fetch, and 47 of 719 have none, so the control is shown disabled
+// with the reason rather than omitted -- a button that vanishes on some rows
+// reads as a bug.
+function ViewPostsControl({ siteLink }: { siteLink: string | null }) {
+  if (!siteLink) {
+    return (
+      <span
+        aria-disabled="true"
+        className="feed-action-btn feed-action-btn-view feed-action-btn-disabled"
+        title="No site link recorded yet. It is read from the feed on the first successful fetch, and posts cannot be filtered without it."
+      >
+        <ViewPostsIcon />
+        View posts
+      </span>
+    );
+  }
   return (
     <Link
-      aria-label="View posts from this feed"
-      className="feed-action-btn feed-action-btn-icon feed-action-btn-view"
+      className="feed-action-btn feed-action-btn-view"
       href={`/?source=${encodeURIComponent(siteLink)}`}
-      title="View posts from this feed"
+      title={`Show posts collected from ${siteLink}`}
     >
       <ViewPostsIcon />
+      View posts
     </Link>
   );
 }
@@ -528,7 +597,14 @@ function parseFilters(searchParams: PageSearchParams | undefined): ActiveFilters
   const status = pickStatus(getSingleSearchParam(searchParams, "status"));
   const q = getSingleSearchParam(searchParams, "q")?.trim().slice(0, 200) || undefined;
   const errors = getSingleSearchParam(searchParams, "errors") === "1";
-  return { status, q, errors };
+  const page = parsePage(getSingleSearchParam(searchParams, "page"));
+  return { status, q, errors, page };
+}
+
+function parsePage(raw: string | undefined): number {
+  if (!raw) return 1;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
 function parseAddFeedback(
@@ -563,6 +639,9 @@ function buildFeedsHref(
   if (filters.status !== "all") params.set("status", filters.status);
   if (filters.q) params.set("q", filters.q);
   if (filters.errors) params.set("errors", "1");
+  // Page 1 is the default, so it stays out of the URL and the plain
+  // /flightdeck/feeds link keeps working as "start again".
+  if (filters.page > 1) params.set("page", String(filters.page));
   for (const [key, value] of Object.entries(extra)) {
     params.set(key, value);
   }

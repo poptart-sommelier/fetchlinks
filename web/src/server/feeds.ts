@@ -81,12 +81,13 @@ function rowToFeed(row: RssFeedRow): RssFeed {
   };
 }
 
-export async function listRssFeeds(
-  sql: SqlClient,
-  filters: RssFeedListFilters = {},
-): Promise<RssFeed[]> {
+// Filters are built once and shared by the list and the count so a page can
+// never report a total that its own rows contradict.
+function buildFeedWhere(
+  filters: RssFeedListFilters,
+  params: SqlParams,
+): string {
   const clauses: string[] = [];
-  const params = new SqlParams();
   const status = filters.status ?? "all";
 
   if (status === "active") {
@@ -112,13 +113,85 @@ export async function listRssFeeds(
     );
   }
 
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  return clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+}
+
+export async function listRssFeeds(
+  sql: SqlClient,
+  filters: RssFeedListFilters = {},
+): Promise<RssFeed[]> {
+  const params = new SqlParams();
+  const where = buildFeedWhere(filters, params);
+
+  // Appended after the filter placeholders so the numbering stays contiguous.
+  let limits = "";
+  if (filters.limit !== undefined) {
+    limits += ` LIMIT ${params.next(filters.limit)}`;
+  }
+  if (filters.offset !== undefined) {
+    limits += ` OFFSET ${params.next(filters.offset)}`;
+  }
+
   const rows = await sql.query<RssFeedRow>(
-    `SELECT ${SELECT_COLUMNS} ${FROM_CLAUSE} ${where} ${ORDER_BY}`,
+    `SELECT ${SELECT_COLUMNS} ${FROM_CLAUSE} ${where} ${ORDER_BY}${limits}`,
     params.toArray(),
   );
 
   return rows.map(rowToFeed);
+}
+
+export async function countRssFeeds(
+  sql: SqlClient,
+  filters: RssFeedListFilters = {},
+): Promise<number> {
+  const params = new SqlParams();
+  const where = buildFeedWhere(filters, params);
+  const rows = await sql.query<{ count: number }>(
+    `SELECT COUNT(*)::int AS count ${FROM_CLAUSE} ${where}`,
+    params.toArray(),
+  );
+
+  return rows[0]?.count ?? 0;
+}
+
+export type RssFeedPage = {
+  feeds: RssFeed[];
+  page: number;
+  pageSize: number;
+  totalFeeds: number;
+  totalPages: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+};
+
+export async function listRssFeedsPage(
+  sql: SqlClient,
+  filters: RssFeedListFilters = {},
+  page = 1,
+  pageSize = 50,
+): Promise<RssFeedPage> {
+  const totalFeeds = await countRssFeeds(sql, filters);
+  const totalPages = Math.max(Math.ceil(totalFeeds / pageSize), 1);
+
+  // Counting first means a hand-typed ?page=999 can be clamped before the rows
+  // are fetched, rather than rendering "Page 999 of 15" over an empty list.
+  const resolved = Math.min(Math.max(page, 1), totalPages);
+
+  const feeds = await listRssFeeds(sql, {
+    ...filters,
+    limit: pageSize,
+    offset: (resolved - 1) * pageSize,
+  });
+
+  return {
+    feeds,
+    page: resolved,
+    pageSize,
+    totalFeeds,
+    totalPages,
+    hasPreviousPage: resolved > 1,
+    hasNextPage: resolved < totalPages,
+  };
 }
 
 export type RssFeedCounts = {
