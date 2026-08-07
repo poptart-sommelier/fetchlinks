@@ -526,10 +526,16 @@ p {
   display: block;
 }
 
+/* .post-source sets a 6px gap to space a source name from its type badge, and
+   it wins on order alone. Here the two spans are the host and path of one URL,
+   so any gap saws it in half. */
+.post-source.feed-row-url {
+  column-gap: 0;
+}
+
 .feed-action-btn-view {
   gap: 6px;
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: var(--accent-soft);
   color: var(--accent-strong);
 }
 
@@ -616,10 +622,13 @@ p {
   justify-content: space-between;
 }
 
-/* Lets the chips take the slack so the actions sit at the right edge on every
-   row. margin-left: auto did the same job but dragged the actions onto their
-   own line as soon as the chips wrapped, which is what made rows look ragged. */
+/* Not .post-links: that stacks its children in a column and rules them off with
+   a border, which is right for the public list and wrong for a row of buttons. */
 .feed-row-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
 }
 

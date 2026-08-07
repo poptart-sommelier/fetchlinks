@@ -249,7 +249,7 @@ function FeedRow({
       </header>
       <div className="feed-row-footer">
         <FeedStats feed={feed} />
-        <nav aria-label="Feed actions" className="post-links feed-row-actions">
+        <nav aria-label="Feed actions" className="feed-row-actions">
           {feed.status !== "removed" && !confirmRemove ? (
             <ViewPostsControl siteLink={feed.siteLink} />
           ) : null}
