@@ -69,8 +69,10 @@ accident is the thing to avoid.
 everything it calls write batches to disk and hold no connection string. The
 boundary is enforced by `fetchlinks-collect.service` having **no
 `EnvironmentFile`**. That absence is the whole mechanism — do not add one "for
-consistency". It is why collection survives a database outage, and why the Pi
-holding a residential IP does not also hold write access to production.
+consistency". It keeps the connection string out of the collector process and
+lets collection survive a database outage. This is mistake-prevention and
+process separation, not host containment: Collector and Publisher both run as
+`rich`, so a compromised collector could read `runtime/publisher.env`.
 
 **The publisher uses the DIRECT Neon endpoint, never the pooled one.** psycopg3
 promotes repeated statements to server-side prepared statements, which do not
