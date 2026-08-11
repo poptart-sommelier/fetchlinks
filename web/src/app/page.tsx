@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Fragment } from "react";
 
 import { formatRelative } from "../lib/format-relative";
@@ -10,7 +11,19 @@ import type {
   SourceType,
 } from "../models/read-models";
 import { getPosts, type PostFilters } from "../server/db";
+import { OWNER_COOKIE_NAME, isValidOwnerToken } from "../server/owner";
+import { ratingTargetsFor } from "../server/rating-targets";
+import {
+  getRatingsFor,
+  getScoresFor,
+  lookupKey,
+  type RatingTarget,
+  type RatingTargetType,
+  type RatingVerdict,
+  type TargetScore,
+} from "../server/ratings";
 import { getSqlClient } from "../server/sql";
+import { exitOwnerModeAction, rateAction } from "./owner-actions";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -37,6 +50,26 @@ type LatestPostsResult =
       status: "error";
     };
 
+type OwnerState = {
+  isOwner: boolean;
+  /** Where "Owner mode" and "Exit owner mode" return to, so a filtered,
+   * paginated view survives the round trip through authentication. */
+  returnPath: string;
+};
+
+/** What the owner may rate on one card, and what they already think. */
+type PostRatings = {
+  targets: RatingTarget[];
+  verdicts: Map<string, RatingVerdict>;
+  scores: Map<string, TargetScore>;
+};
+
+const NO_RATINGS: PostRatings = {
+  targets: [],
+  verdicts: new Map(),
+  scores: new Map(),
+};
+
 const POSTS_PER_PAGE = 50;
 
 const VALID_SOURCE_TYPES: readonly SourceType[] = [
@@ -58,8 +91,64 @@ export default async function Home({ searchParams }: HomeProps = {}) {
   const resolvedSearchParams = await searchParams;
   const page = getPageFromSearchParams(resolvedSearchParams);
   const filters = getFiltersFromSearchParams(resolvedSearchParams);
+  const cookieStore = await cookies();
+  const isOwner = await isValidOwnerToken(
+    cookieStore.get(OWNER_COOKIE_NAME)?.value,
+  );
+  const result = await loadLatestPosts({ page, filters });
 
-  return <LatestPostsView result={await loadLatestPosts({ page, filters })} />;
+  return (
+    <LatestPostsView
+      owner={{ isOwner, returnPath: buildPageHref(page, filters) }}
+      ratingsByPostId={
+        isOwner && result.status === "ready"
+          ? await loadRatings(result.page.posts)
+          : undefined
+      }
+      result={result}
+    />
+  );
+}
+
+/**
+ * Everything the owner has said about everything on this page, in two queries
+ * rather than two per card. Anonymous renders never call this, so a visitor
+ * costs exactly what they did before ratings existed.
+ *
+ * A failure here degrades to an unrated page instead of an error one: not
+ * knowing the previous verdicts is a worse page, not a broken one.
+ */
+async function loadRatings(
+  posts: readonly PostSummary[],
+): Promise<Map<number, PostRatings>> {
+  const byPostId = new Map<number, PostRatings>();
+  const targetsByPostId = new Map<number, RatingTarget[]>();
+  const allTargets: RatingTarget[] = [];
+
+  for (const post of posts) {
+    const targets = ratingTargetsFor(post);
+
+    targetsByPostId.set(post.id, targets);
+    allTargets.push(...targets);
+  }
+
+  try {
+    const sql = getSqlClient(process.env);
+    const [verdicts, scores] = await Promise.all([
+      getRatingsFor(sql, allTargets),
+      getScoresFor(sql, allTargets),
+    ]);
+
+    for (const [postId, targets] of targetsByPostId) {
+      byPostId.set(postId, { targets, verdicts, scores });
+    }
+  } catch {
+    for (const [postId, targets] of targetsByPostId) {
+      byPostId.set(postId, { ...NO_RATINGS, targets });
+    }
+  }
+
+  return byPostId;
 }
 
 export async function loadLatestPosts({
@@ -104,7 +193,15 @@ export async function loadLatestPosts({
   }
 }
 
-export function LatestPostsView({ result }: { result: LatestPostsResult }) {
+export function LatestPostsView({
+  owner = { isOwner: false, returnPath: "/" },
+  ratingsByPostId,
+  result,
+}: {
+  owner?: OwnerState;
+  ratingsByPostId?: Map<number, PostRatings>;
+  result: LatestPostsResult;
+}) {
   if (result.status === "error") {
     return (
       <main className="shell shell-reading">
@@ -122,6 +219,7 @@ export function LatestPostsView({ result }: { result: LatestPostsResult }) {
   return (
     <main className="shell shell-reading">
       <PageHeader filters={result.filters} page={page} />
+      <OwnerBar owner={owner} />
       <FilterBar filters={result.filters} />
       {page.posts.length === 0 ? (
         <EmptyPostsState filters={result.filters} page={page} />
@@ -132,13 +230,45 @@ export function LatestPostsView({ result }: { result: LatestPostsResult }) {
             <PostListItem
               key={post.id}
               filters={result.filters}
+              owner={owner}
               post={post}
+              ratings={ratingsByPostId?.get(post.id) ?? NO_RATINGS}
             />
           ))}
         </section>
       ) : null}
       <Pagination filters={result.filters} page={page} />
     </main>
+  );
+}
+
+/**
+ * Entering owner mode is a link into the Basic-protected area rather than a
+ * form, so the browser's own credential prompt does the authenticating and no
+ * password is ever typed into a page this app renders.
+ */
+function OwnerBar({ owner }: { owner: OwnerState }) {
+  if (!owner.isOwner) {
+    return (
+      <p className="owner-entry">
+        <Link
+          href={`/flightdeck/owner?next=${encodeURIComponent(owner.returnPath)}`}
+          rel="nofollow"
+        >
+          Owner mode
+        </Link>
+      </p>
+    );
+  }
+
+  return (
+    <section aria-label="Owner mode" className="owner-banner">
+      <p>Owner mode. Ratings you make here are private.</p>
+      <form action={exitOwnerModeAction}>
+        <input name="next" type="hidden" value={owner.returnPath} />
+        <button type="submit">Exit owner mode</button>
+      </form>
+    </section>
   );
 }
 
@@ -237,10 +367,14 @@ function EmptyPostsState({ filters, page }: { filters: ActiveFilters; page: Post
 
 function PostListItem({
   filters,
+  owner,
   post,
+  ratings,
 }: {
   filters: ActiveFilters;
+  owner: OwnerState;
   post: PostSummary;
+  ratings: PostRatings;
 }) {
   const primary = pickPrimaryLink(post);
   const extraUrls = post.urls.filter((url) => url.id !== primary?.urlId);
@@ -315,7 +449,127 @@ function PostListItem({
           ) : null}
         </div>
       ) : null}
+      {owner.isOwner ? (
+        <RatingPanel owner={owner} post={post} ratings={ratings} />
+      ) : null}
     </article>
+  );
+}
+
+/**
+ * Collapsed until asked for. A `<details>` element rather than a script,
+ * because the page has no client JavaScript and a rating that only works once
+ * a bundle has loaded is worse than one that always works.
+ */
+function RatingPanel({
+  owner,
+  post,
+  ratings,
+}: {
+  owner: OwnerState;
+  post: PostSummary;
+  ratings: PostRatings;
+}) {
+  if (ratings.targets.length === 0) {
+    return null;
+  }
+
+  const rated = ratings.targets.filter(
+    (target) => ratings.verdicts.get(lookupKey(target.type, target.key)),
+  ).length;
+
+  return (
+    <details className="post-rating">
+      <summary>
+        Rate
+        {rated > 0 ? (
+          <span className="post-rating-count">{rated} rated</span>
+        ) : null}
+      </summary>
+      <ul className="rating-target-list">
+        {ratings.targets.map((target) => (
+          <RatingRow
+            key={`${target.type}-${target.key}`}
+            owner={owner}
+            post={post}
+            score={ratings.scores.get(lookupKey(target.type, target.key))}
+            target={target}
+            verdict={ratings.verdicts.get(lookupKey(target.type, target.key))}
+          />
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+const TARGET_TYPE_LABELS: Record<RatingTargetType, string> = {
+  post: "this post",
+  channel: "feed",
+  actor: "account",
+  domain: "domain",
+};
+
+function RatingRow({
+  owner,
+  post,
+  score,
+  target,
+  verdict,
+}: {
+  owner: OwnerState;
+  post: PostSummary;
+  score: TargetScore | undefined;
+  target: RatingTarget;
+  verdict: RatingVerdict | undefined;
+}) {
+  return (
+    <li className="rating-target">
+      <div className="rating-target-name">
+        <span className="rating-target-type">
+          {TARGET_TYPE_LABELS[target.type]}
+        </span>
+        <span className="rating-target-label">{target.label}</span>
+        {score ? (
+          <span className="rating-target-score" title="Quality score, 0-100">
+            {score.score}
+          </span>
+        ) : null}
+      </div>
+      <form action={rateAction} className="rating-actions">
+        <input name="post_unique_id" type="hidden" value={post.uniqueId} />
+        <input name="target_type" type="hidden" value={target.type} />
+        <input name="target_key" type="hidden" value={target.key} />
+        <input name="next" type="hidden" value={owner.returnPath} />
+        <button
+          aria-pressed={verdict === "good"}
+          className="rating-good"
+          name="verdict"
+          type="submit"
+          value="good"
+        >
+          Good
+        </button>
+        <button
+          aria-pressed={verdict === "noise"}
+          className="rating-noise"
+          name="verdict"
+          type="submit"
+          value="noise"
+        >
+          Noise
+        </button>
+        {verdict ? (
+          <button
+            className="rating-clear"
+            name="verdict"
+            type="submit"
+            value="clear"
+          >
+            Clear
+          </button>
+        ) : null}
+      </form>
+    </li>
   );
 }
 

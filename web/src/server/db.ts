@@ -1,4 +1,9 @@
-import type { PostPage, PostUrl, SourceType } from "../models/read-models";
+import type {
+  PostOccurrence,
+  PostPage,
+  PostUrl,
+  SourceType,
+} from "../models/read-models";
 import { escapeLikeValue, SqlParams, utcIso, type SqlClient } from "./sql";
 
 type CountRow = {
@@ -10,6 +15,7 @@ type NormalizedPostFilters = {
   sourceType?: SourceType;
   author?: string;
   q?: string;
+  uniqueId?: string;
 };
 
 type PostFilterQuery = {
@@ -35,6 +41,19 @@ type PostUrlRow = {
   originalUrl: string;
   urlHash: string;
   unshortenedUrl: string | null;
+  urlHost: string | null;
+};
+
+type PostOccurrenceRow = {
+  id: number;
+  postId: number;
+  sourceType: SourceType | null;
+  channelKey: string;
+  channelLabel: string;
+  actorKey: string;
+  actorLabel: string;
+  source: string;
+  directLink: string;
 };
 
 export type PostFilters = {
@@ -42,6 +61,9 @@ export type PostFilters = {
   sourceType?: string;
   author?: string;
   q?: string;
+  /** Exact post identity. Not a reader-facing filter: it is how a mutation
+   * re-reads the one post it was asked about. */
+  uniqueId?: string;
 };
 
 export type GetPostsOptions = PostFilters & {
@@ -107,11 +129,16 @@ export async function getPosts(
     sql,
     postRows.map((post) => post.id),
   );
+  const occurrencesByPostId = await getOccurrencesByPostId(
+    sql,
+    postRows.map((post) => post.id),
+  );
 
   return {
     posts: postRows.map((post) => ({
       ...post,
       urls: urlsByPostId.get(post.id) ?? [],
+      occurrences: occurrencesByPostId.get(post.id) ?? [],
     })),
     page,
     pageSize,
@@ -155,7 +182,8 @@ async function getUrlsByPostId(
         position,
         url                AS "originalUrl",
         url_hash           AS "urlHash",
-        unshortened_url    AS "unshortenedUrl"
+        unshortened_url    AS "unshortenedUrl",
+        url_host           AS "urlHost"
       FROM content.post_urls
       WHERE post_id = ANY($1::bigint[])
       ORDER BY post_id ASC, position ASC, post_url_id ASC
@@ -169,12 +197,56 @@ async function getUrlsByPostId(
 
     postUrls.push({
       ...url,
+      urlHost: url.urlHost ?? "",
       href: url.unshortenedUrl ?? url.originalUrl,
     });
     urlsByPostId.set(url.postId, postUrls);
   }
 
   return urlsByPostId;
+}
+
+/**
+ * Every recorded arrival for the given posts. These are what the owner rates:
+ * a card offers its feed or subreddit and the account that posted it, and a
+ * link that arrived twice offers both origins.
+ */
+async function getOccurrencesByPostId(
+  sql: SqlClient,
+  postIds: number[],
+): Promise<Map<number, PostOccurrence[]>> {
+  if (postIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await sql.query<PostOccurrenceRow>(
+    `
+      SELECT
+        occurrence_id::int AS id,
+        post_id::int       AS "postId",
+        source_type        AS "sourceType",
+        channel_key        AS "channelKey",
+        channel_label      AS "channelLabel",
+        actor_key          AS "actorKey",
+        actor_label        AS "actorLabel",
+        source,
+        direct_link        AS "directLink"
+      FROM content.post_occurrences
+      WHERE post_id = ANY($1::bigint[])
+      ORDER BY post_id ASC, first_seen_at ASC, occurrence_id ASC
+    `,
+    [postIds],
+  );
+  const byPostId = new Map<number, PostOccurrence[]>();
+
+  for (const row of rows) {
+    const existing = byPostId.get(row.postId) ?? [];
+
+    existing.push(row);
+    byPostId.set(row.postId, existing);
+  }
+
+  return byPostId;
 }
 
 function buildPostFilterQuery(
@@ -193,6 +265,10 @@ function buildPostFilterQuery(
 
   if (filters.author) {
     clauses.push(`posts.author = ${params.next(filters.author)}`);
+  }
+
+  if (filters.uniqueId) {
+    clauses.push(`posts.unique_id = ${params.next(filters.uniqueId)}`);
   }
 
   if (filters.q) {
@@ -237,8 +313,9 @@ function normalizePostFilters(filters: PostFilters): NormalizedPostFilters {
   const sourceType = normalizeSourceType(filters.sourceType);
   const author = normalizeOptionalText(filters.author);
   const q = normalizeOptionalText(filters.q);
+  const uniqueId = normalizeOptionalText(filters.uniqueId);
 
-  return { source, sourceType, author, q };
+  return { source, sourceType, author, q, uniqueId };
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {

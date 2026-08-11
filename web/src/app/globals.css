@@ -1042,6 +1042,160 @@ a.post-source:hover .post-source-type {
   background: var(--accent-strong);
 }
 
+.owner-entry {
+  margin: 0 0 12px;
+  font-size: 13px;
+  text-align: right;
+}
+
+.owner-entry a {
+  color: var(--muted);
+}
+
+.owner-banner {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.owner-banner p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.owner-banner button {
+  display: inline-flex;
+  min-height: var(--control-height);
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.owner-banner button:hover {
+  border-color: var(--accent);
+}
+
+.post-rating {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.post-rating > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.post-rating-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--subtle);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rating-target-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rating-target {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--subtle);
+}
+
+.rating-target-name {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.rating-target-type {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rating-target-label {
+  overflow: hidden;
+  max-width: 46ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rating-target-score {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.rating-actions button {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rating-actions button:hover {
+  border-color: var(--accent);
+}
+
+/* The current verdict has to be obvious at a glance, and colour alone would
+   not say so to a screen reader, hence aria-pressed carrying the same fact. */
+.rating-good[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.rating-noise[aria-pressed="true"] {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--panel);
+  font-weight: 700;
+}
+
 .state {
   display: grid;
   gap: 8px;

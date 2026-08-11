@@ -35,11 +35,13 @@ const MIGRATIONS = [
   "0001_schemas_and_catalog.sql",
   "0002_content.sql",
   "0004_post_occurrences.sql",
+  "0005_curation_ratings.sql",
 ] as const;
 
 // Truncated between tests to keep each case independent without paying to
 // rebuild the schema. Add to this list when a migration adds a table.
 const ALL_TABLES = [
+  "curation.ratings",
   "content.post_urls",
   "content.post_occurrences",
   "content.posts",
