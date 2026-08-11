@@ -127,7 +127,7 @@ describe("Home", () => {
     expect(byQuery).toContain("AI");
   });
 
-  it("offers owner mode as a link through the protected area, keeping the current view", () => {
+  it("says nothing about owner mode to a visitor who is not the owner", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView
         owner={{ isOwner: false, returnPath: "/?source_type=reddit&page=2" }}
@@ -135,10 +135,10 @@ describe("Home", () => {
       />,
     );
 
-    expect(markup).toContain(
-      'href="/flightdeck/owner?next=%2F%3Fsource_type%3Dreddit%26page%3D2"',
-    );
-    // Nothing that belongs to the owner may render for a visitor who is not one.
+    // The entrance lives inside Flightdeck. The public page does not advertise
+    // it, and nothing that belongs to the owner may render for a visitor.
+    expect(markup).not.toContain("/flightdeck/owner");
+    expect(markup).not.toContain("Owner mode");
     expect(markup).not.toContain("owner-banner");
     expect(markup).not.toContain("Exit owner mode");
   });
