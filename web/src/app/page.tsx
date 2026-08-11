@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { Fragment } from "react";
 
 import { formatRelative } from "../lib/format-relative";
@@ -10,7 +11,9 @@ import type {
   SourceType,
 } from "../models/read-models";
 import { getPosts, type PostFilters } from "../server/db";
+import { OWNER_COOKIE_NAME, isValidOwnerToken } from "../server/owner";
 import { getSqlClient } from "../server/sql";
+import { exitOwnerModeAction } from "./owner-actions";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -37,6 +40,13 @@ type LatestPostsResult =
       status: "error";
     };
 
+type OwnerState = {
+  isOwner: boolean;
+  /** Where "Owner mode" and "Exit owner mode" return to, so a filtered,
+   * paginated view survives the round trip through authentication. */
+  returnPath: string;
+};
+
 const POSTS_PER_PAGE = 50;
 
 const VALID_SOURCE_TYPES: readonly SourceType[] = [
@@ -58,8 +68,17 @@ export default async function Home({ searchParams }: HomeProps = {}) {
   const resolvedSearchParams = await searchParams;
   const page = getPageFromSearchParams(resolvedSearchParams);
   const filters = getFiltersFromSearchParams(resolvedSearchParams);
+  const cookieStore = await cookies();
+  const isOwner = await isValidOwnerToken(
+    cookieStore.get(OWNER_COOKIE_NAME)?.value,
+  );
 
-  return <LatestPostsView result={await loadLatestPosts({ page, filters })} />;
+  return (
+    <LatestPostsView
+      owner={{ isOwner, returnPath: buildPageHref(page, filters) }}
+      result={await loadLatestPosts({ page, filters })}
+    />
+  );
 }
 
 export async function loadLatestPosts({
@@ -104,7 +123,13 @@ export async function loadLatestPosts({
   }
 }
 
-export function LatestPostsView({ result }: { result: LatestPostsResult }) {
+export function LatestPostsView({
+  owner = { isOwner: false, returnPath: "/" },
+  result,
+}: {
+  owner?: OwnerState;
+  result: LatestPostsResult;
+}) {
   if (result.status === "error") {
     return (
       <main className="shell shell-reading">
@@ -122,6 +147,7 @@ export function LatestPostsView({ result }: { result: LatestPostsResult }) {
   return (
     <main className="shell shell-reading">
       <PageHeader filters={result.filters} page={page} />
+      <OwnerBar owner={owner} />
       <FilterBar filters={result.filters} />
       {page.posts.length === 0 ? (
         <EmptyPostsState filters={result.filters} page={page} />
@@ -139,6 +165,36 @@ export function LatestPostsView({ result }: { result: LatestPostsResult }) {
       ) : null}
       <Pagination filters={result.filters} page={page} />
     </main>
+  );
+}
+
+/**
+ * Entering owner mode is a link into the Basic-protected area rather than a
+ * form, so the browser's own credential prompt does the authenticating and no
+ * password is ever typed into a page this app renders.
+ */
+function OwnerBar({ owner }: { owner: OwnerState }) {
+  if (!owner.isOwner) {
+    return (
+      <p className="owner-entry">
+        <Link
+          href={`/flightdeck/owner?next=${encodeURIComponent(owner.returnPath)}`}
+          rel="nofollow"
+        >
+          Owner mode
+        </Link>
+      </p>
+    );
+  }
+
+  return (
+    <section aria-label="Owner mode" className="owner-banner">
+      <p>Owner mode. Ratings you make here are private.</p>
+      <form action={exitOwnerModeAction}>
+        <input name="next" type="hidden" value={owner.returnPath} />
+        <button type="submit">Exit owner mode</button>
+      </form>
+    </section>
   );
 }
 

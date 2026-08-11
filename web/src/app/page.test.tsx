@@ -126,6 +126,44 @@ describe("Home", () => {
     expect(byQuery).toContain("AI");
   });
 
+  it("offers owner mode as a link through the protected area, keeping the current view", () => {
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: false, returnPath: "/?source_type=reddit&page=2" }}
+        result={createReadyResult()}
+      />,
+    );
+
+    expect(markup).toContain(
+      'href="/flightdeck/owner?next=%2F%3Fsource_type%3Dreddit%26page%3D2"',
+    );
+    // Nothing that belongs to the owner may render for a visitor who is not one.
+    expect(markup).not.toContain("owner-banner");
+    expect(markup).not.toContain("Exit owner mode");
+  });
+
+  it("shows the owner banner and a way back out once owner mode is on", () => {
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/?q=AI" }}
+        result={createReadyResult()}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Owner mode"');
+    expect(markup).toContain("Exit owner mode");
+    expect(markup).toContain('value="/?q=AI"');
+    expect(markup).not.toContain("/flightdeck/owner?next=");
+  });
+
+  it("treats a view with no owner state as anonymous", () => {
+    const markup = renderToStaticMarkup(
+      <LatestPostsView result={createReadyResult()} />,
+    );
+
+    expect(markup).not.toContain("owner-banner");
+  });
+
   it("renders an empty state when no posts exist", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView
