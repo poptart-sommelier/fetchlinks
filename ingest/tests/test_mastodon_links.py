@@ -62,6 +62,18 @@ class ParseStatusTests(unittest.TestCase):
         self.assertIn('https://example.com/article', parsed.urls)
         self.assertIn('https://card.example/story', parsed.urls)
 
+    def test_parse_status_keys_the_actor_on_the_canonical_uri(self):
+        """`acct` is only unique on one server and display names are not identity."""
+        status = _status()
+        status['account']['uri'] = 'https://infosec.exchange/users/alice'
+        parsed = mastodon_links._parse_status(
+            status, instance_name='infosec', instance_url='https://infosec.exchange'
+        )
+
+        self.assertEqual(parsed.actor_key, 'https://infosec.exchange/users/alice')
+        self.assertEqual(parsed.actor_label, 'alice')
+        self.assertEqual(parsed.channel_key, 'infosec')
+
     def test_parse_status_skips_when_no_links(self):
         status = _status(url='', card_url='')
         status['content'] = '<p>No links here</p>'

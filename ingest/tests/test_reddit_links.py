@@ -15,6 +15,7 @@ def _make_reddit_post(url, name='t3_abc', post_id='abc', created_utc=4102444800)
         'data': {
             'id': post_id,
             'name': name,
+            'subreddit': 'netsec',
             'subreddit_name_prefixed': 'r/netsec',
             'author': 'someone',
             'title': 'a post',

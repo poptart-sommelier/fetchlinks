@@ -2,8 +2,10 @@
 
 ``pipeline`` is the boundary between collecting data and storing it:
 
-- :mod:`pipeline.contract` defines contract v1, the normalized record types
-  written to disk, backed by the checked-in JSON Schemas in ``schemas/``.
+- :mod:`pipeline.contract` defines the batch contract: the normalized record
+  types written to disk, backed by the checked-in JSON Schemas in ``schemas/``.
+  Versions are immutable, and a publisher reads every version that could still
+  be sitting in a spool.
 - :mod:`pipeline.collection` is what a collection cycle hands back before any
   of it is written down.
 - :mod:`pipeline.catalog` is the snapshot of what to collect, exported by a
@@ -34,6 +36,7 @@ from .contract import (
     KIND_MASTODON_FOLLOWS,
     KIND_POSTS,
     KIND_RSS_OBSERVATIONS,
+    SUPPORTED_CONTRACT_VERSIONS,
     BlueskyFollowRecord,
     CheckpointRecord,
     ContractError,
@@ -76,6 +79,7 @@ __all__ = [
     'PostRecord',
     'RssObservationRecord',
     'RuntimeLayout',
+    'SUPPORTED_CONTRACT_VERSIONS',
     'Spool',
     'SpoolError',
     'StateError',

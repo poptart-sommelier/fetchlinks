@@ -125,6 +125,36 @@ class PostRecordTests(unittest.TestCase):
         document = self._record(source_type='lemmy').to_dict()
         contract.validate_record(contract.KIND_POSTS, document)
 
+    def test_origin_fields_round_trip(self):
+        document = self._record(
+            channel_key='https://feed.example/rss',
+            channel_label='The Feed',
+            actor_key='did:plc:abc123',
+            actor_label='someone.bsky.social',
+        ).to_dict()
+        contract.validate_record(contract.KIND_POSTS, document)
+        restored = PostRecord.from_dict(document)
+        self.assertEqual(restored.channel_key, 'https://feed.example/rss')
+        self.assertEqual(restored.actor_key, 'did:plc:abc123')
+
+    def test_a_version_1_record_still_loads_with_empty_origin_fields(self):
+        """Empty is the truthful reading: the origin existed, unrecorded."""
+        document = self._record().to_dict()
+        for field in ('channel_key', 'channel_label', 'actor_key', 'actor_label'):
+            del document[field]
+        contract.validate_record(contract.KIND_POSTS, document, contract_version=1)
+        restored = PostRecord.from_dict(document)
+        self.assertEqual(restored.channel_key, '')
+        self.assertEqual(restored.actor_key, '')
+
+    def test_origin_fields_are_rejected_by_the_version_1_schema(self):
+        """Version 1 is immutable, so it must not quietly accept version 2."""
+        document = self._record(actor_key='did:plc:abc123').to_dict()
+        with self.assertRaises(ContractError):
+            contract.validate_record(
+                contract.KIND_POSTS, document, contract_version=1
+            )
+
     def test_round_trip_through_a_dict(self):
         original = self._record()
         restored = PostRecord.from_dict(original.to_dict())
@@ -317,11 +347,18 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertIsNone(manifest.entry_for(contract.KIND_CHECKPOINTS))
 
-    def test_future_contract_version_is_rejected_explicitly(self):
+    def test_unsupported_contract_version_is_rejected_explicitly(self):
         document = self._manifest().to_dict()
-        document['contract_version'] = 2
-        with self.assertRaises(ContractError):
+        document['contract_version'] = 99
+        with self.assertRaises(ContractError) as caught:
             Manifest.from_dict(document)
+        self.assertIn('99', str(caught.exception))
+
+    def test_a_superseded_contract_version_is_still_readable(self):
+        """An upgrade must not strand batches already sitting in the spool."""
+        document = self._manifest(contract_version=1).to_dict()
+        restored = Manifest.from_dict(document)
+        self.assertEqual(restored.contract_version, 1)
 
     def test_duplicate_file_entries_are_rejected(self):
         entry = FileEntry('posts.ndjson', contract.KIND_POSTS, 1, 'c' * 64)

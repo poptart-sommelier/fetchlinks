@@ -403,6 +403,11 @@ class ClaimedBatch:
         return manifest
 
     def _iter_validated(self, entry: contract.FileEntry) -> Iterator[dict]:
+        # Validate against the version the batch declares, not the version this
+        # build writes. A batch already in the spool when the collector was
+        # upgraded is still a valid batch, and refusing it would strand data
+        # that was collected correctly.
+        contract_version = self.manifest.contract_version
         path = self.path / entry.name
         with path.open('r', encoding='utf-8', newline='') as handle:
             for number, line in enumerate(handle, start=1):
@@ -414,7 +419,12 @@ class ClaimedBatch:
                 context = f'{entry.name} line {number}'
                 try:
                     record = contract.loads_line(stripped, context=context)
-                    contract.validate_record(entry.kind, record, context=context)
+                    contract.validate_record(
+                        entry.kind,
+                        record,
+                        context=context,
+                        contract_version=contract_version,
+                    )
                 except ContractError as exc:
                     raise BatchValidationError(f'Batch {self.batch_id} {exc}') from exc
                 yield record

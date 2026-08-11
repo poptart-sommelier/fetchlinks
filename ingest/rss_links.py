@@ -121,7 +121,7 @@ def fetch_feeds(feeds, timeout):
 
 def parse_posts(fetch_results):
     posts: list[RssPost] = []
-    for _norm, url, feed, _etag, _lm, _status, _err in fetch_results:
+    for normalized_url, url, feed, _etag, _lm, _status, _err in fetch_results:
         if feed is None:
             continue
         feed_meta = feed.feed if hasattr(feed, 'feed') else {}
@@ -130,14 +130,22 @@ def parse_posts(fetch_results):
         # advertised website -- preferred for posts.source so the UI can
         # group "all posts from this feed" without exposing the feed XML
         # URL. Falls back to `url` (the feed XML URL) when site_link is
-        # not advertised.
+        # not advertised. `normalized_url` is the subscription's own identity,
+        # the same key the catalog and the health table use, and is what a
+        # rating about this feed has to hang off.
         feed_source = feed_meta.get('link') or url
         site_link = pick_site_link(feed)
         author = feed_meta.get('title') or feed_source
 
         for post in feed.entries:
             try:
-                parsed = RssPost(feed_source, author, post, site_link=site_link)
+                parsed = RssPost(
+                    feed_source,
+                    author,
+                    post,
+                    site_link=site_link,
+                    feed_url=normalized_url,
+                )
             except Exception as exc:
                 logger.warning('Skipping malformed entry from %s: %s', url, exc)
                 continue

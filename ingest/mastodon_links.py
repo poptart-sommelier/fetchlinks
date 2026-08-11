@@ -179,7 +179,7 @@ def _fetch_timeline_pages(session: requests.Session, instance_config: MastodonIn
     return statuses
 
 
-def _parse_status(status: dict) -> MastodonPost | None:
+def _parse_status(status: dict, instance_name: str = '', instance_url: str = '') -> MastodonPost | None:
     account = status.get('account') if isinstance(status.get('account'), dict) else {}
     created_at = status.get('created_at')
     status_url = status.get('url') or status.get('uri') or ''
@@ -201,6 +201,16 @@ def _parse_status(status: dict) -> MastodonPost | None:
         direct_link=status_url,
         created_at=created_at,
         urls=links,
+        # The configured instance, not the account's home server: the channel
+        # answers "which timeline did this reach me through", which is the
+        # thing that can be muted.
+        channel_key=instance_name,
+        channel_label=instance_url or instance_name,
+        # `acct` is only unique within one server and `display_name` is not
+        # identity at all, so the account's canonical URI is the only value
+        # here that stays pointing at the same person.
+        actor_key=account.get('uri') or account.get('url') or '',
+        actor_label=account.get('acct') or author,
     )
 
 
@@ -229,7 +239,7 @@ def _run_instance(
     skipped_no_links = 0
     skipped_missing_fields = 0
     for status in statuses:
-        parsed = _parse_status(status)
+        parsed = _parse_status(status, instance_name=source_name, instance_url=instance_url)
         if parsed is None:
             if not status.get('created_at'):
                 skipped_missing_fields += 1

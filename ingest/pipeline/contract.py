@@ -1,4 +1,4 @@
-"""Contract v1: the destination-neutral record types exchanged on disk.
+"""The batch contract: the destination-neutral record types exchanged on disk.
 
 The collector writes batches described by this contract; a publisher reads
 them back and applies them to whatever storage it targets. Nothing in this
@@ -22,9 +22,17 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-# Contract versions are immutable. An incompatible change ships as version 2
-# so a publisher can reject what it does not understand instead of guessing.
-CONTRACT_VERSION = 1
+# Contract versions are immutable. An incompatible change ships as a new
+# version so a publisher can reject what it does not understand instead of
+# guessing.
+#
+# Writing and reading are separate questions. A collector writes exactly one
+# version -- the newest it knows -- while a publisher must go on reading every
+# version that could still be sitting in a spool, because an upgrade does not
+# get to invalidate batches that were collected before it. Dropping a version
+# from the readable set is a decision to abandon whatever is still queued in it.
+CONTRACT_VERSION = 2
+SUPPORTED_CONTRACT_VERSIONS = (1, 2)
 
 SCHEMA_DIR = Path(__file__).resolve().parent / 'schemas'
 
@@ -42,6 +50,10 @@ SNAPSHOT_KINDS = frozenset({KIND_BLUESKY_FOLLOWS, KIND_MASTODON_FOLLOWS})
 # Kinds that are partitioned per instance and therefore need a manifest scope.
 SCOPED_KINDS = frozenset({KIND_MASTODON_FOLLOWS})
 
+# Schemas per contract version. Only the kinds that actually changed are
+# repeated: listing the unchanged ones again would invite a future edit to one
+# copy and not the other, and a kind whose shape is identical across versions
+# is better stated once.
 _SCHEMA_FILE_BY_KIND = {
     KIND_POSTS: 'post.v1.json',
     KIND_RSS_OBSERVATIONS: 'rss-observation.v1.json',
@@ -50,8 +62,16 @@ _SCHEMA_FILE_BY_KIND = {
     KIND_MASTODON_FOLLOWS: 'mastodon-follow.v1.json',
 }
 
+_SCHEMA_OVERRIDES_BY_VERSION = {
+    2: {KIND_POSTS: 'post.v2.json'},
+}
+
 MANIFEST_FILENAME = 'manifest.json'
-MANIFEST_SCHEMA_FILE = 'manifest.v1.json'
+_MANIFEST_SCHEMA_BY_VERSION = {
+    1: 'manifest.v1.json',
+    2: 'manifest.v2.json',
+}
+MANIFEST_SCHEMA_FILE = _MANIFEST_SCHEMA_BY_VERSION[CONTRACT_VERSION]
 COLLECTOR_STATE_SCHEMA_FILE = 'collector-state.v1.json'
 
 _FILENAME_BY_KIND = {
@@ -69,7 +89,7 @@ TIMESTAMP_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
 
 class ContractError(ValueError):
-    """A record, manifest, or state document violates contract v1."""
+    """A record, manifest, or state document violates the batch contract."""
 
 
 # --- schema loading -------------------------------------------------------
@@ -107,9 +127,25 @@ def _validator(schema_file: str) -> Draft202012Validator:
     return validator
 
 
-def schema_file_for_kind(kind: str) -> str:
+def check_contract_version(version: Any) -> int:
+    if version not in SUPPORTED_CONTRACT_VERSIONS:
+        supported = ', '.join(str(v) for v in SUPPORTED_CONTRACT_VERSIONS)
+        raise ContractError(
+            f'Unsupported contract version {version!r}; '
+            f'this build reads version {supported}'
+        )
+    return version
+
+
+def manifest_schema_file_for(contract_version: int = CONTRACT_VERSION) -> str:
+    return _MANIFEST_SCHEMA_BY_VERSION[check_contract_version(contract_version)]
+
+
+def schema_file_for_kind(kind: str, contract_version: int = CONTRACT_VERSION) -> str:
+    check_contract_version(contract_version)
+    overrides = _SCHEMA_OVERRIDES_BY_VERSION.get(contract_version, {})
     try:
-        return _SCHEMA_FILE_BY_KIND[kind]
+        return overrides.get(kind) or _SCHEMA_FILE_BY_KIND[kind]
     except KeyError:
         raise ContractError(f'Unknown record kind {kind!r}') from None
 
@@ -125,8 +161,16 @@ def validate_against(schema_file: str, document: Any, *, context: str = '') -> N
     raise ContractError(f'{where}: {error.message}' if where else error.message)
 
 
-def validate_record(kind: str, record: Mapping[str, Any], *, context: str = '') -> None:
-    validate_against(schema_file_for_kind(kind), record, context=context)
+def validate_record(
+    kind: str,
+    record: Mapping[str, Any],
+    *,
+    context: str = '',
+    contract_version: int = CONTRACT_VERSION,
+) -> None:
+    validate_against(
+        schema_file_for_kind(kind, contract_version), record, context=context
+    )
 
 
 # --- naming ---------------------------------------------------------------
@@ -232,7 +276,18 @@ def _clean_optional(value: Any) -> str | None:
 
 @dataclass(frozen=True)
 class PostRecord:
-    """A post carrying external URLs, free of any storage-assigned identity."""
+    """A post carrying external URLs, free of any storage-assigned identity.
+
+    ``channel_key`` and ``actor_key`` identify the origin this particular
+    arrival came from. They matter because ``unique_id`` deliberately does not:
+    it is a digest of the URL set, so two accounts linking the same article
+    produce one post identity and two origins, and only these fields can tell
+    the publisher that the second arrival was not simply a duplicate.
+
+    Keys must be the most rename-proof identifier a source offers. Labels are
+    for display and nothing else -- a rating attached to a display name would
+    silently move to whoever adopted that name next.
+    """
 
     unique_id: str
     source: str
@@ -242,6 +297,10 @@ class PostRecord:
     author: str = ''
     description: str = ''
     direct_link: str = ''
+    channel_key: str = ''
+    channel_label: str = ''
+    actor_key: str = ''
+    actor_label: str = ''
 
     def to_dict(self) -> dict:
         return {
@@ -252,11 +311,18 @@ class PostRecord:
             'description': _clean_text(self.description),
             'direct_link': _clean_text(self.direct_link),
             'posted_at': to_timestamp(self.posted_at),
+            'channel_key': _clean_text(self.channel_key),
+            'channel_label': _clean_text(self.channel_label),
+            'actor_key': _clean_text(self.actor_key),
+            'actor_label': _clean_text(self.actor_label),
             'urls': list(self.urls),
         }
 
     @classmethod
     def from_dict(cls, record: Mapping[str, Any]) -> 'PostRecord':
+        # The origin fields default to empty so a version 1 record still loads.
+        # Empty is the truthful reading of one: the origin existed, the
+        # collector of the day simply did not write down what it was.
         return cls(
             unique_id=record['unique_id'],
             source=record['source'],
@@ -266,6 +332,10 @@ class PostRecord:
             author=record.get('author', ''),
             description=record.get('description', ''),
             direct_link=record.get('direct_link', ''),
+            channel_key=record.get('channel_key', ''),
+            channel_label=record.get('channel_label', ''),
+            actor_key=record.get('actor_key', ''),
+            actor_label=record.get('actor_label', ''),
         )
 
 
@@ -466,7 +536,14 @@ class Manifest:
 
     @classmethod
     def from_dict(cls, document: Mapping[str, Any]) -> 'Manifest':
-        validate_against(MANIFEST_SCHEMA_FILE, document, context=MANIFEST_FILENAME)
+        # The version selects the schema, so it has to be read before the
+        # document can be validated. Checking it first also turns a batch from
+        # some future build into one clear message rather than a pile of
+        # schema errors about a const that does not match.
+        version = check_contract_version(document.get('contract_version'))
+        validate_against(
+            manifest_schema_file_for(version), document, context=MANIFEST_FILENAME
+        )
         manifest = cls(
             batch_id=document['batch_id'],
             created_at=document['created_at'],
@@ -474,18 +551,14 @@ class Manifest:
             collector_commit=document.get('collector_commit'),
             catalog_revision=document.get('catalog_revision'),
             files=tuple(FileEntry.from_dict(entry) for entry in document['files']),
-            contract_version=document['contract_version'],
+            contract_version=version,
         )
         manifest.check_consistency()
         return manifest
 
     def check_consistency(self) -> None:
         """Enforce the cross-field rules JSON Schema cannot express."""
-        if self.contract_version != CONTRACT_VERSION:
-            raise ContractError(
-                f'Unsupported contract version {self.contract_version}; '
-                f'this build understands version {CONTRACT_VERSION}'
-            )
+        check_contract_version(self.contract_version)
         seen = set()
         for entry in self.files:
             if entry.name in seen:

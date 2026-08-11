@@ -58,7 +58,7 @@ class DiscoveryTests(unittest.TestCase):
         # Guards the path arithmetic in default_migrations_dir, which is easy
         # to break by moving the package and hard to notice until deployment.
         versions = [m.version for m in discover(default_migrations_dir())]
-        self.assertEqual(versions[:3], ['0001', '0002', '0003'])
+        self.assertEqual(versions[:4], ['0001', '0002', '0003', '0004'])
 
 
 class MigrationRunTests(PostgresTestCase):
@@ -153,6 +153,7 @@ class ShippedSchemaTests(PostgresTestCase):
             ('catalog', 'subreddits'),
             ('content', 'posts'),
             ('content', 'post_urls'),
+            ('content', 'post_occurrences'),
             ('content', 'rss_feed_health'),
             ('content', 'reddit_state'),
             ('content', 'bluesky_state'),

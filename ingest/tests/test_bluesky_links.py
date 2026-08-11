@@ -49,6 +49,30 @@ class BlueskyLinksTests(unittest.TestCase):
         self.assertIn('https://embed.example/two', parsed.urls)
         self.assertIn('https://example.org/article', parsed.urls)
 
+    def test_parse_feed_item_keys_the_actor_on_the_did_not_the_handle(self):
+        """Handles are rented domain names; a rating must not follow one."""
+        item = {
+            'post': {
+                'uri': 'at://did:plc:alice/app.bsky.feed.post/xyz123',
+                'author': {
+                    'handle': 'alice.bsky.social',
+                    'displayName': 'Alice',
+                    'did': 'did:plc:alice',
+                },
+                'record': {
+                    'text': 'Read https://example.org/article',
+                    'createdAt': '2026-04-19T12:00:00.000Z',
+                },
+            }
+        }
+
+        parsed = bluesky_links._parse_feed_item(item)
+
+        self.assertEqual(parsed.actor_key, 'did:plc:alice')
+        self.assertEqual(parsed.actor_label, 'alice.bsky.social')
+        # One timeline, so there is no channel to distinguish.
+        self.assertEqual(parsed.channel_key, '')
+
     def test_bluesky_cursor_round_trip(self):
         """The timeline resume point now lives in local collector state."""
         with tempfile.TemporaryDirectory() as tmp_dir:

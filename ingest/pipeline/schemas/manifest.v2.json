@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/manifest.v2.json",
+  "title": "Fetchlinks batch manifest (contract v2)",
+  "description": "Identical to version 1 except for the version number itself. It exists because the version is what tells a publisher which post schema to validate against, and version 1 pins that number with a const. The file entry definition is referenced from version 1 rather than copied, so the two cannot drift; version 1's own file stays untouched, as an immutable contract version must.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "batch_id",
+    "created_at",
+    "collector_version",
+    "collector_commit",
+    "catalog_revision",
+    "files"
+  ],
+  "properties": {
+    "contract_version": {
+      "description": "Immutable contract version. Version 2 adds origin identity to post records; every other kind is unchanged from version 1.",
+      "type": "integer",
+      "const": 2
+    },
+    "batch_id": {
+      "description": "Lexicographically sortable, time-ordered batch identifier so FIFO ordering is a plain name sort.",
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{12}Z-[0-9a-f]{8}$"
+    },
+    "created_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "collector_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "collector_commit": {
+      "type": ["string", "null"]
+    },
+    "catalog_revision": {
+      "description": "Revision of the catalog snapshot the collector read, or null when it ran without one.",
+      "type": ["string", "null"]
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "https://fetchlinks.local/schemas/manifest.v1.json#/$defs/fileEntry"
+      }
+    }
+  }
+}

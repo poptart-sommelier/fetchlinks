@@ -117,6 +117,15 @@ class Post:
         self.date_created = ''
         self.urls: List[str] = []
         self.unique_id_string = ''
+        # Where this arrival came from, kept apart from `source` and `author`
+        # because those are display text. A key has to survive a rename, since
+        # it is what a rating about a source will be attached to; a label does
+        # not. Empty means the source has no such dimension -- an RSS feed has
+        # no author, the Bluesky timeline has no channel.
+        self.channel_key = ''
+        self.channel_label = ''
+        self.actor_key = ''
+        self.actor_label = ''
 
     def add_url(self, url: str, base: str = ''):
         cleaned = normalize_url(url, base)
@@ -151,15 +160,23 @@ class Post:
             direct_link=self.direct_link,
             posted_at=clamp_date_not_in_future(self.date_created),
             urls=list(self.urls),
+            channel_key=self.channel_key,
+            channel_label=self.channel_label,
+            actor_key=self.actor_key,
+            actor_label=self.actor_label,
         )
 
 
 class RssPost(Post):
-    def __init__(self, feed_source, feed_author, post, site_link=None):
+    def __init__(self, feed_source, feed_author, post, site_link=None, feed_url=None):
         super().__init__()
-        self.extract_data_from_post(feed_source, feed_author, post, site_link)
+        self.extract_data_from_post(
+            feed_source, feed_author, post, site_link=site_link, feed_url=feed_url
+        )
 
-    def extract_data_from_post(self, feed_source, feed_author, post, site_link=None):
+    def extract_data_from_post(
+        self, feed_source, feed_author, post, site_link=None, feed_url=None
+    ):
         # Prefer the feed's advertised website (site_link) as the post's
         # source so the public UI can link "all posts from this feed"
         # without exposing the feed XML URL. Fall back to the feed URL
@@ -169,6 +186,15 @@ class RssPost(Post):
         self.author = feed_author
         self.description = post.get('title', '')
         self.direct_link = ''
+        # The channel is the feed's own normalized URL, which is what the
+        # catalog and the health table key on, and not the advertised website:
+        # two feeds can advertise the same site, and a site can change its
+        # advertised link without becoming a different subscription.
+        self.channel_key = feed_url or ''
+        self.channel_label = feed_author or ''
+        # A feed has no author. `feed_author` is the channel's title, not a
+        # person, so leaving the actor empty is the honest answer rather than
+        # inventing a second name for the same thing.
         # Resolve relative <link> values against the feed's site URL.
         self.add_url(post.get('link', ''), base=feed_source)
 
@@ -196,6 +222,15 @@ class RedditPost(Post):
         self.description = post['data']['title']
         self.direct_link = f'https://www.reddit.com{post["data"]["permalink"]}'
         self.date_created = convert_epoch_to_mysql(post['data']['created_utc'])
+        # Reddit is the one source whose display fields are already identities:
+        # a subreddit cannot be renamed and `author` is the account name, not a
+        # nickname. Lower-cased for the keys only, because subreddit and
+        # username references are case-insensitive and the same target must not
+        # end up rated twice under two spellings.
+        self.channel_key = str(post['data'].get('subreddit') or '').lower()
+        self.channel_label = post['data'].get('subreddit_name_prefixed') or ''
+        self.actor_key = str(self.author or '').lower()
+        self.actor_label = self.author
 
     def _extract_urls(self, post):
         if post['data'].get('url'):
@@ -208,7 +243,7 @@ class RedditPost(Post):
 
 
 class BlueskyPost(Post):
-    def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str]):
+    def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str], actor_key: str = '', actor_label: str = ''):
         super().__init__()
         self.source = source
         self.source_type = 'bluesky'
@@ -216,13 +251,19 @@ class BlueskyPost(Post):
         self.description = description
         self.direct_link = direct_link
         self.date_created = convert_date_string_for_mysql(created_at)
+        # The DID, not the handle: handles are rented domain names that change
+        # hands, and a rating that followed a handle would end up attached to
+        # whoever took it over. There is no channel -- everything comes from the
+        # one timeline.
+        self.actor_key = actor_key
+        self.actor_label = actor_label or author
         for url in urls:
             self.add_url(url)
         self._generate_unique_url_string()
 
 
 class MastodonPost(Post):
-    def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str]):
+    def __init__(self, source: str, author: str, description: str, direct_link: str, created_at: str, urls: List[str], channel_key: str = '', channel_label: str = '', actor_key: str = '', actor_label: str = ''):
         super().__init__()
         self.source = source
         self.source_type = 'mastodon'
@@ -230,6 +271,14 @@ class MastodonPost(Post):
         self.description = description
         self.direct_link = direct_link
         self.date_created = convert_date_string_for_mysql(created_at)
+        # The channel is the configured instance the timeline was read from;
+        # the actor key is the account's canonical URI, which is stable across
+        # display-name changes and unambiguous for accounts followed from a
+        # remote server.
+        self.channel_key = channel_key
+        self.channel_label = channel_label or channel_key
+        self.actor_key = actor_key
+        self.actor_label = actor_label or author
         for url in urls:
             self.add_url(url)
         self._generate_unique_url_string()
