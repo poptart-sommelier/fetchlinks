@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { PostPage } from "../models/read-models";
+import { ratingTargetsFor } from "../server/rating-targets";
 import { LatestPostsView, loadLatestPosts } from "./page";
 
 describe("Home", () => {
@@ -164,6 +165,52 @@ describe("Home", () => {
     expect(markup).not.toContain("owner-banner");
   });
 
+  it("shows rating controls only in owner mode, with what is already rated", () => {
+    const post = createPostPage().posts[0];
+    const targets = ratingTargetsFor(post);
+    const rated = targets.find((target) => target.type === "actor");
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        ratingsByPostId={
+          new Map([
+            [
+              post.id,
+              {
+                targets,
+                verdicts: new Map([
+                  [`${rated?.type}\u001f${rated?.key}`, "noise" as const],
+                ]),
+                scores: new Map(),
+              },
+            ],
+          ])
+        }
+        result={createReadyResult()}
+      />,
+    );
+
+    expect(markup).toContain("post-rating");
+    expect(markup).toContain("r/test");
+    expect(markup).toContain("example.com");
+    // The recorded verdict has to be visible without relying on colour alone.
+    expect(markup).toContain('aria-pressed="true" class="rating-noise"');
+    // Clearing is only offered where there is something to clear.
+    expect(markup).toContain("Clear");
+    expect(markup).toContain('value="reddit-2"');
+  });
+
+  it("shows no rating controls to an anonymous visitor", () => {
+    const markup = renderToStaticMarkup(
+      <LatestPostsView result={createReadyResult()} />,
+    );
+
+    expect(markup).not.toContain("post-rating");
+    expect(markup).not.toContain("Noise");
+    // Nothing about the owner's judgments may reach a page they did not ask for.
+    expect(markup).not.toContain("rating-target");
+  });
+
   it("renders an empty state when no posts exist", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView
@@ -242,6 +289,19 @@ function createPostPage(overrides: Partial<PostPage> = {}): PostPage {
         directLink: "https://example.com/source-post",
         dateCreated: "2026-04-28T10:00:00Z",
         uniqueId: "reddit-2",
+        occurrences: [
+          {
+            id: 1,
+            postId: 2,
+            sourceType: "reddit",
+            channelKey: "test",
+            channelLabel: "r/test",
+            actorKey: "grace",
+            actorLabel: "Grace",
+            source: "https://www.reddit.com/r/test",
+            directLink: "https://example.com/source-post",
+          },
+        ],
         urls: [
           {
             id: 3,
@@ -250,6 +310,7 @@ function createPostPage(overrides: Partial<PostPage> = {}): PostPage {
             originalUrl: "https://example.com/direct-b",
             urlHash: "hash-b0",
             unshortenedUrl: null,
+            urlHost: "example.com",
             href: "https://example.com/direct-b",
           },
           {
@@ -259,6 +320,7 @@ function createPostPage(overrides: Partial<PostPage> = {}): PostPage {
             originalUrl: "https://short.example/b",
             urlHash: "hash-b1",
             unshortenedUrl: "https://example.com/unshortened-b",
+            urlHost: "example.com",
             href: "https://example.com/unshortened-b",
           },
         ],
@@ -284,6 +346,19 @@ function createRssPost(): PostPage["posts"][number] {
     directLink: "https://example.com/post-1",
     dateCreated: "2026-04-27T10:00:00Z",
     uniqueId: "rss-1",
+    occurrences: [
+      {
+        id: 2,
+        postId: 1,
+        sourceType: "rss",
+        channelKey: "https://example.com/blog",
+        channelLabel: "Ada",
+        actorKey: "",
+        actorLabel: "",
+        source: "https://example.com/blog",
+        directLink: "https://example.com/post-1",
+      },
+    ],
     urls: [
       {
         id: 1,
@@ -292,6 +367,7 @@ function createRssPost(): PostPage["posts"][number] {
         originalUrl: "https://example.com/a",
         urlHash: "hash-a",
         unshortenedUrl: null,
+        urlHost: "example.com",
         href: "https://example.com/a",
       },
     ],

@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import type {
+  PostOccurrence,
   PostPage,
   PostSummary,
   PostUrl,
@@ -16,8 +17,21 @@ describe("read models", () => {
       originalUrl: "https://short.example/a",
       urlHash: "hash-a",
       unshortenedUrl: "https://example.com/a",
+      urlHost: "example.com",
       href: "https://example.com/a",
     } satisfies PostUrl;
+
+    const occurrence = {
+      id: 5,
+      postId: 1,
+      sourceType: "rss",
+      channelKey: "https://example.com/feed",
+      channelLabel: "Example",
+      actorKey: "",
+      actorLabel: "",
+      source: "https://example.com/feed",
+      directLink: "https://example.com/post",
+    } satisfies PostOccurrence;
 
     const post = {
       id: 1,
@@ -29,10 +43,15 @@ describe("read models", () => {
       dateCreated: "2026-04-28T12:00:00Z",
       uniqueId: "rss-1",
       urls: [url],
+      occurrences: [occurrence],
     } satisfies PostSummary;
 
     expect(post.urls[0]?.href).toBe("https://example.com/a");
+    expect(post.occurrences[0]?.channelKey).toBe("https://example.com/feed");
     expectTypeOf<PostSummary["urls"][number]>().toEqualTypeOf<PostUrl>();
+    expectTypeOf<
+      PostSummary["occurrences"][number]
+    >().toEqualTypeOf<PostOccurrence>();
     expectTypeOf<PostUrl["unshortenedUrl"]>().toEqualTypeOf<string | null>();
     expectTypeOf<PostSummary["sourceType"]>().toEqualTypeOf<SourceType | null>();
   });

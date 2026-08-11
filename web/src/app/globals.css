@@ -1089,6 +1089,113 @@ a.post-source:hover .post-source-type {
   border-color: var(--accent);
 }
 
+.post-rating {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.post-rating > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.post-rating-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--subtle);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rating-target-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rating-target {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--subtle);
+}
+
+.rating-target-name {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.rating-target-type {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rating-target-label {
+  overflow: hidden;
+  max-width: 46ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rating-target-score {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.rating-actions button {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rating-actions button:hover {
+  border-color: var(--accent);
+}
+
+/* The current verdict has to be obvious at a glance, and colour alone would
+   not say so to a screen reader, hence aria-pressed carrying the same fact. */
+.rating-good[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.rating-noise[aria-pressed="true"] {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--panel);
+  font-weight: 700;
+}
+
 .state {
   display: grid;
   gap: 8px;
