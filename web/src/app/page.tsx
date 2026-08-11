@@ -243,22 +243,13 @@ export function LatestPostsView({
 }
 
 /**
- * Entering owner mode is a link into the Basic-protected area rather than a
- * form, so the browser's own credential prompt does the authenticating and no
- * password is ever typed into a page this app renders.
+ * Owner mode is entered from Flightdeck, not from here. The public page shows
+ * nothing about it: a visitor has no use for the link, and advertising the
+ * curator's entrance on every page view is noise at best.
  */
 function OwnerBar({ owner }: { owner: OwnerState }) {
   if (!owner.isOwner) {
-    return (
-      <p className="owner-entry">
-        <Link
-          href={`/flightdeck/owner?next=${encodeURIComponent(owner.returnPath)}`}
-          rel="nofollow"
-        >
-          Owner mode
-        </Link>
-      </p>
-    );
+    return null;
   }
 
   return (

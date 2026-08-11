@@ -34,6 +34,13 @@ const SECTIONS: AdminSection[] = [
     description: "Read-only view of the accounts each instance follows.",
     status: "available",
   },
+  {
+    href: "/flightdeck/owner?next=%2F",
+    title: "Owner mode",
+    description:
+      "Rate sources as Good or Noise from the main feed. Lasts a week.",
+    status: "available",
+  },
 ];
 
 export default function AdminIndexPage() {

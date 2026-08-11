@@ -1042,16 +1042,6 @@ a.post-source:hover .post-source-type {
   background: var(--accent-strong);
 }
 
-.owner-entry {
-  margin: 0 0 12px;
-  font-size: 13px;
-  text-align: right;
-}
-
-.owner-entry a {
-  color: var(--muted);
-}
-
 .owner-banner {
   display: flex;
   gap: 12px;
