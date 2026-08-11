@@ -46,6 +46,7 @@ class PublishOutcome:
     record_count: int = 0
     posts_inserted: int = 0
     posts_skipped: int = 0
+    occurrences_applied: int = 0
     urls_inserted: int = 0
     observations_applied: int = 0
     checkpoints_applied: int = 0
@@ -58,6 +59,7 @@ class PublishOutcome:
             return f'{self.batch_id}: already published, nothing applied'
         parts = [
             f'{self.posts_inserted} posts (+{self.urls_inserted} urls)',
+            f'{self.occurrences_applied} occurrences',
             f'{self.observations_applied} rss observations',
             f'{self.checkpoints_applied} checkpoints',
             f'{len(self.follows_replaced)} follows snapshots',
@@ -118,8 +120,32 @@ VALUES (%s, %s, %s, %s)
 ON CONFLICT DO NOTHING
 """
 
+# Resolving the post by `unique_id` inside the statement rather than looking it
+# up first is what keeps this cheap: a batch is mostly articles that are already
+# stored, and a per-duplicate SELECT would add a network round trip each for the
+# thousand-odd repeats in a normal cycle.
+#
+# On conflict it refreshes the labels and nothing else. Labels are display text
+# and go stale when someone renames themselves; the keys, the permalink and the
+# time this origin posted are properties of an arrival that already happened and
+# must not be rewritten by a replay.
+_INSERT_OCCURRENCE = """
+INSERT INTO content.post_occurrences
+    (post_id, source_type, channel_key, actor_key,
+     channel_label, actor_label, source, direct_link, posted_at)
+SELECT p.post_id, %(source_type)s, %(channel_key)s, %(actor_key)s,
+       %(channel_label)s, %(actor_label)s, %(source)s, %(direct_link)s,
+       %(posted_at)s
+  FROM content.posts p
+ WHERE p.unique_id = %(unique_id)s
+ON CONFLICT ON CONSTRAINT post_occurrences_identity DO UPDATE SET
+    channel_label = EXCLUDED.channel_label,
+    actor_label   = EXCLUDED.actor_label
+"""
+
 
 def _apply_posts(cur, claimed, outcome: PublishOutcome) -> None:
+    occurrences = []
     for record in claimed.records(contract.KIND_POSTS):
         cur.execute(_INSERT_POST, (
             record['unique_id'],
@@ -131,6 +157,25 @@ def _apply_posts(cur, claimed, outcome: PublishOutcome) -> None:
             _timestamp(record['posted_at']),
         ))
         row = cur.fetchone()
+
+        # Whether or not the post row is new, the arrival is real and gets an
+        # occurrence. This is the point of the exercise: a post's identity is
+        # its URL set, so an article that a feed published and a Reddit user
+        # then linked is one post and two origins, and the second origin used
+        # to be thrown away here. Discarding it made the site correct and the
+        # question "is this source worth keeping" unanswerable.
+        occurrences.append({
+            'unique_id': record['unique_id'],
+            'source_type': record['source_type'],
+            'channel_key': record.get('channel_key') or '',
+            'channel_label': record.get('channel_label') or '',
+            'actor_key': record.get('actor_key') or '',
+            'actor_label': record.get('actor_label') or '',
+            'source': record.get('source') or '',
+            'direct_link': record.get('direct_link') or '',
+            'posted_at': _timestamp(record['posted_at']),
+        })
+
         if row is None:
             # The post is already stored. Its URL rows are left alone: the
             # contract's identity is the URL set, so re-deriving them could
@@ -152,6 +197,10 @@ def _apply_posts(cur, claimed, outcome: PublishOutcome) -> None:
         if url_rows:
             cur.executemany(_INSERT_URL, url_rows)
             outcome.urls_inserted += max(cur.rowcount, 0)
+
+    if occurrences:
+        cur.executemany(_INSERT_OCCURRENCE, occurrences)
+        outcome.occurrences_applied = len(occurrences)
 
 
 # --- rss health ------------------------------------------------------------

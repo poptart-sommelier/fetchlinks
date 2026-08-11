@@ -40,6 +40,7 @@ TEST_ROLE_PASSWORD = 'test-only-password'
 
 _ALL_TABLES = (
     'content.post_urls',
+    'content.post_occurrences',
     'content.posts',
     'content.rss_feed_health',
     'content.reddit_state',

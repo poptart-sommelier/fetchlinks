@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/post.v2.json",
+  "title": "Fetchlinks post record (contract v2)",
+  "description": "Version 1 plus the identity of the origin that carried the post. A post's unique_id is a digest of its URL set, so the same article legitimately arrives more than once from different places; these four fields are what tells those arrivals apart. Version 1 remains valid and readable -- this is an addition, not a correction.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unique_id",
+    "source",
+    "source_type",
+    "author",
+    "description",
+    "direct_link",
+    "posted_at",
+    "urls",
+    "channel_key",
+    "channel_label",
+    "actor_key",
+    "actor_label"
+  ],
+  "properties": {
+    "unique_id": {
+      "description": "Natural deduplication key derived from the post's sorted URLs.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "source": {
+      "description": "Human-meaningful origin of the post, e.g. a site or subreddit URL.",
+      "type": "string",
+      "minLength": 1
+    },
+    "source_type": {
+      "description": "Collector that produced the record. A free-form lowercase token so a new source needs no contract change.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 32
+    },
+    "author": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "direct_link": {
+      "description": "Permalink to the post itself. Empty when the source has no distinct permalink.",
+      "type": "string"
+    },
+    "posted_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "channel_key": {
+      "description": "Stable identity of the place the post appeared: the feed's own URL, the subreddit name, the Mastodon instance. Must survive a rename of anything cosmetic, because ratings are attached to it. Empty when the source has no such dimension, as with the Bluesky timeline.",
+      "type": "string",
+      "maxLength": 512
+    },
+    "channel_label": {
+      "description": "Display name for the channel. Never used as identity.",
+      "type": "string",
+      "maxLength": 512
+    },
+    "actor_key": {
+      "description": "Stable identity of the account that posted: a Bluesky DID, a Mastodon account URI, a Reddit username. Deliberately not a display name, which is renameable. Empty when the source has no author, as with an RSS feed.",
+      "type": "string",
+      "maxLength": 512
+    },
+    "actor_label": {
+      "description": "Display name for the actor. Never used as identity.",
+      "type": "string",
+      "maxLength": 512
+    },
+    "urls": {
+      "description": "External URLs in collection order. Array position is the authoritative ordering.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^https?://",
+        "minLength": 1
+      }
+    }
+  }
+}

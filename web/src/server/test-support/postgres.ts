@@ -31,12 +31,17 @@ export const describePostgres = TEST_DATABASE_URL ? describe : describe.skip;
 // 0003 (roles and grants) is deliberately not applied. These suites connect as
 // the owner to arrange publisher-written rows; the web role's privileges are
 // asserted by the publisher's own permission tests against the same migration.
-const MIGRATIONS = ["0001_schemas_and_catalog.sql", "0002_content.sql"] as const;
+const MIGRATIONS = [
+  "0001_schemas_and_catalog.sql",
+  "0002_content.sql",
+  "0004_post_occurrences.sql",
+] as const;
 
 // Truncated between tests to keep each case independent without paying to
 // rebuild the schema. Add to this list when a migration adds a table.
 const ALL_TABLES = [
   "content.post_urls",
+  "content.post_occurrences",
   "content.posts",
   "content.rss_feed_health",
   "content.reddit_state",

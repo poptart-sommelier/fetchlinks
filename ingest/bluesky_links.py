@@ -148,6 +148,10 @@ def _parse_feed_item(item: Dict[str, Any]) -> Optional[BlueskyPost]:
         direct_link=_build_direct_link(author, post),
         created_at=created_at,
         urls=external_links,
+        # The DID is Bluesky's permanent account identifier; the handle is a
+        # domain name that can be changed or transferred to someone else.
+        actor_key=author.get('did') or '',
+        actor_label=author.get('handle') or author_name,
     )
 
 

@@ -40,6 +40,11 @@ class RolePermissionTests(PostgresTestCase):
         self.assertAllowed(conn, 'SELECT count(*) FROM content.posts')
         self.assertAllowed(conn, 'SELECT count(*) FROM content.rss_feed_health')
         self.assertAllowed(conn, 'SELECT count(*) FROM catalog.rss_feeds')
+        # A table added by a later migration than the one granting privileges.
+        # It is covered by ALTER DEFAULT PRIVILEGES rather than by a grant of
+        # its own, and that only holds while every migration runs as the same
+        # role -- a condition nothing else would notice breaking.
+        self.assertAllowed(conn, 'SELECT count(*) FROM content.post_occurrences')
 
     def test_web_can_curate_the_catalog(self):
         conn = self.as_role('fetchlinks_web')
@@ -61,6 +66,7 @@ class RolePermissionTests(PostgresTestCase):
         )
         self.assertDenied(conn, 'DELETE FROM content.posts')
         self.assertDenied(conn, 'UPDATE content.rss_feed_health SET last_status = 200')
+        self.assertDenied(conn, 'DELETE FROM content.post_occurrences')
 
     def test_web_cannot_hard_delete_catalog_entries(self):
         # Removal is a soft delete, and the grant is what enforces it.
@@ -77,6 +83,7 @@ class RolePermissionTests(PostgresTestCase):
             "VALUES ('x', 'rss', now())",
         )
         self.assertAllowed(conn, 'DELETE FROM content.bluesky_follows')
+        self.assertAllowed(conn, 'DELETE FROM content.post_occurrences')
         self.assertAllowed(conn, 'DELETE FROM content.posts')
 
     def test_publisher_can_read_but_not_change_the_catalog(self):

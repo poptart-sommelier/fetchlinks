@@ -27,6 +27,7 @@ class _RssEntry(dict):
 
 def _make_reddit_post(url, **overrides):
     data = {
+        'subreddit': 'netsec',
         'subreddit_name_prefixed': 'r/netsec',
         'author': 'someone',
         'title': 'a post',
@@ -36,6 +37,46 @@ def _make_reddit_post(url, **overrides):
     }
     data.update(overrides)
     return {'data': data}
+
+
+class PostOriginTests(unittest.TestCase):
+    """Each source records an identity that survives a rename."""
+
+    def test_reddit_keys_are_case_folded(self):
+        post = RedditPost(_make_reddit_post(
+            'https://example.com/a',
+            subreddit='NetSec',
+            subreddit_name_prefixed='r/NetSec',
+            author='SomeOne',
+        ))
+        # Subreddit and username references are case-insensitive, so the same
+        # target must not end up rated twice under two spellings.
+        self.assertEqual(post.channel_key, 'netsec')
+        self.assertEqual(post.channel_label, 'r/NetSec')
+        self.assertEqual(post.actor_key, 'someone')
+        self.assertEqual(post.actor_label, 'SomeOne')
+
+    def test_rss_channel_is_the_feed_url_not_the_advertised_site(self):
+        entry = _RssEntry({'title': 'A post', 'link': 'https://example.com/a'})
+        post = RssPost(
+            'https://site.example',
+            'The Feed',
+            entry,
+            site_link='https://site.example',
+            feed_url='https://site.example/rss.xml',
+        )
+        # Two feeds can advertise the same website, and a website can change
+        # its advertised link without becoming a different subscription.
+        self.assertEqual(post.channel_key, 'https://site.example/rss.xml')
+        self.assertEqual(post.channel_label, 'The Feed')
+        # A feed title is not a person, so there is no actor to name.
+        self.assertEqual(post.actor_key, '')
+
+    def test_origin_reaches_the_contract_record(self):
+        post = RedditPost(_make_reddit_post('https://example.com/a'))
+        record = post.to_record()
+        self.assertEqual(record.channel_key, 'netsec')
+        self.assertEqual(record.actor_key, 'someone')
 
 
 class BuildHashTests(unittest.TestCase):
@@ -334,8 +375,9 @@ class PostToRecordTests(unittest.TestCase):
         self.assertNotIn('url_hash', document)
         self.assertNotIn('position', document)
         self.assertEqual(sorted(document), [
-            'author', 'description', 'direct_link', 'posted_at', 'source',
-            'source_type', 'unique_id', 'urls',
+            'actor_key', 'actor_label', 'author', 'channel_key',
+            'channel_label', 'description', 'direct_link', 'posted_at',
+            'source', 'source_type', 'unique_id', 'urls',
         ])
 
     def test_clamps_a_future_date_the_same_way_the_row_does(self):

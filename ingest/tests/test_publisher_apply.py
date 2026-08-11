@@ -6,6 +6,8 @@ the suite at one.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +72,39 @@ def checkpoint(**kwargs):
     )
     fields.update(kwargs)
     return CheckpointRecord(**fields)
+
+
+def _downgrade_batch_to_v1(path: Path) -> None:
+    """Rewrite a ready batch as the previous contract version.
+
+    The collector can only write the newest version, so a batch left over from
+    before an upgrade has to be manufactured. Doing it by editing a real batch
+    rather than hand-writing files means the checksums, counts and manifest
+    rules are all still the genuine ones.
+    """
+    from pipeline import contract
+
+    posts = path / 'posts.ndjson'
+    lines = [
+        contract.dumps_line({
+            key: value for key, value in contract.loads_line(line).items()
+            if key not in ('channel_key', 'channel_label',
+                           'actor_key', 'actor_label')
+        })
+        for line in posts.read_text(encoding='utf-8').splitlines()
+    ]
+    body = ''.join(f'{line}\n' for line in lines)
+    posts.write_text(body, encoding='utf-8', newline='')
+
+    manifest_path = path / contract.MANIFEST_FILENAME
+    document = json.loads(manifest_path.read_text(encoding='utf-8'))
+    document['contract_version'] = 1
+    for entry in document['files']:
+        if entry['name'] == 'posts.ndjson':
+            entry['sha256'] = hashlib.sha256(body.encode('utf-8')).hexdigest()
+    manifest_path.write_text(
+        contract.dumps_document(document), encoding='utf-8', newline=''
+    )
 
 
 class BatchBuilderMixin:
@@ -170,6 +205,138 @@ class PostPublishTests(BatchBuilderMixin, PostgresTestCase):
             self.queue(posts=[post(urls=('https://a.example/1',
                                          'https://a.example/1'))])
 
+    def test_url_host_is_derived_and_normalized(self):
+        self.queue(posts=[post(urls=(
+            'https://WWW.Example.com:8443/a?x=1#f',
+            'https://blog.example.com/b',
+        ))])
+        self.publish_next()
+        hosts = [row[0] for row in self.rows(
+            'SELECT url_host FROM content.post_urls ORDER BY position'
+        )]
+        # `www.` goes, the port and path go, and nothing else does: collapsing
+        # other subdomains would merge distinct publishers into one target.
+        self.assertEqual(hosts, ['example.com', 'blog.example.com'])
+
+    def test_url_host_follows_an_unshortened_url_once_resolved(self):
+        self.queue(posts=[post(urls=('https://bit.ly/abc',))])
+        self.publish_next()
+        self.assertEqual(
+            self.scalar('SELECT url_host FROM content.post_urls'), 'bit.ly'
+        )
+        with self.conn.cursor() as cur:
+            cur.execute("UPDATE content.post_urls "
+                        "SET unshortened_url = 'https://www.arstechnica.com/x'")
+        self.conn.commit()
+        self.assertEqual(
+            self.scalar('SELECT url_host FROM content.post_urls'), 'arstechnica.com'
+        )
+
+
+class PostOccurrenceTests(BatchBuilderMixin, PostgresTestCase):
+    """Every arrival of a link is recorded, even when the post already exists.
+
+    A post's identity is a digest of its URL set, so the same article really
+    does arrive more than once. Keeping only the first arrival is what made the
+    question "which sources are worth keeping" unanswerable.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.setUpSpool()
+
+    def occurrences(self):
+        return self.rows(
+            'SELECT source_type, channel_key, actor_key, actor_label, direct_link '
+            'FROM content.post_occurrences ORDER BY source_type, actor_key'
+        )
+
+    def test_first_arrival_gets_an_occurrence(self):
+        self.queue(posts=[post(channel_key='https://feed.example/rss',
+                               channel_label='The Feed')])
+        outcome = self.publish_next()
+        self.assertEqual(outcome.occurrences_applied, 1)
+        self.assertEqual(
+            self.occurrences(),
+            [('rss', 'https://feed.example/rss', '', '', 'https://feed.example/post')],
+        )
+
+    def test_a_second_source_for_the_same_link_is_kept(self):
+        urls = ('https://arstechnica.com/article',)
+        self.queue(posts=[post(unique_id='uid-x', urls=urls,
+                               channel_key='https://feed.example/rss')])
+        self.publish_next()
+        self.queue(posts=[post(
+            unique_id='uid-x', urls=urls, source_type='reddit',
+            source='https://www.reddit.com/r/apple',
+            direct_link='https://www.reddit.com/r/apple/comments/1',
+            channel_key='apple', channel_label='r/apple',
+            actor_key='someuser', actor_label='someuser',
+        )])
+        outcome = self.publish_next()
+
+        self.assertEqual(outcome.posts_inserted, 0,
+                         'the article is the same article')
+        self.assertEqual(outcome.posts_skipped, 1)
+        self.assertEqual(self.count('content.posts'), 1)
+        self.assertEqual(self.count('content.post_occurrences'), 2)
+        self.assertEqual(
+            [(row[0], row[1], row[2]) for row in self.occurrences()],
+            [('reddit', 'apple', 'someuser'), ('rss', 'https://feed.example/rss', '')],
+        )
+
+    def test_two_accounts_in_one_channel_are_separate_occurrences(self):
+        urls = ('https://arstechnica.com/article',)
+        for actor in ('alice', 'bob'):
+            self.queue(posts=[post(
+                unique_id='uid-x', urls=urls, source_type='reddit',
+                channel_key='apple', actor_key=actor, actor_label=actor,
+            )])
+            self.publish_next()
+        self.assertEqual(self.count('content.posts'), 1)
+        self.assertEqual(
+            [row[2] for row in self.occurrences()], ['alice', 'bob']
+        )
+
+    def test_republishing_the_same_origin_adds_nothing(self):
+        for _ in range(2):
+            self.queue(posts=[post(unique_id='uid-x', source_type='reddit',
+                                   channel_key='apple', actor_key='alice',
+                                   actor_label='alice')])
+            self.publish_next()
+        self.assertEqual(self.count('content.post_occurrences'), 1)
+
+    def test_a_renamed_account_keeps_its_occurrence_and_refreshes_the_label(self):
+        """The key is the identity; the label is only ever display text."""
+        self.queue(posts=[post(unique_id='uid-x', source_type='bluesky',
+                               actor_key='did:plc:abc', actor_label='old.handle')])
+        self.publish_next()
+        self.queue(posts=[post(unique_id='uid-x', source_type='bluesky',
+                               actor_key='did:plc:abc', actor_label='new.handle')])
+        self.publish_next()
+
+        self.assertEqual(self.count('content.post_occurrences'), 1)
+        self.assertEqual(self.occurrences()[0][3], 'new.handle')
+
+    def test_a_version_1_batch_still_publishes_with_an_unidentified_origin(self):
+        """An upgrade must not strand batches already sitting in the spool."""
+        batch_id = self.queue(posts=[post()])
+        path = self.spool.batch_path('ready', batch_id)
+        _downgrade_batch_to_v1(path)
+
+        outcome = self.publish_next()
+        self.assertEqual(outcome.posts_inserted, 1)
+        self.assertEqual(outcome.occurrences_applied, 1)
+        self.assertEqual(self.occurrences(), [('rss', '', '', '', 'https://feed.example/post')])
+
+    def test_deleting_a_post_cascades_to_its_occurrences(self):
+        self.queue(posts=[post(channel_key='https://feed.example/rss')])
+        self.publish_next()
+        with self.conn.cursor() as cur:
+            cur.execute('DELETE FROM content.posts')
+        self.conn.commit()
+        self.assertEqual(self.count('content.post_occurrences'), 0)
+
 
 class BatchReplayTests(BatchBuilderMixin, PostgresTestCase):
     def setUp(self):
@@ -211,7 +378,7 @@ class BatchReplayTests(BatchBuilderMixin, PostgresTestCase):
             'record_count, posts_inserted, urls_inserted '
             'FROM content.published_batches'
         )[0]
-        self.assertEqual(row[0], 1)
+        self.assertEqual(row[0], 2)
         self.assertEqual(row[1], 'test/1')
         self.assertEqual(row[2], 'rev-xyz')
         self.assertEqual(row[3], 1)

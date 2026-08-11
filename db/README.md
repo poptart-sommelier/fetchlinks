@@ -8,7 +8,7 @@ neither: the Publisher writes `content`, the web admin writes `catalog`.
 | Schema    | Owner            | Contents                                          |
 | --------- | ---------------- | ------------------------------------------------- |
 | `catalog` | web admin        | RSS feed and subreddit identity plus on/off state  |
-| `content` | Publisher        | posts, URLs, feed health, checkpoints, follows     |
+| `content` | Publisher        | posts, origins, URLs, feed health, checkpoints, follows |
 | `public`  | migrations       | `schema_migrations` only                          |
 
 ## Migrations
@@ -19,6 +19,7 @@ Plain SQL, applied in filename order, recorded with a checksum:
 db/migrations/0001_schemas_and_catalog.sql
 db/migrations/0002_content.sql
 db/migrations/0003_roles_and_grants.sql
+db/migrations/0004_post_occurrences.sql
 ```
 
 Rules:
@@ -105,3 +106,19 @@ than fail.
 - **`content.follows_snapshots` is the staleness guard.** Follows arrive as
   complete snapshots, so applying one is a replacement; recording when each
   scope was last observed stops a delayed batch reinstating a superseded list.
+- **`content.post_occurrences` is where a post's origin lives.** A post's
+  identity is a digest of its URL set, so the same article genuinely arrives
+  from a feed and from Reddit and is one row in `content.posts`. The second
+  arrival used to be discarded; it is now a second occurrence. `posts.source`
+  and `posts.author` remain the display attribution of whichever arrival came
+  first.
+- **Occurrence keys are identities, labels are not.** `actor_key` holds a
+  Bluesky DID or a Mastodon account URI rather than a handle or display name,
+  because a rating attached to a name would follow the name to whoever took it
+  over next. Empty means the dimension does not exist for that source, or that
+  the row predates the collector recording it.
+- **`post_urls.url_host` is a generated column.** Derived rather than written
+  for the same reason `url_hash` is derived: the normalization rule lives in
+  one place and cannot be pinned by an old Collector. It follows
+  `unshortened_url` automatically once that is resolved, so there is no second
+  update path to forget.
