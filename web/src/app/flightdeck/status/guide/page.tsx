@@ -1,27 +1,49 @@
 /**
- * The operating guide.
+ * The operating guide, as a page of its own.
  *
- * It lives on the page rather than in a repository document for one reason: the
+ * It lives on the site rather than in a repository document for one reason: the
  * moment it is needed is the moment something is broken, and a document in a
- * checkout on a laptop is not where anyone looks at that point. It is static, so
- * it renders in full even when the status query above it failed -- the database
- * being down is precisely when the diagnosis steps matter.
+ * checkout on a laptop is not where anyone looks at that point. It is entirely
+ * static and never touches the database, so it still answers when the status
+ * page above it cannot -- which is precisely when the diagnosis steps matter.
  */
+
+import Link from "next/link";
 
 const RUNTIME = "~/fetchlinks/runtime";
 const PY = "~/fetchlinks/.venv/bin/python";
+
+export const metadata = {
+  title: "How to read System status",
+};
+
+export default function StatusGuidePage() {
+  return (
+    <main className="shell">
+      <header className="page-header">
+        <div className="page-title">
+          <p className="eyebrow">
+            <Link href="/flightdeck/status">&larr; System status</Link>
+          </p>
+          <h1>How to read System status</h1>
+        </div>
+      </header>
+      <StatusGuide />
+    </main>
+  );
+}
 
 export function StatusGuide() {
   return (
     <section aria-labelledby="guide-heading" className="status-guide">
       <h2 id="guide-heading">Operating guide</h2>
       <p className="status-guide-intro">
-        Everything above comes from one table that the Raspberry Pi writes, one
-        row per job run, kept for seven days. Nothing else reports. If the Pi
-        cannot reach the database it cannot write &ldquo;I cannot reach the
-        database&rdquo; into it &mdash; which is why a stale heartbeat is
-        described here as &ldquo;has not reported&rdquo; rather than as the Pi
-        being off.
+        Everything on the status page comes from one table that the Raspberry Pi
+        writes, one row per job run, kept for seven days. Nothing else reports.
+        If the Pi cannot reach the database it cannot write &ldquo;I cannot
+        reach the database&rdquo; into it &mdash; which is why a stale heartbeat
+        is described there as &ldquo;has not reported&rdquo; rather than as the
+        Pi being off.
       </p>
 
       <h3>What normal looks like</h3>
@@ -48,7 +70,11 @@ export function StatusGuide() {
         </li>
       </ul>
 
-      <h3>Reading the labels</h3>
+      <h3>What the health labels mean</h3>
+      <p>
+        These describe whether a job is <em>reporting</em>, which is a separate
+        question from whether its last run went well.
+      </p>
       <ul className="status-guide-list">
         <li>
           <strong>Healthy</strong> &mdash; reported within one expected gap.
@@ -74,15 +100,49 @@ export function StatusGuide() {
           already stored.
         </li>
         <li>
-          <strong>Partial</strong> &mdash; some of the work succeeded. One failing
-          feed out of forty, or one quarantined batch while the rest published.
-        </li>
-        <li>
           <strong>Missing</strong> in the 24-hour strip &mdash; no run started in
           a window where one was expected. This is what a stopped timer looks
           like.
         </li>
       </ul>
+
+      <h3>What a run&rsquo;s outcome means</h3>
+      <p>
+        Separate from the words above, every run records how it went. These are
+        the words in the Recent runs table and on each source.
+      </p>
+      <ul className="status-guide-list">
+        <li>
+          <strong>ok</strong> &mdash; every part of the run succeeded.
+        </li>
+        <li>
+          <strong>partial</strong> &mdash; some parts succeeded and some did not.
+          The usual cause is a handful of the several hundred RSS feeds timing
+          out or returning an error while the rest were fine. Calling that a
+          failure would be wrong, because most of the work landed; calling it a
+          success would hide the casualties. A collection is almost never
+          perfectly clean, so <em>partial is the normal state of the world</em>{" "}
+          and only worth investigating when the failed count climbs.
+        </li>
+        <li>
+          <strong>failed</strong> &mdash; nothing succeeded. For a publish run,
+          that usually means the database could not be reached at all.
+        </li>
+        <li>
+          <strong>running</strong> &mdash; still going, or stopped so abruptly it
+          never got to write down how it ended. A run stuck as
+          &ldquo;running&rdquo; for hours means the process was killed.
+        </li>
+        <li>
+          <strong>skipped</strong> &mdash; shown against a source that is switched
+          off in the configuration. It does not count towards the run&rsquo;s
+          outcome either way.
+        </li>
+      </ul>
+      <p>
+        The rule combining them is mechanical: all parts ok makes the whole run
+        ok, no part ok makes it failed, and anything in between is partial.
+      </p>
 
       <h3>If the Publisher has not reported</h3>
       <p>

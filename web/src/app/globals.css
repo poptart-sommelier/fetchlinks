@@ -1636,3 +1636,18 @@ a.post-source:hover .post-source-type {
     gap: 2px;
   }
 }
+
+/* The outcome words are jargon at first sight, so the table carries its own
+   one-line glossary rather than sending the reader to the guide for "partial". */
+.status-legend {
+  margin-top: -4px;
+  margin-bottom: 12px;
+}
+
+.status-legend strong {
+  color: var(--foreground);
+}
+
+.status-observed a {
+  font-size: 13px;
+}

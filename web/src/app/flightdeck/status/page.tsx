@@ -19,7 +19,6 @@ import type {
 } from "../../../models/system-status";
 import { getSystemStatus } from "../../../server/status";
 import { getSqlClient } from "../../../server/sql";
-import { StatusGuide } from "./guide";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +54,8 @@ export function StatusView({ result }: { result: LoadResult }) {
         {result.status === "ready" ? (
           <p className="status-observed" title={result.data.observedAt}>
             Read {formatRelative(result.data.observedAt) ?? "just now"}
+            <br />
+            <Link href="/flightdeck/status/guide">How to read this page</Link>
           </p>
         ) : null}
       </header>
@@ -66,14 +67,19 @@ export function StatusView({ result }: { result: LoadResult }) {
             The database could not be read, so nothing below it is known. That
             failure is itself a finding: if the site is otherwise working, the
             web app has a database problem rather than the Pi. The exception is
-            in Vercel&rsquo;s runtime logs. The guide below is unaffected.
+            in Vercel&rsquo;s runtime logs.
+          </p>
+          <p>
+            {/* The guide is a separate, static page precisely so it still
+                answers when this read does not. */}
+            <Link href="/flightdeck/status/guide">
+              How to read this page, and what to do next
+            </Link>
           </p>
         </section>
       ) : (
         <StatusBody data={result.data} />
       )}
-
-      <StatusGuide />
     </main>
   );
 }
@@ -113,6 +119,38 @@ function StatusBody({ data }: { data: SystemStatus }) {
 
       <RecentRunsPanel runs={data.recentRuns} />
     </>
+  );
+}
+
+// --- run outcomes ----------------------------------------------------------
+
+/**
+ * Plain-English gloss for the four words a run can end with.
+ *
+ * These appear as bare words in the table and on each source, where they read
+ * as jargon: "partial" in particular sounds like a fault, when for a collection
+ * across several hundred feeds it is the ordinary case. The full explanation
+ * lives in the guide; this is the version that reaches someone who is not going
+ * to open it.
+ */
+const RESULT_MEANING: Record<string, string> = {
+  ok: "Every part of the run succeeded.",
+  partial:
+    "Some parts succeeded and some did not \u2014 usually a few feeds timing out while the rest were fine. Normal unless the failed count climbs.",
+  failed: "Nothing succeeded.",
+  running:
+    "Still going, or stopped before it could write down how it ended.",
+  skipped: "Switched off in the configuration; does not count either way.",
+};
+
+function ResultWord({ result }: { result: string }) {
+  return (
+    <span
+      className={`status-result status-result-${result}`}
+      title={RESULT_MEANING[result] ?? undefined}
+    >
+      {result}
+    </span>
   );
 }
 
@@ -180,9 +218,14 @@ function JobHeadlineCard({
         </div>
         <div>
           <dt>Outcome</dt>
-          <dd>{status.latest ? status.latest.result : MISSING}</dd>
+          <dd>
+            {status.latest ? <ResultWord result={status.latest.result} /> : MISSING}
+          </dd>
         </div>
       </dl>
+      {status.latest && status.latest.result !== "ok" ? (
+        <p className="status-card-note">{RESULT_MEANING[status.latest.result]}</p>
+      ) : null}
       <p className="status-card-note">{subtitle}</p>
       {status.latest?.errorMessage ? (
         <p className="status-card-error">
@@ -405,7 +448,9 @@ function SourceCard({
     <article className={`status-source status-source-${source.result}`}>
       <header className="status-source-header">
         <h3>{label}</h3>
-        <span className="status-source-result">{source.result}</span>
+        <span className="status-source-result" title={RESULT_MEANING[source.result]}>
+          {source.result}
+        </span>
       </header>
       <p className="status-source-counts">
         {source.result === "skipped" ? (
@@ -543,6 +588,12 @@ function RecentRunsPanel({ runs }: { runs: RunSummary[] }) {
   return (
     <section aria-label="Recent runs" className="status-panel">
       <h2>Recent runs</h2>
+      <p className="status-panel-note status-legend">
+        <strong>ok</strong> everything worked &middot; <strong>partial</strong>{" "}
+        some parts worked and some did not &middot; <strong>failed</strong>{" "}
+        nothing worked &middot; <strong>running</strong> still going, or stopped
+        before it could say how it ended. <Link href="/flightdeck/status/guide">More</Link>
+      </p>
       <div className="status-table-scroll">
         <table className="status-table">
           <thead>
@@ -562,9 +613,7 @@ function RecentRunsPanel({ runs }: { runs: RunSummary[] }) {
                   {formatRelative(run.startedAt) ?? MISSING}
                 </td>
                 <td>
-                  <span className={`status-result status-result-${run.result}`}>
-                    {run.result}
-                  </span>
+                  <ResultWord result={run.result} />
                 </td>
                 <td>{formatDuration(run.elapsedMs)}</td>
                 <td className="status-table-detail">

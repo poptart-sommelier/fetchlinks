@@ -67,14 +67,45 @@ function status(overrides: Partial<SystemStatus> = {}): SystemStatus {
 }
 
 describe("StatusView", () => {
-  // The one case that must never regress: the read that failed is often the
-  // fault being diagnosed, so the instructions have to survive it.
-  it("still shows the guide when the database cannot be read", () => {
+  // The guide is now a page of its own, which is what makes it survive this:
+  // the read failing is often the fault being diagnosed, and a static page
+  // answers when a database-backed one cannot.
+  it("still points at the guide when the database cannot be read", () => {
     const html = render(<StatusView result={{ status: "error" }} />);
 
     expect(html).toContain("Status data unavailable");
-    expect(html).toContain("Operating guide");
+    expect(html).toContain("/flightdeck/status/guide");
     expect(html).not.toContain("Last new post");
+  });
+
+  it("links to the guide from the top of the page", () => {
+    const html = render(<StatusView result={{ status: "ready", data: status() }} />);
+
+    expect(html).toContain("How to read this page");
+    expect(html).toContain("/flightdeck/status/guide");
+  });
+
+  // "partial" reads as a fault to anyone who has not been told otherwise, and
+  // for a collection across several hundred feeds it is the ordinary case.
+  it("explains an outcome word where the word appears", () => {
+    const data = status({
+      recentRuns: [
+        {
+          job: "collect",
+          startedAt: "2026-01-02T11:30:00.000Z",
+          finishedAt: "2026-01-02T11:30:42.000Z",
+          reportedAt: "2026-01-02T11:40:00.000Z",
+          result: "partial",
+          elapsedMs: 42000,
+          errorKind: "",
+          errorMessage: "",
+        },
+      ],
+    });
+    const html = render(<StatusView result={{ status: "ready", data }} />);
+
+    expect(html).toContain("some parts worked and some did not");
+    expect(html).toContain("a few feeds timing out");
   });
 
   it("shows both headline jobs and their state", () => {
