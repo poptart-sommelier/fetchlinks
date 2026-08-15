@@ -7,6 +7,7 @@ import requests
 
 import ingest_limits
 import url_filters
+import error_kinds
 from auth import MastodonAuth
 from config import MastodonInstance, MastodonSource
 from pipeline.collection import CollectionResult
@@ -130,6 +131,7 @@ def _fetch_timeline_page(
     instance_config: MastodonInstance,
     since_id: str | None,
     max_id: str | None = None,
+    tally=None,
 ) -> tuple[list[dict], str | None]:
     timeline_url = _build_timeline_url(instance_config.instance_url, instance_config.timeline)
     limit = max(1, min(instance_config.timeline_limit, MAX_TIMELINE_LIMIT))
@@ -139,27 +141,39 @@ def _fetch_timeline_page(
     if max_id:
         params['max_id'] = max_id
 
+    def note(kind: str, message: str):
+        if tally is not None:
+            tally.fault(kind, message)
+        return [], None
+
     try:
         response = session.get(timeline_url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
         payload = response.json()
     except ValueError as exc:
         logger.error('Invalid JSON while retrieving Mastodon %s: %s', instance_config.name, exc)
-        return [], None
+        return note(error_kinds.INVALID_RESPONSE, error_kinds.describe(exc))
     except requests.RequestException as exc:
         logger.error('Request error while retrieving Mastodon %s: %s', instance_config.name, exc)
-        return [], None
+        return note(error_kinds.from_exception(exc), error_kinds.describe(exc))
     if not isinstance(payload, list):
         logger.error('Unexpected Mastodon payload shape for %s', instance_config.name)
-        return [], None
+        return note(error_kinds.INVALID_RESPONSE,
+                    f'Unexpected payload shape for {instance_config.name}')
     return payload, _next_max_id_from_link_header(response.headers.get('Link', ''))
 
 
-def _fetch_timeline_pages(session: requests.Session, instance_config: MastodonInstance, since_id: str | None) -> list[dict]:
+def _fetch_timeline_pages(
+    session: requests.Session,
+    instance_config: MastodonInstance,
+    since_id: str | None,
+    tally=None,
+) -> list[dict]:
     statuses = []
     max_id = None
     for page_num in range(1, MAX_PAGES + 1):
-        page_statuses, next_max_id = _fetch_timeline_page(session, instance_config, since_id, max_id)
+        page_statuses, next_max_id = _fetch_timeline_page(
+            session, instance_config, since_id, max_id, tally=tally)
         logger.debug(
             'Mastodon %s page %s/%s: since_id=%s, max_id=%s, statuses=%s, next_max_id=%s',
             instance_config.name,
@@ -222,8 +236,10 @@ def _run_instance(
     excluded_url_or_description_keywords: list[str] | None = None,
 ) -> CollectionResult:
     result = CollectionResult()
+    tally = result.tally(CHECKPOINT_SOURCE_TYPE)
     if not instance_config.enabled:
         logger.info('Mastodon source %s is disabled; skipping', instance_config.name)
+        tally.skipped = True
         return result
 
     source_name = instance_config.name
@@ -231,9 +247,11 @@ def _run_instance(
     auth_client = MastodonAuth(str(instance_config.credential_location))
     last_seen_id = state.checkpoint(CHECKPOINT_SOURCE_TYPE, source_name)
 
+    faults_before = tally.fault_count
     with requests.Session() as session:
         session.headers.update(auth_client.headers)
-        statuses = _fetch_timeline_pages(session, instance_config, last_seen_id)
+        statuses = _fetch_timeline_pages(session, instance_config, last_seen_id, tally=tally)
+    tally.close_channel(faults_before, items=len(statuses))
 
     parsed_posts = []
     skipped_no_links = 0
@@ -261,6 +279,7 @@ def _run_instance(
         f'Mastodon {source_name}',
     )
     result.add_posts(post.to_record() for post in recent_posts)
+    tally.posts_kept = len(recent_posts)
 
     highest_id = _highest_status_id(statuses)
     if highest_id:
@@ -296,6 +315,7 @@ def run(
     result = CollectionResult()
     if not mastodon_config.enabled:
         logger.info('Mastodon source is disabled; skipping')
+        result.tally(CHECKPOINT_SOURCE_TYPE).skipped = True
         return result
 
     for instance_config in mastodon_config.instances:

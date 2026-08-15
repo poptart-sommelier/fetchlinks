@@ -172,8 +172,10 @@ def run(
     excluded_url_or_description_keywords: List[str] | None = None,
 ) -> CollectionResult:
     result = CollectionResult()
+    tally = result.tally(CHECKPOINT_SOURCE_TYPE)
     if not bluesky_config.enabled:
         logger.info('Bluesky source is disabled; skipping')
+        tally.skipped = True
         return result
 
     timeline_limit = max(1, min(bluesky_config.timeline_limit, MAX_TIMELINE_LIMIT))
@@ -251,6 +253,10 @@ def run(
     )
     result.add_posts(post.to_record() for post in recent_posts)
 
+    # Bluesky is one timeline rather than many channels, and every failure on
+    # the way here leaves by raising, so reaching this line is the success.
+    tally.channel_succeeded(items=len(feed_items))
+    tally.posts_kept = len(recent_posts)
     # An unchanged cursor is not an advance; storing it again would only churn
     # the observation time. An empty one means the timeline call gave us
     # nowhere to resume from, and writing that down would restart the source.

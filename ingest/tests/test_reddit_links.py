@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import reddit_links
 from config import RedditSource
 from pipeline.catalog import build_catalog
+from pipeline.collection import SourceTally
 from pipeline.state import CollectorState
 from utils import Post
 from utils import RedditPost
@@ -132,6 +133,46 @@ class RedditLinksTests(unittest.TestCase):
         self.assertEqual(posts, [])
         self.assertIsNone(newest_fullname)
 
+    def test_a_subreddit_that_fails_says_so_rather_than_looking_quiet(self):
+        session = Mock()
+        session.get.side_effect = reddit_links.requests.exceptions.Timeout('timeout')
+        tally = SourceTally('reddit')
+
+        reddit_links.get_subreddit(session, 'netsec', None, tally=tally)
+
+        self.assertEqual(tally.channels_failed, 1)
+        self.assertEqual(tally.errors, {'timeout': 1})
+        self.assertEqual(tally.result, 'failed')
+
+    def test_a_subreddit_that_failed_late_still_reports_what_it_returned(self):
+        """Pages one and two arriving does not make a broken fetch a good one."""
+        session = Mock()
+        session.get.side_effect = [
+            _make_response([
+                _make_reddit_post('https://example.com/1', name='t3_1', post_id='1'),
+            ], after='t3_page2'),
+            reddit_links.requests.exceptions.ConnectionError('dropped'),
+        ]
+        tally = SourceTally('reddit')
+
+        posts, _newest = reddit_links.get_subreddit(session, 'netsec', 't3_seen',
+                                                    tally=tally)
+
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(tally.channels_failed, 1)
+        self.assertEqual(tally.items_returned, 1)
+        self.assertEqual(tally.errors, {'network': 1})
+
+    def test_a_quiet_subreddit_is_a_success(self):
+        session = Mock()
+        session.get.return_value = _make_response([])
+        tally = SourceTally('reddit')
+
+        reddit_links.get_subreddit(session, 'netsec', None, tally=tally)
+
+        self.assertEqual(tally.channels_succeeded, 1)
+        self.assertEqual(tally.result, 'ok')
+
     def test_get_subreddits_uses_catalog_and_state(self):
         reddit_config = RedditSource(
             enabled=True,
@@ -161,7 +202,7 @@ class RedditLinksTests(unittest.TestCase):
         self.assertEqual(state_updates, [('netsec', 't3_new')])
         session.headers.update.assert_called_once()
         get_subreddit.assert_called_once_with(
-            session, 'netsec', 't3_seen', limit=100, max_pages=5,
+            session, 'netsec', 't3_seen', limit=100, max_pages=5, tally=None,
         )
 
     def test_get_subreddits_reads_only_the_catalog(self):
@@ -241,6 +282,7 @@ class RedditRunTests(unittest.TestCase):
 
         get_subreddits.assert_called_once_with(
             self.reddit_config, self.catalog, self.state,
+            tally=result.tally('reddit'),
         )
         parse_posts.assert_called_once()
         self.assertEqual(result.posts, [])

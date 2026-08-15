@@ -5,6 +5,7 @@ import logging
 from utils import RedditPost
 import ingest_limits
 import url_filters
+import error_kinds
 from auth import RedditAuth
 from config import RedditSource
 from pipeline.collection import CollectionResult
@@ -53,7 +54,7 @@ def _log_rate_limit(response):
         logger.debug('Reddit rate limit remaining=%s reset=%s', remaining, reset)
 
 
-def get_subreddits(reddit_config: RedditSource, catalog, state) -> tuple[list[dict], list[tuple[str, str]]]:
+def get_subreddits(reddit_config: RedditSource, catalog, state, tally=None) -> tuple[list[dict], list[tuple[str, str]]]:
     subreddit_posts = []
     state_updates = []
 
@@ -73,6 +74,7 @@ def get_subreddits(reddit_config: RedditSource, catalog, state) -> tuple[list[di
                 state.checkpoint(CHECKPOINT_SOURCE_TYPE, normalized_name),
                 limit=limit,
                 max_pages=max_pages,
+                tally=tally,
             )
             subreddit_posts.extend(posts)
             if newest_fullname:
@@ -87,11 +89,26 @@ def get_subreddit(
     last_seen_fullname: str | None,
     limit: int = DEFAULT_LISTING_LIMIT,
     max_pages: int = MAX_PAGES,
+    tally=None,
 ) -> tuple[list[dict], str | None]:
     subreddit_url = f'https://oauth.reddit.com/r/{subreddit}/new/.json'
     fetched_posts = []
     newest_fullname = None
     after = None
+
+    def failed(kind, message):
+        # Recorded here rather than inferred by the caller: a subreddit that
+        # fails on page three still returns pages one and two, so from the
+        # outside it is indistinguishable from a subreddit that simply had
+        # little to say.
+        if tally is not None:
+            tally.channel_failed(kind, message, items=len(fetched_posts))
+        return fetched_posts, newest_fullname
+
+    def succeeded():
+        if tally is not None:
+            tally.channel_succeeded(items=len(fetched_posts))
+        return fetched_posts, newest_fullname
 
     for page_num in range(1, max_pages + 1):
         params = {'show': 'all', 'limit': limit, 'raw_json': 1}
@@ -108,26 +125,27 @@ def get_subreddit(
             subreddit_resp = response.json()
         except ValueError as err:
             logger.error('Invalid JSON while retrieving r/%s: %s', subreddit, err)
-            return fetched_posts, newest_fullname
+            return failed(error_kinds.INVALID_RESPONSE, error_kinds.describe(err))
         except requests.exceptions.HTTPError as errh:
             logger.error('HTTP error while retrieving r/%s: %s', subreddit, errh)
-            return fetched_posts, newest_fullname
+            return failed(error_kinds.from_exception(errh), error_kinds.describe(errh))
         except requests.exceptions.ConnectionError as errc:
             logger.error('Connection error while retrieving r/%s: %s', subreddit, errc)
-            return fetched_posts, newest_fullname
+            return failed(error_kinds.NETWORK, error_kinds.describe(errc))
         except requests.exceptions.Timeout as errt:
             logger.error('Timeout while retrieving r/%s: %s', subreddit, errt)
-            return fetched_posts, newest_fullname
+            return failed(error_kinds.TIMEOUT, error_kinds.describe(errt))
         except requests.exceptions.RequestException as err:
             logger.error('Request error while retrieving r/%s: %s', subreddit, err)
-            return fetched_posts, newest_fullname
+            return failed(error_kinds.from_exception(err), error_kinds.describe(err))
 
         _log_rate_limit(response)
         response_data = subreddit_resp.get('data') if isinstance(subreddit_resp.get('data'), dict) else {}
         subreddit_posts = response_data.get('children', [])
         if not isinstance(subreddit_posts, list):
             logger.error('Unexpected Reddit payload shape for r/%s', subreddit)
-            return fetched_posts, newest_fullname
+            return failed(error_kinds.INVALID_RESPONSE,
+                          f'Unexpected payload shape for r/{subreddit}')
 
         if page_num == 1 and subreddit_posts:
             newest_fullname = _post_fullname(subreddit_posts[0]) or None
@@ -143,7 +161,7 @@ def get_subreddit(
 
         for post in subreddit_posts:
             if _post_fullname(post) == last_seen_fullname:
-                return fetched_posts, newest_fullname
+                return succeeded()
             fetched_posts.append(post)
 
         after = response_data.get('after')
@@ -153,7 +171,7 @@ def get_subreddit(
     if last_seen_fullname and fetched_posts:
         logger.info('r/%s previous state %s was not reached in %s page(s)', subreddit, last_seen_fullname, max_pages)
 
-    return fetched_posts, newest_fullname
+    return succeeded()
 
 
 def parse_posts(posts: list[dict]) -> list[RedditPost]:
@@ -176,7 +194,8 @@ def run(
 ) -> CollectionResult:
     """Read every catalogued subreddit and return what was collected."""
     result = CollectionResult()
-    subreddit_posts, state_updates = get_subreddits(reddit_config, catalog, state)
+    tally = result.tally(CHECKPOINT_SOURCE_TYPE)
+    subreddit_posts, state_updates = get_subreddits(reddit_config, catalog, state, tally=tally)
     parsed_posts = parse_posts(subreddit_posts)
     recent_posts = ingest_limits.filter_posts_by_age(parsed_posts, max_post_age_months, 'Reddit')
     recent_posts = url_filters.filter_posts_by_url_host_keywords(
@@ -191,6 +210,7 @@ def run(
     )
 
     result.add_posts(post.to_record() for post in recent_posts)
+    tally.posts_kept = len(recent_posts)
     logger.info('Collected %s Reddit posts', len(recent_posts))
 
     # The checkpoint is the newest post seen, not the newest post kept: age and

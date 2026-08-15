@@ -278,7 +278,53 @@ class RunInstanceTests(unittest.TestCase):
                                                   CollectorState())
 
         self.assertTrue(result.is_empty)
+        self.assertTrue(result.tally('mastodon').skipped)
+        self.assertEqual(result.tally('mastodon').result, 'skipped')
         auth_cls.assert_not_called()
+
+    def test_an_unreachable_instance_is_told_apart_from_a_quiet_one(self):
+        """Both hand back an empty list, so only what was noted separates them."""
+        auth_client = Mock()
+        auth_client.headers = {}
+        session = Mock()
+        session.get.side_effect = mastodon_links.requests.ConnectionError('down')
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links.requests, 'Session') as session_cls, \
+             self.assertLogs(mastodon_links.logger, 'ERROR'):
+            session_cls.return_value.__enter__.return_value = session
+            result = mastodon_links._run_instance(_instance(), self._state())
+
+        tally = result.tally('mastodon')
+        self.assertEqual(tally.channels_failed, 1)
+        self.assertEqual(tally.errors, {'network': 1})
+        self.assertEqual(tally.result, 'failed')
+
+    def test_a_quiet_instance_is_a_success(self):
+        auth_client = Mock()
+        auth_client.headers = {}
+
+        with patch.object(mastodon_links, 'MastodonAuth', return_value=auth_client), \
+             patch.object(mastodon_links, '_fetch_timeline_pages', return_value=[]):
+            result = mastodon_links._run_instance(_instance(), self._state('10'))
+
+        self.assertEqual(result.tally('mastodon').result, 'ok')
+
+    def test_each_instance_counts_as_its_own_channel(self):
+        source = MastodonSource(enabled=True, instances=(
+            _instance(name='one'), _instance(name='two'),
+        ))
+        good = CollectionResult()
+        good.tally('mastodon').channel_succeeded(items=3)
+        bad = CollectionResult()
+        bad.tally('mastodon').channel_failed('network', 'down')
+
+        with patch.object(mastodon_links, '_run_instance', side_effect=[good, bad]):
+            result = mastodon_links.run(source, CollectorState())
+
+        tally = result.tally('mastodon')
+        self.assertEqual(tally.channels_attempted, 2)
+        self.assertEqual(tally.result, 'partial')
 
     def test_run_instance_checkpoints_the_highest_id_seen_not_kept(self):
         instance_config = _instance(instance_url='https://infosec.exchange/')
