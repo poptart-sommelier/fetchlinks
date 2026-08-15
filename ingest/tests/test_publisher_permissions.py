@@ -45,6 +45,7 @@ class RolePermissionTests(PostgresTestCase):
         # its own, and that only holds while every migration runs as the same
         # role -- a condition nothing else would notice breaking.
         self.assertAllowed(conn, 'SELECT count(*) FROM content.post_occurrences')
+        self.assertAllowed(conn, 'SELECT count(*) FROM content.operation_runs')
 
     def test_web_can_curate_the_catalog(self):
         conn = self.as_role('fetchlinks_web')
@@ -67,6 +68,11 @@ class RolePermissionTests(PostgresTestCase):
         self.assertDenied(conn, 'DELETE FROM content.posts')
         self.assertDenied(conn, 'UPDATE content.rss_feed_health SET last_status = 200')
         self.assertDenied(conn, 'DELETE FROM content.post_occurrences')
+        self.assertDenied(
+            conn,
+            "INSERT INTO content.operation_runs (job, started_at, result) "
+            "VALUES ('collection', now(), 'running')",
+        )
 
     def test_web_cannot_hard_delete_catalog_entries(self):
         # Removal is a soft delete, and the grant is what enforces it.
@@ -84,6 +90,13 @@ class RolePermissionTests(PostgresTestCase):
         )
         self.assertAllowed(conn, 'DELETE FROM content.bluesky_follows')
         self.assertAllowed(conn, 'DELETE FROM content.post_occurrences')
+        self.assertAllowed(
+            conn,
+            "INSERT INTO content.operation_runs (job, started_at, result) "
+            "VALUES ('publish', now(), 'running')",
+        )
+        # Retention trims run history weekly, so deleting is part of the job.
+        self.assertAllowed(conn, 'DELETE FROM content.operation_runs')
         self.assertAllowed(conn, 'DELETE FROM content.posts')
 
     def test_publisher_can_read_but_not_change_the_catalog(self):

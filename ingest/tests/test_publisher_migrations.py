@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import psycopg
+
 from tests.pg_support import PostgresTestCase
 
 from publisher.migrations import (
@@ -162,6 +164,7 @@ class ShippedSchemaTests(PostgresTestCase):
             ('content', 'mastodon_follows'),
             ('content', 'follows_snapshots'),
             ('content', 'published_batches'),
+            ('content', 'operation_runs'),
         ]
         missing = [f'{s}.{t}' for s, t in expected if not self.table_exists(s, t)]
         self.assertEqual(missing, [])
@@ -186,6 +189,115 @@ class ShippedSchemaTests(PostgresTestCase):
             roles,
             {'fetchlinks_owner', 'fetchlinks_web', 'fetchlinks_publisher'},
         )
+
+
+class OperationRunsTableTests(PostgresTestCase):
+    """The rules 0006 relies on the database, not the caller, to enforce."""
+
+    def insert(self, **values):
+        columns = ', '.join(values)
+        placeholders = ', '.join(['%s'] * len(values))
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f'INSERT INTO content.operation_runs ({columns}) '
+                f'VALUES ({placeholders})',
+                list(values.values()),
+            )
+        self.conn.commit()
+
+    def assertRejected(self, **values):
+        try:
+            with self.assertRaises(psycopg.errors.Error):
+                self.insert(**values)
+        finally:
+            self.conn.rollback()
+
+    def test_an_unfinished_run_is_recorded_as_running(self):
+        self.insert(job='publish', started_at='2026-01-01T00:00:00Z', result='running')
+        self.assertEqual(self.count('content.operation_runs'), 1)
+
+    def test_a_running_row_may_not_claim_a_finish_time(self):
+        self.assertRejected(
+            job='publish',
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z',
+            result='running',
+        )
+
+    def test_a_finished_row_must_say_when_it_finished(self):
+        # Otherwise a forgotten assignment reads as a job that is still going,
+        # forever, which is indistinguishable from the outage being looked for.
+        self.assertRejected(
+            job='publish', started_at='2026-01-01T00:00:00Z', result='ok'
+        )
+
+    def test_an_unknown_result_is_refused(self):
+        self.assertRejected(
+            job='publish',
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z',
+            result='probably fine',
+        )
+
+    def test_an_unbounded_error_message_is_refused(self):
+        self.assertRejected(
+            job='collection',
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z',
+            result='failed',
+            error_message='x' * 501,
+        )
+
+    def test_details_must_be_an_object(self):
+        self.assertRejected(
+            job='publish',
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z',
+            result='ok',
+            details='[1, 2]',
+        )
+
+    def test_a_replayed_collection_cannot_be_recorded_twice(self):
+        batch_id = '20260101T000000000000Z-abcdef01'
+        self.insert(
+            job='collection',
+            run_key=batch_id,
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z',
+            result='ok',
+        )
+        self.assertRejected(
+            job='collection',
+            run_key=batch_id,
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z',
+            result='ok',
+        )
+
+    def test_runs_with_no_natural_key_do_not_collide(self):
+        # The publisher writes one of these every hour and they are all
+        # distinct events, so the uniqueness rule must not reach them.
+        for _ in range(3):
+            self.insert(
+                job='publish',
+                started_at='2026-01-01T00:00:00Z',
+                finished_at='2026-01-01T00:01:00Z',
+                result='ok',
+            )
+        self.assertEqual(self.count('content.operation_runs'), 3)
+
+    def test_the_same_key_may_be_reused_by_a_different_job(self):
+        self.insert(
+            job='collection', run_key='k',
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z', result='ok',
+        )
+        self.insert(
+            job='retention', run_key='k',
+            started_at='2026-01-01T00:00:00Z',
+            finished_at='2026-01-01T00:01:00Z', result='ok',
+        )
+        self.assertEqual(self.count('content.operation_runs'), 2)
 
 
 if __name__ == '__main__':

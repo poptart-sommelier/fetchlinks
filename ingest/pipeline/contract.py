@@ -31,8 +31,8 @@ from referencing.jsonschema import DRAFT202012
 # version that could still be sitting in a spool, because an upgrade does not
 # get to invalidate batches that were collected before it. Dropping a version
 # from the readable set is a decision to abandon whatever is still queued in it.
-CONTRACT_VERSION = 2
-SUPPORTED_CONTRACT_VERSIONS = (1, 2)
+CONTRACT_VERSION = 3
+SUPPORTED_CONTRACT_VERSIONS = (1, 2, 3)
 
 SCHEMA_DIR = Path(__file__).resolve().parent / 'schemas'
 
@@ -42,6 +42,7 @@ KIND_RSS_OBSERVATIONS = 'rss_observations'
 KIND_CHECKPOINTS = 'checkpoints'
 KIND_BLUESKY_FOLLOWS = 'bluesky_follows'
 KIND_MASTODON_FOLLOWS = 'mastodon_follows'
+KIND_COLLECTION_RUNS = 'collection_runs'
 
 # Kinds whose files are complete snapshots rather than incremental records.
 # A publisher must replace the whole scope, never merge.
@@ -50,26 +51,28 @@ SNAPSHOT_KINDS = frozenset({KIND_BLUESKY_FOLLOWS, KIND_MASTODON_FOLLOWS})
 # Kinds that are partitioned per instance and therefore need a manifest scope.
 SCOPED_KINDS = frozenset({KIND_MASTODON_FOLLOWS})
 
-# Schemas per contract version. Only the kinds that actually changed are
-# repeated: listing the unchanged ones again would invite a future edit to one
-# copy and not the other, and a kind whose shape is identical across versions
-# is better stated once.
+# Schemas per contract version. The table below is the current shape of each
+# kind; a version that predates a change states its own older file. Naming the
+# current one once means a new version does not have to restate every kind that
+# did not change, which is how two copies of a mapping drift apart.
 _SCHEMA_FILE_BY_KIND = {
-    KIND_POSTS: 'post.v1.json',
+    KIND_POSTS: 'post.v2.json',
     KIND_RSS_OBSERVATIONS: 'rss-observation.v1.json',
     KIND_CHECKPOINTS: 'checkpoint.v1.json',
     KIND_BLUESKY_FOLLOWS: 'bluesky-follow.v1.json',
     KIND_MASTODON_FOLLOWS: 'mastodon-follow.v1.json',
+    KIND_COLLECTION_RUNS: 'collection-run.v1.json',
 }
 
 _SCHEMA_OVERRIDES_BY_VERSION = {
-    2: {KIND_POSTS: 'post.v2.json'},
+    1: {KIND_POSTS: 'post.v1.json'},
 }
 
 MANIFEST_FILENAME = 'manifest.json'
 _MANIFEST_SCHEMA_BY_VERSION = {
     1: 'manifest.v1.json',
     2: 'manifest.v2.json',
+    3: 'manifest.v3.json',
 }
 MANIFEST_SCHEMA_FILE = _MANIFEST_SCHEMA_BY_VERSION[CONTRACT_VERSION]
 COLLECTOR_STATE_SCHEMA_FILE = 'collector-state.v1.json'
@@ -79,6 +82,7 @@ _FILENAME_BY_KIND = {
     KIND_RSS_OBSERVATIONS: 'rss-observations.ndjson',
     KIND_CHECKPOINTS: 'checkpoints.ndjson',
     KIND_BLUESKY_FOLLOWS: 'bluesky-follows.ndjson',
+    KIND_COLLECTION_RUNS: 'collection-runs.ndjson',
 }
 
 # Scope tokens end up in file names, so keep them to a conservative,
@@ -271,6 +275,80 @@ def _clean_optional(value: Any) -> str | None:
     return text or None
 
 
+# --- failure vocabulary ---------------------------------------------------
+
+# Results a job or one of its parts can end in. ``skipped`` is not a failure:
+# a source that is switched off in configuration still deserves a line, so that
+# "nothing from Reddit" reads as a setting rather than a fault.
+RESULT_OK = 'ok'
+RESULT_PARTIAL = 'partial'
+RESULT_FAILED = 'failed'
+RESULT_SKIPPED = 'skipped'
+
+# Deliberately small and stable. Exception class names change when a library is
+# upgraded, and then this week's counts stop being comparable with last week's.
+ERROR_KIND_NONE = ''
+ERROR_KIND_UNKNOWN = 'unknown'
+ERROR_KINDS = (
+    ERROR_KIND_NONE,
+    'network',
+    'timeout',
+    'authentication',
+    'rate_limit',
+    'http',
+    'invalid_response',
+    'parse',
+    ERROR_KIND_UNKNOWN,
+)
+
+ERROR_MESSAGE_MAX_LENGTH = 500
+
+
+def clean_error_kind(value: Any) -> str:
+    """Return a vocabulary term, mapping anything unrecognized to ``unknown``.
+
+    Forgiving rather than strict on purpose. A run summary exists to explain a
+    failure, so rejecting the summary because the failure was categorized with
+    a typo would lose exactly the record that was worth keeping.
+    """
+    text = (value or '').strip().lower() if isinstance(value, str) else ''
+    if not text:
+        return ERROR_KIND_NONE
+    return text if text in ERROR_KINDS else ERROR_KIND_UNKNOWN
+
+
+def clean_error_message(value: Any) -> str:
+    """Collapse to one bounded line.
+
+    This is the only field carrying text from a stranger's website, so it is
+    truncated here as well as constrained by the schema. The marker matters:
+    a message that was cut should not read as one that simply ended.
+    """
+    if value is None:
+        return ''
+    text = ' '.join(str(value).split())
+    if len(text) <= ERROR_MESSAGE_MAX_LENGTH:
+        return text
+    return text[:ERROR_MESSAGE_MAX_LENGTH - 3] + '...'
+
+
+def overall_result(results: Iterable[str]) -> str:
+    """Combine part results into the result of the whole.
+
+    Skipped parts are ignored -- a run with every source switched off is not a
+    failure. With nothing left to judge, the run succeeded: collecting nothing
+    because there was nothing to collect is a valid, quiet success.
+    """
+    considered = [result for result in results if result != RESULT_SKIPPED]
+    if not considered:
+        return RESULT_OK
+    if all(result == RESULT_OK for result in considered):
+        return RESULT_OK
+    if any(result == RESULT_OK or result == RESULT_PARTIAL for result in considered):
+        return RESULT_PARTIAL
+    return RESULT_FAILED
+
+
 # --- record types ---------------------------------------------------------
 
 
@@ -461,12 +539,169 @@ class MastodonFollowRecord:
         )
 
 
+@dataclass(frozen=True)
+class SourceReport:
+    """What one source did during one collection run.
+
+    ``items_returned`` and ``posts_kept`` are both here because they answer
+    different questions: a source being served nothing looks the same as one
+    whose items are all being discarded if only the second is recorded.
+
+    A source reports its own result rather than having it inferred from the
+    post count. Zero posts is a perfectly good hour, and the sources disagree
+    about how they signal trouble -- RSS returns an observation per feed, while
+    others log and hand back an empty list.
+    """
+
+    source_type: str
+    result: str = RESULT_OK
+    elapsed_ms: int = 0
+    channels_attempted: int = 0
+    channels_succeeded: int = 0
+    channels_failed: int = 0
+    items_returned: int = 0
+    posts_kept: int = 0
+    errors: Mapping[str, int] = field(default_factory=dict)
+    error_kind: str = ERROR_KIND_NONE
+    error_message: str = ''
+
+    def to_dict(self) -> dict:
+        errors = {}
+        for kind, count in (self.errors or {}).items():
+            clean = clean_error_kind(kind)
+            errors[clean] = errors.get(clean, 0) + int(count)
+        return {
+            'source_type': str(self.source_type),
+            'result': self.result,
+            'elapsed_ms': max(0, int(self.elapsed_ms)),
+            'channels_attempted': max(0, int(self.channels_attempted)),
+            'channels_succeeded': max(0, int(self.channels_succeeded)),
+            'channels_failed': max(0, int(self.channels_failed)),
+            'items_returned': max(0, int(self.items_returned)),
+            'posts_kept': max(0, int(self.posts_kept)),
+            'errors': {kind: count for kind, count in sorted(errors.items()) if count > 0},
+            'error_kind': clean_error_kind(self.error_kind),
+            'error_message': clean_error_message(self.error_message),
+        }
+
+    @classmethod
+    def from_dict(cls, record: Mapping[str, Any]) -> 'SourceReport':
+        return cls(
+            source_type=record['source_type'],
+            result=record.get('result', RESULT_OK),
+            elapsed_ms=record.get('elapsed_ms', 0),
+            channels_attempted=record.get('channels_attempted', 0),
+            channels_succeeded=record.get('channels_succeeded', 0),
+            channels_failed=record.get('channels_failed', 0),
+            items_returned=record.get('items_returned', 0),
+            posts_kept=record.get('posts_kept', 0),
+            errors=dict(record.get('errors') or {}),
+            error_kind=record.get('error_kind', ERROR_KIND_NONE),
+            error_message=record.get('error_message', ''),
+        )
+
+
+@dataclass(frozen=True)
+class SubtaskReport:
+    """Work done alongside collection that can fail on its own.
+
+    Refreshing a follows snapshot is the case that matters: it can fail while
+    every post still arrives, and folding it into the source's result would
+    report a healthy run as broken.
+    """
+
+    name: str
+    scope: str = ''
+    result: str = RESULT_OK
+    elapsed_ms: int = 0
+    error_kind: str = ERROR_KIND_NONE
+    error_message: str = ''
+
+    def to_dict(self) -> dict:
+        return {
+            'name': str(self.name),
+            'scope': _clean_text(self.scope),
+            'result': self.result,
+            'elapsed_ms': max(0, int(self.elapsed_ms)),
+            'error_kind': clean_error_kind(self.error_kind),
+            'error_message': clean_error_message(self.error_message),
+        }
+
+    @classmethod
+    def from_dict(cls, record: Mapping[str, Any]) -> 'SubtaskReport':
+        return cls(
+            name=record['name'],
+            scope=record.get('scope', ''),
+            result=record.get('result', RESULT_OK),
+            elapsed_ms=record.get('elapsed_ms', 0),
+            error_kind=record.get('error_kind', ERROR_KIND_NONE),
+            error_message=record.get('error_message', ''),
+        )
+
+
+@dataclass(frozen=True)
+class CollectionRunRecord:
+    """What one collection attempt did.
+
+    Exactly one of these belongs in every batch that reaches the spool, so that
+    a run which collected nothing, and a run in which every source failed, are
+    both visible afterwards rather than being indistinguishable from a run that
+    never happened.
+
+    It deliberately carries no identity of its own. The batch it travels in is
+    its identity, which is what lets a replayed batch record its collection
+    once rather than twice.
+    """
+
+    started_at: str
+    finished_at: str
+    elapsed_ms: int
+    result: str = RESULT_OK
+    posts_collected: int = 0
+    error_kind: str = ERROR_KIND_NONE
+    error_message: str = ''
+    sources: tuple[SourceReport, ...] = field(default_factory=tuple)
+    subtasks: tuple[SubtaskReport, ...] = field(default_factory=tuple)
+
+    def to_dict(self) -> dict:
+        return {
+            'started_at': to_timestamp(self.started_at),
+            'finished_at': to_timestamp(self.finished_at),
+            'elapsed_ms': max(0, int(self.elapsed_ms)),
+            'result': self.result,
+            'posts_collected': max(0, int(self.posts_collected)),
+            'error_kind': clean_error_kind(self.error_kind),
+            'error_message': clean_error_message(self.error_message),
+            'sources': [as_dict(report) for report in self.sources],
+            'subtasks': [as_dict(report) for report in self.subtasks],
+        }
+
+    @classmethod
+    def from_dict(cls, record: Mapping[str, Any]) -> 'CollectionRunRecord':
+        return cls(
+            started_at=record['started_at'],
+            finished_at=record['finished_at'],
+            elapsed_ms=record['elapsed_ms'],
+            result=record.get('result', RESULT_OK),
+            posts_collected=record.get('posts_collected', 0),
+            error_kind=record.get('error_kind', ERROR_KIND_NONE),
+            error_message=record.get('error_message', ''),
+            sources=tuple(
+                SourceReport.from_dict(entry) for entry in record.get('sources') or ()
+            ),
+            subtasks=tuple(
+                SubtaskReport.from_dict(entry) for entry in record.get('subtasks') or ()
+            ),
+        )
+
+
 RECORD_CLASS_BY_KIND = {
     KIND_POSTS: PostRecord,
     KIND_RSS_OBSERVATIONS: RssObservationRecord,
     KIND_CHECKPOINTS: CheckpointRecord,
     KIND_BLUESKY_FOLLOWS: BlueskyFollowRecord,
     KIND_MASTODON_FOLLOWS: MastodonFollowRecord,
+    KIND_COLLECTION_RUNS: CollectionRunRecord,
 }
 
 

@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from tests.pg_support import PostgresTestCase, available
 
+from pipeline import contract
 from pipeline.contract import (
     BlueskyFollowRecord,
     CheckpointRecord,
@@ -378,7 +379,7 @@ class BatchReplayTests(BatchBuilderMixin, PostgresTestCase):
             'record_count, posts_inserted, urls_inserted '
             'FROM content.published_batches'
         )[0]
-        self.assertEqual(row[0], 2)
+        self.assertEqual(row[0], contract.CONTRACT_VERSION)
         self.assertEqual(row[1], 'test/1')
         self.assertEqual(row[2], 'rev-xyz')
         self.assertEqual(row[3], 1)

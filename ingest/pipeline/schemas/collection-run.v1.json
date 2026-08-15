@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchlinks.local/schemas/collection-run.v1.json",
+  "title": "Fetchlinks collection run (contract v3)",
+  "description": "What one collection attempt did. Exactly one of these rides in every batch that reaches the spool, including a run that collected nothing and a run in which every source failed -- those are precisely the runs an operator needs to see. It carries counts, categories and one short message per failure; complete logs and tracebacks stay on the collector's own machine.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "started_at",
+    "finished_at",
+    "elapsed_ms",
+    "result",
+    "posts_collected",
+    "error_kind",
+    "error_message",
+    "sources",
+    "subtasks"
+  ],
+  "properties": {
+    "started_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "finished_at": {
+      "$ref": "https://fetchlinks.local/schemas/timestamp.v1.json"
+    },
+    "elapsed_ms": {
+      "description": "Measured with a monotonic clock rather than subtracting the two timestamps, which an NTP correction can make nonsensical.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "result": {
+      "description": "ok when every enabled source succeeded, partial when some did and some did not, failed when none did. Zero posts is not a failure: a quiet hour is a valid successful result.",
+      "$ref": "#/$defs/result"
+    },
+    "posts_collected": {
+      "description": "Posts handed to this batch. Not posts stored -- deduplication is the publisher's decision and belongs to its own record.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "error_kind": { "$ref": "#/$defs/errorKind" },
+    "error_message": { "$ref": "#/$defs/errorMessage" },
+    "sources": {
+      "description": "One entry per source the run considered, including ones it skipped because they are switched off.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceReport" }
+    },
+    "subtasks": {
+      "description": "Work done alongside collection that can fail on its own, such as refreshing a follows snapshot. Kept separate so a failed follows sync does not read as a failed collection.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/subtaskReport" }
+    }
+  },
+  "$defs": {
+    "result": {
+      "type": "string",
+      "enum": ["ok", "partial", "failed", "skipped"]
+    },
+    "errorKind": {
+      "description": "A small stable vocabulary, so counts can be compared across weeks. Empty when nothing failed. Deliberately not an exception class name: those change when a library is upgraded.",
+      "type": "string",
+      "enum": [
+        "",
+        "network",
+        "timeout",
+        "authentication",
+        "rate_limit",
+        "http",
+        "invalid_response",
+        "parse",
+        "unknown"
+      ]
+    },
+    "errorMessage": {
+      "description": "One short, truncated message for the operator. Bounded because this is the one field carrying text from a stranger's website.",
+      "type": "string",
+      "maxLength": 500
+    },
+    "sourceReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_type",
+        "result",
+        "elapsed_ms",
+        "channels_attempted",
+        "channels_succeeded",
+        "channels_failed",
+        "items_returned",
+        "posts_kept",
+        "errors",
+        "error_kind",
+        "error_message"
+      ],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": { "$ref": "#/$defs/result" },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "channels_attempted": {
+          "description": "Feeds, subreddits or accounts this source tried. One for sources that are a single stream.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "channels_succeeded": { "type": "integer", "minimum": 0 },
+        "channels_failed": { "type": "integer", "minimum": 0 },
+        "items_returned": {
+          "description": "Items the provider handed over before filtering, so a source that is being served nothing looks different from one whose items are all being discarded.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "posts_kept": { "type": "integer", "minimum": 0 },
+        "errors": {
+          "description": "How many channels failed for each reason. An object rather than a list so a reader cannot see the same category twice.",
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/errorKind" },
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        },
+        "error_kind": { "$ref": "#/$defs/errorKind" },
+        "error_message": { "$ref": "#/$defs/errorMessage" }
+      }
+    },
+    "subtaskReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "scope",
+        "result",
+        "elapsed_ms",
+        "error_kind",
+        "error_message"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "description": "Which slice the subtask covered, for work that runs once per instance. Empty when there is only one.",
+          "type": "string"
+        },
+        "result": { "$ref": "#/$defs/result" },
+        "elapsed_ms": { "type": "integer", "minimum": 0 },
+        "error_kind": { "$ref": "#/$defs/errorKind" },
+        "error_message": { "$ref": "#/$defs/errorMessage" }
+      }
+    }
+  }
+}

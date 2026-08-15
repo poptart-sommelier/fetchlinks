@@ -11,6 +11,7 @@ from pipeline import contract, spool as spool_module
 from pipeline.contract import (
     BlueskyFollowRecord,
     CheckpointRecord,
+    CollectionRunRecord,
     ContractError,
     MastodonFollowRecord,
     PostRecord,
@@ -223,6 +224,57 @@ class BatchWritingTests(_SpoolCase):
         batch = self.write_batch(posts=[make_post('a')])
         with self.assertRaises(SpoolError):
             batch.add_posts([make_post('b')])
+
+
+class CollectionRunReportingTests(_SpoolCase):
+    def make_run(self, **overrides):
+        values = {
+            'started_at': '2026-01-02T03:04:05Z',
+            'finished_at': '2026-01-02T03:05:05Z',
+            'elapsed_ms': 60000,
+            'result': contract.RESULT_OK,
+        }
+        values.update(overrides)
+        return CollectionRunRecord(**values)
+
+    def test_a_run_that_collected_nothing_still_reaches_the_publisher(self):
+        # The batch is otherwise empty and would normally be thrown away --
+        # which is exactly how a stopped collector used to be invisible.
+        with self.spool.new_batch(collector_version=COLLECTOR_VERSION) as batch:
+            batch.set_collection_run(self.make_run(posts_collected=0))
+        self.assertFalse(batch.discarded)
+        self.assertEqual(self.ready_ids(), [batch.batch_id])
+
+    def test_the_run_is_named_in_the_manifest(self):
+        with self.spool.new_batch(collector_version=COLLECTOR_VERSION) as batch:
+            batch.set_collection_run(self.make_run())
+        manifest = json.loads(
+            (self.root / STAGE_READY / batch.batch_id / 'manifest.json').read_text('utf-8')
+        )
+        by_kind = {entry['kind']: entry for entry in manifest['files']}
+        self.assertEqual(by_kind[contract.KIND_COLLECTION_RUNS]['record_count'], 1)
+
+    def test_a_second_report_for_one_run_is_refused(self):
+        with self.assertRaises(SpoolError):
+            with self.spool.new_batch(collector_version=COLLECTOR_VERSION) as batch:
+                batch.set_collection_run(self.make_run())
+                batch.set_collection_run(self.make_run())
+
+    def test_the_run_reads_back_through_a_claimed_batch(self):
+        with self.spool.new_batch(collector_version=COLLECTOR_VERSION) as batch:
+            batch.add_posts([make_post('a')])
+            batch.set_collection_run(self.make_run(posts_collected=1))
+        claimed = self.spool.claim_next()
+        records = list(claimed.records(contract.KIND_COLLECTION_RUNS))
+        self.assertEqual(len(records), 1)
+        self.assertEqual(
+            CollectionRunRecord.from_dict(records[0]).posts_collected, 1
+        )
+
+    def test_a_malformed_run_is_refused_before_it_reaches_the_spool(self):
+        with self.assertRaises(ContractError):
+            with self.spool.new_batch(collector_version=COLLECTOR_VERSION) as batch:
+                batch.set_collection_run({'started_at': '2026-01-02T03:04:05Z'})
 
 
 class CrashDuringCollectionTests(_SpoolCase):
