@@ -26,8 +26,9 @@ import sys
 from pathlib import Path
 
 import config as app_config
+from pipeline import contract
 from pipeline.layout import RuntimeLayout
-from publisher import connection
+from publisher import connection, operations
 from publisher.bootstrap import bootstrap_catalog
 from publisher.catalog_sync import sync_catalog
 from publisher.drain import drain_ready
@@ -103,7 +104,13 @@ def cmd_sync_catalog(args) -> int:
     layout = _layout(args, cfg)
     layout.initialize()
     with connection.connect(args.database_url) as conn:
-        catalog = sync_catalog(conn, layout.catalog_path)
+        with operations.record_run(conn, operations.JOB_CATALOG_SYNC) as run:
+            catalog = sync_catalog(conn, layout.catalog_path)
+            run.note(
+                revision=catalog.revision,
+                feeds=len(catalog.feeds),
+                subreddits=len(catalog.subreddits),
+            )
     print(
         f'Catalog {catalog.revision[:12]}: {len(catalog.feeds)} feeds, '
         f'{len(catalog.subreddits)} subreddits -> {layout.catalog_path}'
@@ -118,10 +125,43 @@ def cmd_publish(args) -> int:
     spool = layout.spool()
 
     with connection.connect(args.database_url) as conn:
-        report = drain_ready(conn, spool, max_batches=args.max_batches)
+        # Announced before the drain, not after it, so a publisher killed
+        # halfway through leaves a row that says so. A run that never reports
+        # is the failure this whole table exists to make visible.
+        run = operations.start_run(
+            conn, operations.JOB_PUBLISH,
+            details={'queue_before': spool.queue_stats()},
+        )
+        try:
+            report = drain_ready(conn, spool, max_batches=args.max_batches)
+        except Exception as exc:
+            run.note(**operations.host_facts(layout.root))
+            run.finish(
+                contract.RESULT_FAILED,
+                error_kind=operations.error_kind_for(exc),
+                error_message=operations.describe_error(exc),
+            )
+            raise
 
-    if args.prune_days > 0:
-        spool.prune_published(args.prune_days)
+        if args.prune_days > 0:
+            spool.prune_published(args.prune_days)
+
+        run.note(
+            queue_after=spool.queue_stats(),
+            batches_published=report.published_count,
+            batches_quarantined=len(report.failed),
+            posts_inserted=report.posts_inserted,
+            occurrences_applied=sum(
+                outcome.occurrences_applied for outcome in report.published
+            ),
+            collection_runs_applied=sum(
+                outcome.collection_runs_applied for outcome in report.published
+            ),
+            database_bytes=operations.database_size_bytes(conn),
+            **operations.host_facts(layout.root),
+        )
+        run.finish(_publish_result(report), error_kind=_publish_error_kind(report),
+                   error_message=_publish_error_message(report))
 
     print(report.summary())
     # A quarantined batch or a stalled queue is an operational problem the
@@ -129,6 +169,37 @@ def cmd_publish(args) -> int:
     if report.failed or report.stopped_on:
         return 1
     return 0
+
+
+def _publish_result(report) -> str:
+    """A drain that got some batches through is partial, not failed.
+
+    The distinction matters on the status page: a single poisoned batch that
+    quarantines itself while everything else publishes is a very different
+    morning from a database that refused every connection.
+    """
+    if not report.failed and not report.stopped_on:
+        return contract.RESULT_OK
+    if report.published_count:
+        return contract.RESULT_PARTIAL
+    return contract.RESULT_FAILED
+
+
+def _publish_error_kind(report) -> str:
+    if report.stopped_on:
+        return operations.KIND_DATABASE
+    if report.failed:
+        return operations.KIND_INVALID_BATCH
+    return operations.KIND_NONE
+
+
+def _publish_error_message(report) -> str:
+    if report.stopped_on:
+        return f'stopped on {report.stopped_on[0]}: {report.stopped_on[1]}'
+    if report.failed:
+        batch_id, reason = report.failed[0]
+        return f'quarantined {batch_id}: {reason}'
+    return ''
 
 
 def cmd_retain(args) -> int:
@@ -147,7 +218,15 @@ def cmd_retain(args) -> int:
         return 0
 
     with connection.connect(args.database_url) as conn:
-        report = run_retention(conn, max_age)
+        with operations.record_run(conn, operations.JOB_RETENTION) as run:
+            report = run_retention(conn, max_age)
+            run.note(
+                posts_deleted=report.posts_deleted,
+                batches_forgotten=report.batches_forgotten,
+                runs_forgotten=report.runs_forgotten,
+                max_age_months=max_age,
+                database_bytes=operations.database_size_bytes(conn),
+            )
     print(report.summary())
     return 0
 

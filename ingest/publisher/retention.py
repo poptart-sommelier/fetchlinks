@@ -30,21 +30,32 @@ DELETE FROM content.published_batches
  WHERE published_at < now() - make_interval(days => %s)
 """
 
+_PRUNE_RUNS = """
+DELETE FROM content.operation_runs
+ WHERE started_at < now() - make_interval(days => %s)
+"""
+
 #: The ledger only has to outlive the spool's own retention of published
 #: batches, since a batch that no longer exists on disk can never be replayed.
 #: A generous margin over the 14-day spool default.
 DEFAULT_LEDGER_RETENTION_DAYS = 90
+
+#: A week of run history. Long enough to answer "was it broken over the
+#: weekend?", short enough that a row every half hour costs nothing.
+DEFAULT_RUN_RETENTION_DAYS = 7
 
 
 @dataclass
 class RetentionReport:
     posts_deleted: int = 0
     batches_forgotten: int = 0
+    runs_forgotten: int = 0
 
     def summary(self) -> str:
         return (
             f'{self.posts_deleted} posts deleted, '
-            f'{self.batches_forgotten} batch ledger rows forgotten'
+            f'{self.batches_forgotten} batch ledger rows forgotten, '
+            f'{self.runs_forgotten} run records forgotten'
         )
 
 
@@ -53,6 +64,7 @@ def run_retention(
     max_age_months: int,
     *,
     ledger_retention_days: int = DEFAULT_LEDGER_RETENTION_DAYS,
+    run_retention_days: int = DEFAULT_RUN_RETENTION_DAYS,
 ) -> RetentionReport:
     """Delete posts past the age limit and forget long-published batch ids."""
     if max_age_months <= 0:
@@ -66,6 +78,9 @@ def run_retention(
             if ledger_retention_days > 0:
                 cur.execute(_PRUNE_BATCH_LEDGER, (ledger_retention_days,))
                 report.batches_forgotten = max(cur.rowcount, 0)
+            if run_retention_days > 0:
+                cur.execute(_PRUNE_RUNS, (run_retention_days,))
+                report.runs_forgotten = max(cur.rowcount, 0)
         conn.commit()
     except Exception:
         conn.rollback()

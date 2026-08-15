@@ -119,7 +119,7 @@ class BatchBuilderMixin:
     def queue(self, *, posts=(), observations=(), checkpoints=(),
               bluesky_follows=None, mastodon_follows=None,
               batch_id=None, catalog_revision='rev-1',
-              follows_observed_at=None):
+              follows_observed_at=None, collection_run=None):
         with self.spool.new_batch(
             collector_version='test/1',
             catalog_revision=catalog_revision,
@@ -128,6 +128,8 @@ class BatchBuilderMixin:
             batch.add_posts(posts)
             batch.add_rss_observations(observations)
             batch.add_checkpoints(checkpoints)
+            if collection_run is not None:
+                batch.set_collection_run(collection_run)
             if bluesky_follows is not None:
                 batch.set_bluesky_follows(
                     bluesky_follows, observed_at=follows_observed_at
@@ -406,6 +408,82 @@ class BatchReplayTests(BatchBuilderMixin, PostgresTestCase):
 
         # And the batch is still claimable, so nothing was lost.
         self.assertIsNotNone(self.spool.claim_next())
+
+
+class CollectionRunApplyTests(BatchBuilderMixin, PostgresTestCase):
+    """The collection run travels in the batch and lands with it."""
+
+    def setUp(self):
+        super().setUp()
+        self.setUpSpool()
+
+    def run_record(self, **overrides):
+        fields = {
+            'started_at': '2026-01-01T10:00:00Z',
+            'finished_at': '2026-01-01T10:00:09Z',
+            'elapsed_ms': 9000,
+            'posts_collected': 1,
+        }
+        fields.update(overrides)
+        return contract.CollectionRunRecord(**fields)
+
+    def test_the_run_lands_with_the_posts_it_describes(self):
+        batch_id = self.queue(posts=[post()], collection_run=self.run_record())
+        outcome = self.publish_next()
+
+        self.assertEqual(outcome.collection_runs_applied, 1)
+        (job, run_key, result, details), = self.rows(
+            'SELECT job, run_key, result, details FROM content.operation_runs'
+        )
+        self.assertEqual(job, 'collect')
+        self.assertEqual(run_key, batch_id)
+        self.assertEqual(result, 'ok')
+        self.assertEqual(details['posts_collected'], 1)
+        self.assertEqual(details['batch_id'], batch_id)
+
+    def test_replaying_a_batch_does_not_record_its_run_twice(self):
+        self.queue(posts=[post()], collection_run=self.run_record())
+
+        claimed = self.spool.claim_next()
+        apply_batch(self.conn, claimed)
+        recovered = self.spool.claim_next()
+        second = apply_batch(self.conn, recovered)
+        recovered.mark_published()
+
+        self.assertTrue(second.already_published)
+        self.assertEqual(second.collection_runs_applied, 0)
+        self.assertEqual(self.count('content.operation_runs'), 1)
+
+    def test_a_failed_batch_records_no_run_at_all(self):
+        self.queue(posts=[post()], checkpoints=[checkpoint()],
+                   collection_run=self.run_record())
+        claimed = self.spool.claim_next()
+
+        with patch('publisher.apply._apply_bluesky_follows',
+                   side_effect=psycopg.OperationalError('connection lost')):
+            with self.assertRaises(psycopg.OperationalError):
+                apply_batch(self.conn, claimed)
+
+        self.assertEqual(self.count('content.operation_runs'), 0,
+                         'the run record must roll back with the batch')
+
+    def test_a_run_where_everything_failed_still_reaches_the_database(self):
+        # The point of the whole exercise: a collection that produced nothing
+        # must be visible, not silent.
+        self.queue(collection_run=self.run_record(
+            result=contract.RESULT_FAILED,
+            posts_collected=0,
+            error_kind='network',
+            error_message='every source failed',
+        ))
+        self.publish_next()
+
+        (result, kind, message), = self.rows(
+            'SELECT result, error_kind, error_message FROM content.operation_runs'
+        )
+        self.assertEqual(result, 'failed')
+        self.assertEqual(kind, 'network')
+        self.assertEqual(message, 'every source failed')
 
 
 class RssHealthTests(BatchBuilderMixin, PostgresTestCase):
