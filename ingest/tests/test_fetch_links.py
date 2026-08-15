@@ -18,7 +18,8 @@ from config import (
     Sources,
 )
 from pipeline.catalog import Catalog, CatalogError, build_catalog
-from pipeline.collection import CollectionResult
+from pipeline import contract
+from pipeline.collection import CollectionResult, SourceTally
 from pipeline.contract import CheckpointRecord, PostRecord, RssObservationRecord
 from pipeline.layout import RuntimeLayout
 from pipeline.state import CollectorState
@@ -245,18 +246,23 @@ class SourceIsolationTests(unittest.TestCase):
 
         self.assertEqual(merged.summary()['failed'], 'reddit')
 
-    def test_every_source_failing_still_raises(self):
-        """Usually means the machine has no network, which must not look fine."""
+    def test_every_source_failing_is_reported_as_such(self):
+        """Usually means the machine has no network, which must not look fine.
+
+        The raise moved to `collect_once`, after the batch is durable: the
+        summary explaining the failure is the only thing worth keeping from a
+        run like this, so it must be written down before the process exits.
+        """
         with patch.object(fetch_links.rss_links, 'run',
                           side_effect=ConnectionError('no network')), \
              patch.object(fetch_links.reddit_links, 'run',
                           side_effect=ConnectionError('no network')), \
-             self.assertLogs(fetch_links.logger, 'ERROR'), \
-             self.assertRaises(RuntimeError) as exc:
-            fetch_links.collect(self._cfg_rss_and_reddit(),
-                                build_catalog(), CollectorState())
+             self.assertLogs(fetch_links.logger, 'ERROR'):
+            merged = fetch_links.collect(self._cfg_rss_and_reddit(),
+                                         build_catalog(), CollectorState())
 
-        self.assertIn('rss, reddit', str(exc.exception))
+        self.assertTrue(merged.every_source_failed)
+        self.assertEqual(merged.failed_sources, ['rss', 'reddit'])
 
     def test_a_failing_follows_sync_keeps_that_source_s_posts(self):
         tmp = Path('/tmp/fl-test')
@@ -273,8 +279,116 @@ class SourceIsolationTests(unittest.TestCase):
             merged = fetch_links.collect(cfg, build_catalog(), CollectorState())
 
         self.assertEqual([post.unique_id for post in merged.posts], ['a'])
-        self.assertEqual(merged.failed_sources, ['bluesky-follows'])
+        # A follows snapshot is a subtask, not a source: it failing must not
+        # make a run that collected every post read as broken.
+        self.assertEqual(merged.failed_sources, [])
+        self.assertFalse(merged.every_source_failed)
+        self.assertEqual([(task.name, task.scope, task.result)
+                          for task in merged.subtasks],
+                         [('follows', 'bluesky', 'failed')])
         self.assertIsNone(merged.bluesky_follows)
+
+
+class RunRecordTests(unittest.TestCase):
+    """The summary a cycle writes about itself."""
+
+    def _record(self, result: CollectionResult):
+        return fetch_links.build_run_record(
+            result, '2026-01-01T00:00:00Z', '2026-01-01T00:00:12Z', 12_000)
+
+    def test_a_source_switched_off_reads_as_off_not_missing(self):
+        result = CollectionResult()
+        result.tally('bluesky').skipped = True
+        result.tally('rss').channel_succeeded(items=4)
+
+        record = self._record(result)
+
+        by_type = {report.source_type: report for report in record.sources}
+        self.assertEqual(by_type['bluesky'].result, 'skipped')
+        # A run made entirely of working and switched-off sources is a good
+        # run, not a partial one.
+        self.assertEqual(record.result, 'ok')
+
+    def test_some_channels_failing_is_partial_not_failed(self):
+        result = CollectionResult()
+        tally = result.tally('rss')
+        tally.channel_succeeded(items=3)
+        tally.channel_failed('timeout', 'took too long')
+
+        record = self._record(result)
+
+        self.assertEqual(record.result, 'partial')
+        self.assertEqual(record.sources[0].errors, {'timeout': 1})
+        self.assertEqual(record.error_kind, 'timeout')
+
+    def test_a_source_that_never_started_reads_as_failed(self):
+        """A login that will not complete counts zero channels, not zero news."""
+        result = CollectionResult()
+        result.tally('reddit').fault('authentication', 'bad credentials')
+
+        record = self._record(result)
+
+        self.assertEqual(record.sources[0].result, 'failed')
+        self.assertEqual(record.result, 'failed')
+
+    def test_a_failing_subtask_does_not_spoil_the_run(self):
+        result = CollectionResult()
+        result.tally('bluesky').channel_succeeded(items=2)
+        result.record_subtask(fetch_links.Subtask(
+            name='follows', scope='bluesky', result='failed',
+            error_kind='network', error_message='no route'))
+
+        record = self._record(result)
+
+        self.assertEqual(record.result, 'ok')
+        self.assertEqual(record.subtasks[0].result, 'failed')
+
+    def test_the_record_survives_a_round_trip_to_disk(self):
+        result = CollectionResult()
+        result.tally('rss').channel_failed('http', 'HTTP 500')
+        record = self._record(result)
+
+        restored = contract.CollectionRunRecord.from_dict(record.to_dict())
+
+        self.assertEqual(restored.result, 'failed')
+        self.assertEqual(restored.sources[0].errors, {'http': 1})
+
+
+class SourceTallyTests(unittest.TestCase):
+    def test_merging_keeps_both_instances_counts(self):
+        first = SourceTally('mastodon')
+        first.channel_succeeded(items=5)
+        second = SourceTally('mastodon')
+        second.channel_failed('network', 'unreachable', items=1)
+
+        first.merge(second)
+
+        self.assertEqual(first.channels_attempted, 2)
+        self.assertEqual(first.items_returned, 6)
+        self.assertEqual(first.result, 'partial')
+
+    def test_a_channel_that_only_logs_is_judged_by_what_it_noted(self):
+        tally = SourceTally('mastodon')
+        before = tally.fault_count
+        tally.fault('timeout', 'slow instance')
+        tally.close_channel(before, items=0)
+
+        self.assertEqual(tally.channels_failed, 1)
+        self.assertEqual(tally.result, 'failed')
+
+    def test_a_quiet_channel_is_a_success(self):
+        tally = SourceTally('mastodon')
+        tally.close_channel(tally.fault_count, items=0)
+
+        self.assertEqual(tally.channels_succeeded, 1)
+        self.assertEqual(tally.result, 'ok')
+
+    def test_an_unrecognized_category_is_kept_rather_than_dropped(self):
+        """Losing the run summary over a mislabelled failure is the worse bug."""
+        tally = SourceTally('rss')
+        tally.channel_failed('something new', 'odd')
+
+        self.assertEqual(tally.errors, {'unknown': 1})
 
 
 class AdvanceStateTests(unittest.TestCase):
@@ -387,7 +501,13 @@ class CollectOnceTests(unittest.TestCase):
             self.assertEqual(claimed.batch_id, batch_id)
             self.assertEqual(claimed.manifest.catalog_revision, revision)
 
-    def test_nothing_collected_queues_no_batch_and_leaves_state_untouched(self):
+    def test_a_quiet_cycle_still_queues_its_run_record(self):
+        """A collector that has stopped and a quiet hour must not look alike.
+
+        Every cycle queues a batch now, because each one carries the record of
+        the run that produced it. The absence of a run record is the symptom
+        of a collector that is no longer running at all.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             cfg = self._prepare(tmp)
@@ -396,8 +516,34 @@ class CollectOnceTests(unittest.TestCase):
             with patch.object(fetch_links, 'collect', return_value=CollectionResult()):
                 batch_id = fetch_links.collect_once(cfg)
 
-            self.assertIsNone(batch_id)
-            self.assertEqual(layout.spool().batch_ids('ready'), [])
+            self.assertIsNotNone(batch_id)
+            self.assertEqual(layout.spool().batch_ids('ready'), [batch_id])
+            self.assertTrue(layout.state_path.exists())
+
+            claimed = layout.spool().claim_next()
+            runs = list(claimed.records(contract.KIND_COLLECTION_RUNS))
+            self.assertEqual(len(runs), 1)
+            self.assertEqual(runs[0]['result'], 'ok')
+            self.assertEqual(runs[0]['posts_collected'], 0)
+
+    def test_every_source_failing_queues_the_summary_then_exits_badly(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            cfg = self._prepare(tmp)
+            layout = RuntimeLayout(cfg.paths.runtime_dir)
+
+            failed = CollectionResult()
+            failed.record_attempt('rss')
+            failed.record_failure('rss')
+
+            with patch.object(fetch_links, 'collect', return_value=failed):
+                with self.assertRaises(RuntimeError) as exc:
+                    fetch_links.collect_once(cfg)
+
+            self.assertIn('rss', str(exc.exception))
+            # Durable first, then loud: the explanation is the only thing this
+            # run produced, so losing it would be the worst possible outcome.
+            self.assertEqual(len(layout.spool().batch_ids('ready')), 1)
             self.assertFalse(layout.state_path.exists())
 
     def test_missing_catalog_is_a_clear_error(self):

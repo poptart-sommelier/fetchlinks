@@ -28,7 +28,7 @@ from .catalog import (
     CatalogSubreddit,
     build_catalog,
 )
-from .collection import CollectionResult, FollowsSnapshot
+from .collection import CollectionResult, FollowsSnapshot, SourceTally, Subtask
 from .contract import (
     CONTRACT_VERSION,
     ERROR_KINDS,
@@ -83,6 +83,8 @@ __all__ = [
     'ContractError',
     'FileEntry',
     'FollowsSnapshot',
+    'SourceTally',
+    'Subtask',
     'KIND_BLUESKY_FOLLOWS',
     'KIND_CHECKPOINTS',
     'KIND_COLLECTION_RUNS',

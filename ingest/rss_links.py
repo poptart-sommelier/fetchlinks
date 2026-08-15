@@ -21,6 +21,7 @@ import requests
 
 import ingest_limits
 import url_filters
+import error_kinds
 from pipeline.collection import CollectionResult
 from pipeline.contract import RssObservationRecord, utc_now
 from utils import RssPost
@@ -28,6 +29,7 @@ from utils import RssPost
 logger = logging.getLogger(__name__)
 
 THREADS = 50
+SOURCE_TYPE = 'rss'
 USER_AGENT = 'fetchlinks-rss/0.1 (+https://github.com/poptart-sommelier/fetchlinks)'
 
 # What we pass between fetch and parse:
@@ -285,6 +287,20 @@ def run(
         recent_posts, excluded_url_or_description_keywords or [], 'RSS')
 
     result.add_posts(post.to_record() for post in recent_posts)
+
+    # Health is read back from the observations rather than counted a second
+    # time, because those are already this source's honest per-feed account of
+    # what happened, and are what the publisher stores.
+    tally = result.tally(SOURCE_TYPE)
+    for (_norm, _url, feed, _etag, _lm, status, err) in fetch_results:
+        entries = len(getattr(feed, 'entries', ()) or ()) if feed is not None else 0
+        if status in (200, 304):
+            tally.channel_succeeded(items=entries)
+        else:
+            tally.channel_failed(
+                error_kinds.from_rss_error(status, err), err or '', items=entries
+            )
+    tally.posts_kept = len(recent_posts)
 
     counts = {200: 0, 304: 0, 'error': 0}
     for _norm, _u, _f, _e, _l, status, _err in fetch_results:

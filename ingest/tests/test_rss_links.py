@@ -414,6 +414,52 @@ class RunTests(unittest.TestCase):
 
         self.assertEqual(result.checkpoints, [])
 
+    def test_run_counts_each_feed_as_its_own_channel(self):
+        catalog = self._catalog(
+            ('https://a.example/feed.xml', 'https://a.example/feed.xml'),
+            ('https://b.example/feed.xml', 'https://b.example/feed.xml'),
+            ('https://c.example/feed.xml', 'https://c.example/feed.xml'),
+        )
+        fetch_results = [
+            ('https://a.example/feed.xml', 'https://a.example/feed.xml',
+             SimpleNamespace(entries=[1, 2, 3]), '', '', 200, None),
+            # A confirmed cache is a success, not a miss.
+            ('https://b.example/feed.xml', 'https://b.example/feed.xml',
+             None, '', '', 304, None),
+            ('https://c.example/feed.xml', 'https://c.example/feed.xml',
+             None, '', '', 0, 'ConnectionError'),
+        ]
+
+        with patch.object(rss_links, 'fetch_feeds', return_value=fetch_results), \
+             patch.object(rss_links, 'parse_posts', return_value=[]):
+            result = rss_links.run(_rss_source(), catalog, CollectorState())
+
+        tally = result.tally('rss')
+        self.assertEqual(tally.channels_attempted, 3)
+        self.assertEqual(tally.channels_succeeded, 2)
+        self.assertEqual(tally.channels_failed, 1)
+        self.assertEqual(tally.items_returned, 3)
+        self.assertEqual(tally.errors, {'network': 1})
+        self.assertEqual(tally.result, 'partial')
+
+    def test_run_separates_being_served_nothing_from_discarding_everything(self):
+        catalog = self._catalog(('https://a.example/feed.xml',
+                                 'https://a.example/feed.xml'))
+        fetch_results = [('https://a.example/feed.xml', 'https://a.example/feed.xml',
+                          SimpleNamespace(entries=[1, 2, 3, 4]), '', '', 200, None)]
+        old_post = self._post('https://example.com/old',
+                              date_created='2000-01-01 00:00:00')
+
+        with patch.object(rss_links, 'fetch_feeds', return_value=fetch_results), \
+             patch.object(rss_links, 'parse_posts', return_value=[old_post]):
+            result = rss_links.run(_rss_source(), catalog, CollectorState(),
+                                   max_post_age_months=3)
+
+        tally = result.tally('rss')
+        self.assertEqual(tally.items_returned, 4)
+        self.assertEqual(tally.posts_kept, 0)
+        self.assertEqual(tally.result, 'ok')
+
 
 class LatestEntryAtTests(unittest.TestCase):
     @staticmethod
