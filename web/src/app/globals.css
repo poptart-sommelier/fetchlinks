@@ -1079,7 +1079,14 @@ a.post-source:hover .post-source-type {
   border-color: var(--accent);
 }
 
+/* Both of these release the automatic minimum size that `.post-item` warns
+   about. The rating rows contain `nowrap` labels, so their min-content width is
+   a whole feed title or hostname; as grid items that minimum propagates up and
+   sets the card's column width, pushing the entire card off the side of a
+   phone. It only showed once a panel was open, because a closed <details>
+   hides its children from sizing entirely. */
 .post-rating {
+  min-width: 0;
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
@@ -1117,6 +1124,7 @@ a.post-source:hover .post-source-type {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
+  min-width: 0;
   padding: 6px 8px;
   border-radius: 6px;
   background: var(--subtle);
