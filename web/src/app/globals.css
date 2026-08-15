@@ -1299,3 +1299,340 @@ a.post-source:hover .post-source-type {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- system status ------------------------------------------------------ */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.status-observed {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.status-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.status-card,
+.status-panel,
+.status-strip-panel,
+.status-secondary,
+.status-source {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+/* The left edge carries the state as well as the badge, so a card that needs
+   attention is findable by shape before anything is read. */
+.status-card-healthy { border-left: 3px solid var(--accent); }
+.status-card-delayed { border-left: 3px solid var(--focus); }
+.status-card-stopped { border-left: 3px solid var(--danger); }
+.status-card-unknown,
+.status-card-quiet { border-left: 3px solid var(--border-strong); }
+
+.status-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.status-card-header h2,
+.status-card-header h3 {
+  font-size: 16px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-badge-healthy { border-color: var(--accent); color: var(--accent-strong); }
+.status-badge-delayed,
+.status-badge-quiet { border-color: var(--focus); color: var(--focus); }
+.status-badge-stopped { border-color: var(--danger); color: var(--danger); }
+.status-badge-unknown { color: var(--muted); }
+
+.status-card-lead {
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.status-card-facts,
+.status-facts {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.status-facts {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.status-card-facts div,
+.status-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.status-facts div {
+  display: grid;
+  gap: 2px;
+}
+
+.status-card-facts dt,
+.status-facts dt {
+  color: var(--muted);
+}
+
+.status-facts dd {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.status-fact-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.status-card-median {
+  color: var(--muted);
+}
+
+.status-card-note,
+.status-panel-note,
+.status-empty {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.status-card-error,
+.status-source-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.status-strips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.status-strip-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.status-strip-header h2 { font-size: 16px; }
+
+.status-strip-summary {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  list-style: none;
+}
+
+/* Each slot carries a glyph as well as a colour: a missing run has to be
+   findable without distinguishing amber from green. */
+.status-slot {
+  display: flex;
+  width: 20px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--subtle);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.status-slot-ok { border-color: var(--accent); color: var(--accent-strong); }
+.status-slot-partial { border-color: var(--focus); color: var(--focus); }
+.status-slot-failed { border-color: var(--danger); color: var(--danger); }
+.status-slot-running { color: var(--muted); }
+.status-slot-missing { border-style: dashed; color: var(--muted); }
+
+.status-panel {
+  margin-bottom: 18px;
+}
+
+.status-panel h2 {
+  margin-bottom: 12px;
+  font-size: 17px;
+}
+
+.status-source-grid,
+.status-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.status-source-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.status-source-header h3 { font-size: 15px; }
+
+.status-source-result {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-source-ok { border-left: 3px solid var(--accent); }
+.status-source-partial { border-left: 3px solid var(--focus); }
+.status-source-failed { border-left: 3px solid var(--danger); }
+.status-source-skipped { border-left: 3px solid var(--border-strong); }
+
+.status-source-counts { font-size: 14px; line-height: 1.5; }
+
+.status-source-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-source-note a { color: var(--link); text-decoration: underline; }
+
+.status-subtasks {
+  margin-top: 12px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.status-table-scroll { overflow-x: auto; }
+
+.status-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.status-table th,
+.status-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.status-table th { color: var(--muted); font-size: 13px; }
+
+.status-table-detail {
+  max-width: 460px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.status-result { font-weight: 700; }
+.status-result-ok { color: var(--accent-strong); }
+.status-result-partial { color: var(--focus); }
+.status-result-failed { color: var(--danger); }
+.status-result-running { color: var(--muted); }
+
+.status-guide {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  line-height: 1.6;
+}
+
+.status-guide h2 { margin-bottom: 10px; font-size: 20px; }
+
+.status-guide h3 {
+  margin-top: 20px;
+  margin-bottom: 6px;
+  font-size: 16px;
+  color: var(--accent-strong);
+}
+
+.status-guide p { max-width: 74ch; font-size: 14px; }
+
+.status-guide-intro { color: var(--muted); }
+
+.status-guide-list {
+  max-width: 74ch;
+  padding-left: 18px;
+  font-size: 14px;
+}
+
+.status-guide-list li { margin-bottom: 4px; }
+
+.status-guide-code {
+  max-width: 74ch;
+  margin: 10px 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.status-guide code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95em;
+}
+
+@media (max-width: 640px) {
+  .status-card,
+  .status-panel,
+  .status-strip-panel,
+  .status-secondary,
+  .status-source {
+    padding: 12px 13px;
+  }
+
+  .status-strip-header {
+    display: grid;
+    gap: 2px;
+  }
+}

@@ -11,6 +11,13 @@ type AdminSection = {
 
 const SECTIONS: AdminSection[] = [
   {
+    href: "/flightdeck/status",
+    title: "System status",
+    description:
+      "Is anything broken? Collector, publisher, queue, and how to diagnose each.",
+    status: "available",
+  },
+  {
     href: "/flightdeck/feeds",
     title: "RSS feeds",
     description: "Add, search, and remove RSS feed subscriptions.",
