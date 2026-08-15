@@ -83,6 +83,31 @@ class RetentionTests(PostgresTestCase):
         self.assertEqual(report.batches_forgotten, 0)
         self.assertEqual(self.count('content.published_batches'), 1)
 
+    def add_run(self, job: str, days_ago: int, run_key: str = '') -> None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO content.operation_runs '
+                '(job, run_key, started_at, finished_at, result, elapsed_ms) '
+                "VALUES (%s, %s, now() - make_interval(days => %s), now(), 'ok', 1)",
+                (job, run_key, days_ago),
+            )
+        self.conn.commit()
+
+    def test_forgets_run_history_past_the_keep_window(self):
+        self.add_run('publish', days_ago=9)
+        self.add_run('publish', days_ago=1)
+
+        report = run_retention(self.conn, 3, run_retention_days=7)
+
+        self.assertEqual(report.runs_forgotten, 1)
+        self.assertEqual(self.count('content.operation_runs'), 1)
+
+    def test_run_pruning_can_be_switched_off(self):
+        self.add_run('publish', days_ago=900)
+        report = run_retention(self.conn, 3, run_retention_days=0)
+        self.assertEqual(report.runs_forgotten, 0)
+        self.assertEqual(self.count('content.operation_runs'), 1)
+
     def test_a_nonsense_age_limit_is_rejected_rather_than_applied(self):
         # A zero or negative cutoff would delete everything.
         self.add_post('recent', months_ago=1)

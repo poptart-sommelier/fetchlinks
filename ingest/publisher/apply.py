@@ -22,6 +22,8 @@ import psycopg
 from pipeline import contract
 from utils import build_hash
 
+from . import operations
+
 logger = logging.getLogger(__name__)
 
 #: Batch fields are RFC 3339 UTC strings; the database wants aware datetimes.
@@ -51,6 +53,7 @@ class PublishOutcome:
     observations_applied: int = 0
     checkpoints_applied: int = 0
     checkpoints_skipped: int = 0
+    collection_runs_applied: int = 0
     follows_replaced: list[str] = field(default_factory=list)
     follows_stale: list[str] = field(default_factory=list)
 
@@ -68,6 +71,8 @@ class PublishOutcome:
             parts.append(f'{self.posts_skipped} duplicate posts skipped')
         if self.checkpoints_skipped:
             parts.append(f'{self.checkpoints_skipped} stale checkpoints skipped')
+        if self.collection_runs_applied:
+            parts.append(f'{self.collection_runs_applied} collection runs')
         if self.follows_stale:
             parts.append(f'{len(self.follows_stale)} stale snapshots skipped')
         return f'{self.batch_id}: ' + ', '.join(parts)
@@ -330,6 +335,20 @@ def _apply_checkpoints(cur, claimed, outcome: PublishOutcome) -> None:
             outcome.checkpoints_skipped += 1
 
 
+# --- collection runs -------------------------------------------------------
+
+
+def _apply_collection_runs(cur, claimed, outcome: PublishOutcome) -> None:
+    """Store what the collection that produced this batch actually did.
+
+    Inside the batch transaction, keyed by the batch id, so the run becomes
+    visible with the posts it describes and a replay records it once.
+    """
+    for record in claimed.records(contract.KIND_COLLECTION_RUNS):
+        if operations.record_collection_run(cur, claimed.batch_id, record):
+            outcome.collection_runs_applied += 1
+
+
 # --- follows ---------------------------------------------------------------
 #
 # Follows arrive as complete snapshots, so applying one is a replacement.
@@ -443,6 +462,7 @@ def apply_batch(conn: psycopg.Connection, claimed) -> PublishOutcome:
             _apply_posts(cur, claimed, outcome)
             _apply_rss_observations(cur, claimed, outcome)
             _apply_checkpoints(cur, claimed, outcome)
+            _apply_collection_runs(cur, claimed, outcome)
             _apply_bluesky_follows(cur, claimed, manifest, outcome)
             _apply_mastodon_follows(cur, claimed, manifest, outcome)
 
