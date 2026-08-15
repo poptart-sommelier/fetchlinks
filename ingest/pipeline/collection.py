@@ -1,9 +1,9 @@
 """What a collection cycle produced, before anything is written down.
 
 Source modules fetch and normalize, then hand back one of these. The collector
-merges them and writes a single batch, which is what makes a cycle atomic: a
-crash mid-Mastodon does not leave Reddit's posts committed and its checkpoint
-lost, because nothing is committed until every source has had its turn.
+merges them and writes a single batch, which is what makes a cycle atomic:
+nothing is committed until every source has had its turn, so a failure while
+writing cannot leave Reddit's posts committed and its checkpoint lost.
 
 The distinction that matters here is between a snapshot that was *not
 collected* and one that is *empty*. Follows files replace an entire scope, so
@@ -42,6 +42,7 @@ class CollectionResult:
         self.checkpoints: list = []
         self.bluesky_follows: FollowsSnapshot | None = None
         self.mastodon_follows: dict[str, FollowsSnapshot] = {}
+        self.failed_sources: list[str] = []
 
     def __repr__(self) -> str:
         return f'<CollectionResult {self.summary()}>'
@@ -65,6 +66,15 @@ class CollectionResult:
             records, scope=scope, observed_at=observed_at
         )
 
+    def record_failure(self, name: str) -> None:
+        """Note that a source failed, so the cycle can report an honest total.
+
+        Deliberately not part of `is_empty`: a cycle where everything failed
+        has nothing to write down, and queueing a batch to record that would
+        put the collector's own troubles into the content spool.
+        """
+        self.failed_sources.append(name)
+
     def extend(self, other: 'CollectionResult') -> 'CollectionResult':
         """Fold another source's result into this one."""
         self.posts.extend(other.posts)
@@ -73,6 +83,7 @@ class CollectionResult:
         if other.bluesky_follows is not None:
             self.bluesky_follows = other.bluesky_follows
         self.mastodon_follows.update(other.mastodon_follows)
+        self.failed_sources.extend(other.failed_sources)
         return self
 
     # --- inspection -------------------------------------------------------
@@ -98,6 +109,8 @@ class CollectionResult:
             summary['bluesky_follows'] = len(self.bluesky_follows.records)
         for scope in sorted(self.mastodon_follows):
             summary[f'mastodon_follows[{scope}]'] = len(self.mastodon_follows[scope].records)
+        if self.failed_sources:
+            summary['failed'] = ','.join(self.failed_sources)
         return summary
 
     # --- output -----------------------------------------------------------

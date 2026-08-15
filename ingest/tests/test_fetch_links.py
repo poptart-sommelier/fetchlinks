@@ -198,6 +198,85 @@ class CollectRoutingTests(unittest.TestCase):
         mastodon_run.assert_not_called()
 
 
+class SourceIsolationTests(unittest.TestCase):
+    """One unreachable source must not discard what the others fetched."""
+
+    def _cfg_rss_and_reddit(self) -> AppConfig:
+        tmp = Path('/tmp/fl-test')
+        return _cfg(
+            tmp,
+            rss=RssSource(enabled=True),
+            reddit=RedditSource(enabled=True, credential_location=tmp / 'reddit.json',
+                                subreddits=('netsec',)),
+        )
+
+    def test_one_failing_source_keeps_the_others_work(self):
+        rss_result = CollectionResult()
+        rss_result.add_posts([_post('a')])
+
+        with patch.object(fetch_links.rss_links, 'run', return_value=rss_result), \
+             patch.object(fetch_links.reddit_links, 'run',
+                          side_effect=ConnectionError('no network')), \
+             self.assertLogs(fetch_links.logger, 'ERROR'):
+            merged = fetch_links.collect(self._cfg_rss_and_reddit(),
+                                         build_catalog(), CollectorState())
+
+        self.assertEqual([post.unique_id for post in merged.posts], ['a'])
+        self.assertEqual(merged.failed_sources, ['reddit'])
+
+    def test_a_failing_source_contributes_no_checkpoint(self):
+        """Its resume position must stay put so the next run retries it."""
+        with patch.object(fetch_links.rss_links, 'run', side_effect=_empty), \
+             patch.object(fetch_links.reddit_links, 'run',
+                          side_effect=ConnectionError('no network')), \
+             self.assertLogs(fetch_links.logger, 'ERROR'):
+            merged = fetch_links.collect(self._cfg_rss_and_reddit(),
+                                         build_catalog(), CollectorState())
+
+        self.assertEqual(merged.checkpoints, [])
+
+    def test_the_failure_is_named_in_the_cycle_summary(self):
+        with patch.object(fetch_links.rss_links, 'run', side_effect=_empty), \
+             patch.object(fetch_links.reddit_links, 'run',
+                          side_effect=ConnectionError('no network')), \
+             self.assertLogs(fetch_links.logger, 'ERROR'):
+            merged = fetch_links.collect(self._cfg_rss_and_reddit(),
+                                         build_catalog(), CollectorState())
+
+        self.assertEqual(merged.summary()['failed'], 'reddit')
+
+    def test_every_source_failing_still_raises(self):
+        """Usually means the machine has no network, which must not look fine."""
+        with patch.object(fetch_links.rss_links, 'run',
+                          side_effect=ConnectionError('no network')), \
+             patch.object(fetch_links.reddit_links, 'run',
+                          side_effect=ConnectionError('no network')), \
+             self.assertLogs(fetch_links.logger, 'ERROR'), \
+             self.assertRaises(RuntimeError) as exc:
+            fetch_links.collect(self._cfg_rss_and_reddit(),
+                                build_catalog(), CollectorState())
+
+        self.assertIn('rss, reddit', str(exc.exception))
+
+    def test_a_failing_follows_sync_keeps_that_source_s_posts(self):
+        tmp = Path('/tmp/fl-test')
+        bluesky = BlueskySource(enabled=True, credential_location=tmp / 'bsky.json')
+        cfg = _cfg(tmp, bluesky=bluesky)
+
+        posts = CollectionResult()
+        posts.add_posts([_post('a')])
+
+        with patch.object(fetch_links.bluesky_links, 'run', return_value=posts), \
+             patch.object(fetch_links.bluesky_links, 'sync_follows',
+                          side_effect=ConnectionError('no network')), \
+             self.assertLogs(fetch_links.logger, 'ERROR'):
+            merged = fetch_links.collect(cfg, build_catalog(), CollectorState())
+
+        self.assertEqual([post.unique_id for post in merged.posts], ['a'])
+        self.assertEqual(merged.failed_sources, ['bluesky-follows'])
+        self.assertIsNone(merged.bluesky_follows)
+
+
 class AdvanceStateTests(unittest.TestCase):
     def test_successful_observation_updates_cache_headers(self):
         state = CollectorState()
@@ -329,7 +408,7 @@ class CollectOnceTests(unittest.TestCase):
                 fetch_links.collect_once(cfg)
             self.assertIn('catalog sync', str(exc.exception))
 
-    def test_a_failing_source_queues_nothing_and_advances_nothing(self):
+    def test_a_failing_collection_queues_nothing_and_advances_nothing(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             cfg = self._prepare(tmp)
