@@ -422,6 +422,10 @@ p {
      the phone layout overflows by a factor of five. Every flex or grid
      ancestor between here and .post-link-path needs the same release. */
   min-width: 0;
+  /* Rating a post returns the browser to this card by fragment. Without this
+     it lands flush against the top edge, which reads as the card being cut
+     off rather than as the one you just judged. */
+  scroll-margin-top: 12px;
 }
 
 .post-item:hover {

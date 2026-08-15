@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getPosts } from "../server/db";
+import type { PostSummary } from "../models/read-models";
 import {
   OWNER_COOKIE_NAME,
   isValidOwnerToken,
@@ -18,6 +19,7 @@ import {
   type RatingTarget,
 } from "../server/ratings";
 import { getSqlClient } from "../server/sql";
+import { withRatedAnchor } from "./post-anchor";
 
 /**
  * Leaving owner mode only has to drop the cookie; there is no server-side
@@ -45,6 +47,9 @@ export async function exitOwnerModeAction(formData: FormData): Promise<void> {
  * the post has nothing to do with, and attaching an attacker-chosen label to a
  * real target, which would otherwise be stored and later displayed in the
  * owner's own review queue.
+ *
+ * The redirect goes back to the card rather than the top of the feed. See
+ * `post-anchor.ts` for why that takes both a fragment and a query parameter.
  */
 export async function rateAction(formData: FormData): Promise<void> {
   const store = await cookies();
@@ -64,7 +69,7 @@ export async function rateAction(formData: FormData): Promise<void> {
   }
 
   const sql = getSqlClient(process.env);
-  const target = await resolveTarget(uniqueId, targetType, targetKey);
+  const { post, target } = await resolveTarget(uniqueId, targetType, targetKey);
 
   if (verdict === "clear") {
     await clearRating(sql, target);
@@ -75,14 +80,14 @@ export async function rateAction(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/");
-  redirect(next);
+  redirect(withRatedAnchor(next, post.id));
 }
 
 async function resolveTarget(
   uniqueId: string,
   targetType: string,
   targetKey: string,
-): Promise<RatingTarget> {
+): Promise<{ post: PostSummary; target: RatingTarget }> {
   const sql = getSqlClient(process.env);
   const { posts } = await getPosts(sql, { uniqueId, pageSize: 1 });
   const post = posts[0];
@@ -99,5 +104,5 @@ async function resolveTarget(
     throw new Error("That is not something this post can be rated by.");
   }
 
-  return target;
+  return { post, target };
 }
