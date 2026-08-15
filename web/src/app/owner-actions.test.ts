@@ -131,7 +131,7 @@ describe("rateAction", () => {
         }),
       }),
     );
-    expect(redirect).toHaveBeenCalledWith("/");
+    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
   });
 
   it("refuses a target the post does not have", async () => {
@@ -184,6 +184,27 @@ describe("rateAction", () => {
     await signIn();
     await rateAction(form({ ...VALID_TARGET, next: "https://evil.example/" }));
 
-    expect(redirect).toHaveBeenCalledWith("/");
+    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
+  });
+
+  it("returns to the rated card, keeping the filters and page it came from", async () => {
+    await signIn();
+    await rateAction(form({ ...VALID_TARGET, next: "/?q=AI&page=3" }));
+
+    expect(redirect).toHaveBeenCalledWith("/?q=AI&page=3&rated=1#post-1");
+  });
+
+  it("does not stack up a rated marker over repeated ratings", async () => {
+    await signIn();
+    await rateAction(form({ ...VALID_TARGET, next: "/?rated=9#post-9" }));
+
+    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
+  });
+
+  it("returns to the card after clearing, not just after rating", async () => {
+    await signIn();
+    await rateAction(form({ ...VALID_TARGET, verdict: "clear" }));
+
+    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
   });
 });

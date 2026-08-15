@@ -200,6 +200,67 @@ describe("Home", () => {
     expect(markup).toContain('value="reddit-2"');
   });
 
+  it("gives every card an anchor so a rating can come back to it", () => {
+    const post = createPostPage().posts[0];
+    const markup = renderToStaticMarkup(
+      <LatestPostsView result={createReadyResult()} />,
+    );
+
+    expect(markup).toContain(`id="post-${post.id}"`);
+  });
+
+  it("reopens the panel on the card just rated, and only that one", () => {
+    const page = createPostPage();
+    const [first, second] = page.posts;
+    const ratingsByPostId = new Map(
+      page.posts.map((post) => [
+        post.id,
+        {
+          targets: ratingTargetsFor(post),
+          verdicts: new Map(),
+          scores: new Map(),
+        },
+      ]),
+    );
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/", ratedPostId: first.id }}
+        ratingsByPostId={ratingsByPostId}
+        result={createReadyResult({ page })}
+      />,
+    );
+
+    expect(markup).toContain('<details class="post-rating" open="">');
+    // A second card must not be dragged open with it.
+    if (second) {
+      expect(markup).toContain('<details class="post-rating">');
+    }
+  });
+
+  it("leaves every panel shut when no rating has just happened", () => {
+    const page = createPostPage();
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        ratingsByPostId={
+          new Map(
+            page.posts.map((post) => [
+              post.id,
+              {
+                targets: ratingTargetsFor(post),
+                verdicts: new Map(),
+                scores: new Map(),
+              },
+            ]),
+          )
+        }
+        result={createReadyResult({ page })}
+      />,
+    );
+
+    expect(markup).not.toContain("open=");
+  });
+
   it("shows no rating controls to an anonymous visitor", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView result={createReadyResult()} />,

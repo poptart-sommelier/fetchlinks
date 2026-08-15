@@ -24,6 +24,7 @@ import {
 } from "../server/ratings";
 import { getSqlClient } from "../server/sql";
 import { exitOwnerModeAction, rateAction } from "./owner-actions";
+import { RATED_PARAM, postAnchorId, ratedPostIdFrom } from "./post-anchor";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -55,6 +56,10 @@ type OwnerState = {
   /** Where "Owner mode" and "Exit owner mode" return to, so a filtered,
    * paginated view survives the round trip through authentication. */
   returnPath: string;
+  /** The card just rated, if the reader has come back from a rating. Its panel
+   * is reopened so judging several things about one post does not mean
+   * reopening it between every click. */
+  ratedPostId?: number;
 };
 
 /** What the owner may rate on one card, and what they already think. */
@@ -99,7 +104,11 @@ export default async function Home({ searchParams }: HomeProps = {}) {
 
   return (
     <LatestPostsView
-      owner={{ isOwner, returnPath: buildPageHref(page, filters) }}
+      owner={{
+        isOwner,
+        returnPath: buildPageHref(page, filters),
+        ratedPostId: ratedPostIdFrom(resolvedSearchParams?.[RATED_PARAM]),
+      }}
       ratingsByPostId={
         isOwner && result.status === "ready"
           ? await loadRatings(result.page.posts)
@@ -383,7 +392,7 @@ function PostListItem({
       : undefined;
 
   return (
-    <article className="post-item">
+    <article className="post-item" id={postAnchorId(post.id)}>
       <h2 className="post-title">
         {primary ? (
           <a
@@ -451,6 +460,10 @@ function PostListItem({
  * Collapsed until asked for. A `<details>` element rather than a script,
  * because the page has no client JavaScript and a rating that only works once
  * a bundle has loaded is worse than one that always works.
+ *
+ * Reopened server-side for the card the reader just rated. A fragment alone
+ * could not do this: fragments never reach the server, so the render would
+ * have no idea which panel had been open.
  */
 function RatingPanel({
   owner,
@@ -470,7 +483,7 @@ function RatingPanel({
   ).length;
 
   return (
-    <details className="post-rating">
+    <details className="post-rating" open={owner.ratedPostId === post.id}>
       <summary>
         Rate
         {rated > 0 ? (
