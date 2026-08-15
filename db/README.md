@@ -20,6 +20,8 @@ db/migrations/0001_schemas_and_catalog.sql
 db/migrations/0002_content.sql
 db/migrations/0003_roles_and_grants.sql
 db/migrations/0004_post_occurrences.sql
+db/migrations/0005_curation_ratings.sql
+db/migrations/0006_operation_runs.sql
 ```
 
 Rules:
@@ -122,3 +124,10 @@ than fail.
   one place and cannot be pinned by an old Collector. It follows
   `unshortened_url` automatically once that is resolved, so there is no second
   update path to forget.
+- **`content.operation_runs` is a record of work, not a log.** One row per
+  attempt of a scheduled job, with counts, a normalized error category and one
+  short message, kept for a week. It is what makes "no new posts" explainable:
+  without it, a stopped collector, a stopped publisher and a genuinely quiet
+  hour all look identical. Full logs and tracebacks stay on the Pi. Collection
+  rows arrive inside a batch and are keyed by its id, so a replayed batch
+  cannot record its run twice.

@@ -199,6 +199,20 @@ class BatchWriter:
             snapshot=True,
         )
 
+    def set_collection_run(self, record: Any) -> int:
+        """Record what the run that produced this batch did.
+
+        Exactly one per batch, refused twice for the same reason a snapshot is:
+        two accounts of one run is worse than none. Writing it also makes the
+        batch non-empty, which is deliberate -- a run that collected nothing,
+        or in which everything failed, is the run most worth keeping.
+        """
+        return self._append(
+            contract.KIND_COLLECTION_RUNS,
+            (record,),
+            snapshot=True,
+        )
+
     def _append(
         self,
         kind: str,

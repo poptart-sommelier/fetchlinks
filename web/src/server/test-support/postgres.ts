@@ -36,6 +36,7 @@ const MIGRATIONS = [
   "0002_content.sql",
   "0004_post_occurrences.sql",
   "0005_curation_ratings.sql",
+  "0006_operation_runs.sql",
 ] as const;
 
 // Truncated between tests to keep each case independent without paying to
@@ -53,6 +54,7 @@ const ALL_TABLES = [
   "content.bluesky_follows",
   "content.mastodon_follows",
   "content.published_batches",
+  "content.operation_runs",
   "catalog.rss_feeds",
   "catalog.subreddits",
 ] as const;

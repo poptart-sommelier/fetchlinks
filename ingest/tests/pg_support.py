@@ -50,6 +50,7 @@ _ALL_TABLES = (
     'content.bluesky_follows',
     'content.mastodon_follows',
     'content.published_batches',
+    'content.operation_runs',
     'catalog.rss_feeds',
     'catalog.subreddits',
 )

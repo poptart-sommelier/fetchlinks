@@ -7,12 +7,15 @@ from pipeline import contract
 from pipeline.contract import (
     BlueskyFollowRecord,
     CheckpointRecord,
+    CollectionRunRecord,
     ContractError,
     FileEntry,
     Manifest,
     MastodonFollowRecord,
     PostRecord,
     RssObservationRecord,
+    SourceReport,
+    SubtaskReport,
 )
 
 
@@ -391,6 +394,163 @@ class ManifestTests(unittest.TestCase):
 
     def test_manifest_may_declare_no_files(self):
         Manifest.from_dict(self._manifest(files=()).to_dict())
+
+
+class CollectionRunTests(unittest.TestCase):
+    def _run(self, **overrides):
+        values = {
+            'started_at': '2026-01-01T00:00:00Z',
+            'finished_at': '2026-01-01T00:01:00Z',
+            'elapsed_ms': 60000,
+            'result': contract.RESULT_OK,
+            'posts_collected': 12,
+        }
+        values.update(overrides)
+        return CollectionRunRecord(**values)
+
+    def test_round_trip_through_the_schema(self):
+        record = self._run(
+            sources=(
+                SourceReport(
+                    source_type='rss',
+                    result=contract.RESULT_PARTIAL,
+                    elapsed_ms=41000,
+                    channels_attempted=718,
+                    channels_succeeded=700,
+                    channels_failed=18,
+                    items_returned=5400,
+                    posts_kept=12,
+                    errors={'timeout': 12, 'http': 6},
+                    error_kind='timeout',
+                    error_message='Read timed out',
+                ),
+            ),
+            subtasks=(
+                SubtaskReport(name='bluesky_follows', elapsed_ms=900),
+            ),
+        )
+        document = record.to_dict()
+        contract.validate_record(contract.KIND_COLLECTION_RUNS, document)
+        self.assertEqual(CollectionRunRecord.from_dict(document).to_dict(), document)
+
+    def test_a_run_that_collected_nothing_is_still_a_valid_record(self):
+        # The whole point of the record: a quiet hour must be reportable, and
+        # must not be mistaken for a run that never happened.
+        document = self._run(posts_collected=0).to_dict()
+        contract.validate_record(contract.KIND_COLLECTION_RUNS, document)
+
+    def test_a_run_where_everything_failed_is_still_a_valid_record(self):
+        document = self._run(
+            result=contract.RESULT_FAILED,
+            posts_collected=0,
+            error_kind='network',
+            error_message='Every source failed',
+            sources=(
+                SourceReport(
+                    source_type='rss',
+                    result=contract.RESULT_FAILED,
+                    channels_attempted=3,
+                    channels_failed=3,
+                    errors={'network': 3},
+                    error_kind='network',
+                ),
+            ),
+        ).to_dict()
+        contract.validate_record(contract.KIND_COLLECTION_RUNS, document)
+
+    def test_an_unknown_error_category_becomes_unknown_rather_than_failing(self):
+        # Losing the summary because its failure was mislabelled would throw
+        # away the one record worth keeping.
+        document = self._run(error_kind='ETIMEDOUT').to_dict()
+        self.assertEqual(document['error_kind'], 'unknown')
+        contract.validate_record(contract.KIND_COLLECTION_RUNS, document)
+
+    def test_error_messages_are_collapsed_and_bounded(self):
+        document = self._run(error_message='a\n\n b' + 'c' * 900).to_dict()
+        message = document['error_message']
+        self.assertLessEqual(len(message), contract.ERROR_MESSAGE_MAX_LENGTH)
+        self.assertTrue(message.startswith('a b'))
+        self.assertTrue(message.endswith('...'))
+        contract.validate_record(contract.KIND_COLLECTION_RUNS, document)
+
+    def test_zero_counts_are_dropped_from_the_error_breakdown(self):
+        document = self._run(
+            sources=(SourceReport(source_type='reddit', errors={'timeout': 0}),)
+        ).to_dict()
+        self.assertEqual(document['sources'][0]['errors'], {})
+
+    def test_repeated_categories_are_summed_not_duplicated(self):
+        document = self._run(
+            sources=(
+                SourceReport(source_type='reddit', errors={'ETIMEDOUT': 2, 'nonsense': 1}),
+            )
+        ).to_dict()
+        self.assertEqual(document['sources'][0]['errors'], {'unknown': 3})
+
+    def test_an_unknown_field_is_rejected(self):
+        document = self._run().to_dict()
+        document['collector_note'] = 'hello'
+        with self.assertRaises(ContractError):
+            contract.validate_record(contract.KIND_COLLECTION_RUNS, document)
+
+    def test_the_kind_is_only_nameable_from_version_3(self):
+        self.assertEqual(
+            contract.file_name_for(contract.KIND_COLLECTION_RUNS),
+            'collection-runs.ndjson',
+        )
+        entry = FileEntry(
+            'collection-runs.ndjson', contract.KIND_COLLECTION_RUNS, 1, 'd' * 64
+        )
+        Manifest.from_dict(Manifest(
+            batch_id=contract.new_batch_id(datetime.datetime(2026, 1, 1, tzinfo=UTC)),
+            created_at='2026-01-01T00:00:00Z',
+            collector_version='1.0.0',
+            files=(entry,),
+        ).to_dict())
+        with self.assertRaises(ContractError):
+            Manifest.from_dict(Manifest(
+                batch_id=contract.new_batch_id(datetime.datetime(2026, 1, 1, tzinfo=UTC)),
+                created_at='2026-01-01T00:00:00Z',
+                collector_version='1.0.0',
+                files=(entry,),
+                contract_version=2,
+            ).to_dict())
+
+
+class OverallResultTests(unittest.TestCase):
+    def test_everything_working_is_ok(self):
+        self.assertEqual(
+            contract.overall_result(['ok', 'ok']), contract.RESULT_OK
+        )
+
+    def test_some_working_and_some_not_is_partial(self):
+        self.assertEqual(
+            contract.overall_result(['ok', 'failed']), contract.RESULT_PARTIAL
+        )
+
+    def test_nothing_working_is_failed(self):
+        self.assertEqual(
+            contract.overall_result(['failed', 'failed']), contract.RESULT_FAILED
+        )
+
+    def test_a_partial_part_makes_the_whole_partial(self):
+        self.assertEqual(
+            contract.overall_result(['partial']), contract.RESULT_PARTIAL
+        )
+
+    def test_switched_off_sources_are_not_failures(self):
+        self.assertEqual(
+            contract.overall_result(['skipped', 'ok']), contract.RESULT_OK
+        )
+        self.assertEqual(
+            contract.overall_result(['skipped', 'failed']), contract.RESULT_FAILED
+        )
+
+    def test_a_run_with_nothing_to_do_succeeded(self):
+        self.assertEqual(contract.overall_result([]), contract.RESULT_OK)
+        self.assertEqual(
+            contract.overall_result(['skipped', 'skipped']), contract.RESULT_OK
+        )
 
 
 class DestinationIndependenceTests(unittest.TestCase):
