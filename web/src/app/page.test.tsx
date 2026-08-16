@@ -205,13 +205,21 @@ describe("Home", () => {
     expect(markup).toContain("example.com");
     expect(markup).toContain('title="Distinct articles marked down"');
     expect(markup).toContain(">👎</span> 7");
-    // Pressed state and text both say this article contributes to the count.
-    expect(markup).toContain('aria-pressed="true" class="manage-thumb"');
-    expect(markup).toContain("Remove thumbs down");
+    expect(markup).toContain(
+      'aria-label="Remove thumbs down" aria-pressed="true" class="manage-icon-control manage-thumb" data-tooltip="Remove thumbs down"',
+    );
+    expect(markup).toContain('data-icon="thumbs-down"');
+    expect(markup).toContain('aria-label="Thumbs down" aria-pressed="false"');
     expect(markup).toContain("Hidden from public.");
     expect(markup).toContain("account — Grace");
-    expect(markup).toContain('aria-pressed="true" class="manage-mute"');
-    expect(markup).toContain(">Unmute</button>");
+    expect(markup).toContain(
+      'aria-label="Unmute" aria-pressed="true" class="manage-icon-control manage-mute" data-tooltip="Unmute"',
+    );
+    expect(markup).toContain('data-icon="mute"');
+    expect(markup).not.toContain(">Unmute</button>");
+    expect(markup).not.toContain(">Mute</button>");
+    expect(markup).not.toContain(">Thumbs down</button>");
+    expect(markup).not.toContain(">Remove thumbs down</button>");
     expect(markup).toContain('value="reddit-2"');
   });
 
@@ -331,9 +339,51 @@ describe("Home", () => {
     );
 
     expect(markup).toContain(
-      '<details class="manage-remove-confirm"><summary>Remove from collection</summary>',
+      '<details class="manage-remove-confirm"><summary aria-label="Remove this feed from collection" class="manage-icon-control" data-tooltip="Remove this feed from collection">',
     );
+    expect(markup).toContain('data-icon="trash"');
     expect(markup).toContain("Remove from collection</button>");
+    expect(markup).not.toContain(">Remove from collection</summary>");
+  });
+
+  it("names a subreddit in its collection removal control", () => {
+    const post = createPostPage().posts[0]!;
+    const targets = curationTargetsFor(post);
+    const channel = targets.find((target) => target.type === "channel");
+    if (!channel) throw new Error("expected a subreddit channel");
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        managementByPostId={
+          new Map([
+            [
+              post.id,
+              {
+                catalogSources: new Map([
+                  [
+                    lookupKey(channel.type, channel.key),
+                    {
+                      id: 13,
+                      kind: "subreddit" as const,
+                      status: "active" as const,
+                      targetKey: channel.key,
+                    },
+                  ],
+                ]),
+                mutes: new Set<string>(),
+                targets,
+                thumbsDowns: new Map(),
+              },
+            ],
+          ])
+        }
+        result={createReadyResult()}
+      />,
+    );
+
+    expect(markup).toContain(
+      'aria-label="Remove this subreddit from collection" class="manage-icon-control" data-tooltip="Remove this subreddit from collection"',
+    );
   });
 
   it("shows a removed-source reason and direct restore without clearing mutes", () => {
@@ -376,8 +426,15 @@ describe("Home", () => {
 
     expect(markup).toContain("Hidden from public.");
     expect(markup).toContain("removed from collection — Ada");
-    expect(markup).toContain("Restore</button>");
-    expect(markup).toContain(">Unmute</button>");
+    expect(markup).toContain(
+      'aria-label="Restore this feed to collection" class="manage-icon-control" data-tooltip="Restore this feed to collection"',
+    );
+    expect(markup).toContain('data-icon="restore"');
+    expect(markup).toContain(
+      'aria-label="Unmute" aria-pressed="true" class="manage-icon-control manage-mute" data-tooltip="Unmute"',
+    );
+    expect(markup).not.toContain(">Restore</button>");
+    expect(markup).not.toContain(">Unmute</button>");
     expect(markup).not.toContain("manage-remove-confirm");
   });
 
@@ -445,7 +502,7 @@ describe("Home", () => {
       expect(ownerMarkup).toContain("Hidden from public.");
       expect(ownerMarkup).toContain(reason);
       expect(ownerMarkup).not.toContain("manage-remove-confirm");
-      expect(ownerMarkup).not.toContain("Restore</button>");
+      expect(ownerMarkup).not.toContain('data-icon="restore"');
       expect(publicMarkup).not.toContain("Hidden from public.");
       expect(publicMarkup).not.toContain("disabled in collection");
       expect(publicMarkup).not.toContain("Remove from collection");

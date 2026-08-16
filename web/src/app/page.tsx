@@ -596,8 +596,16 @@ function VisibilityNotice({
               <input name="target_type" type="hidden" value={target.type} />
               <input name="target_key" type="hidden" value={target.key} />
               <input name="next" type="hidden" value={owner.returnPath} />
-              <button name="intent" type="submit" value="unmute">
-                Unmute
+              <button
+                aria-label="Unmute"
+                aria-pressed="true"
+                className="manage-icon-control manage-mute"
+                data-tooltip="Unmute"
+                name="intent"
+                type="submit"
+                value="unmute"
+              >
+                <ManageIcon name="mute" />
               </button>
             </form>
           </li>
@@ -616,8 +624,15 @@ function VisibilityNotice({
                 <input name="target_type" type="hidden" value={target.type} />
                 <input name="target_key" type="hidden" value={source.targetKey} />
                 <input name="next" type="hidden" value={owner.returnPath} />
-                <button name="intent" type="submit" value="restore">
-                  Restore
+                <button
+                  aria-label={collectionActionLabel("restore", source.kind)}
+                  className="manage-icon-control"
+                  data-tooltip={collectionActionLabel("restore", source.kind)}
+                  name="intent"
+                  type="submit"
+                  value="restore"
+                >
+                  <ManageIcon name="restore" />
                 </button>
               </form>
             ) : null}
@@ -693,6 +708,16 @@ const TARGET_TYPE_LABELS: Record<CurationTargetType, string> = {
   domain: "domain",
 };
 
+function collectionActionLabel(
+  action: "remove" | "restore",
+  kind: CatalogSource["kind"],
+): string {
+  const noun = kind === "rss" ? "feed" : "subreddit";
+  return `${action === "remove" ? "Remove" : "Restore"} this ${noun} ${
+    action === "remove" ? "from" : "to"
+  } collection`;
+}
+
 function ManageRow({
   catalogSource,
   muted,
@@ -709,6 +734,12 @@ function ManageRow({
   target: CurationTarget;
 }) {
   const active = state?.activePostUniqueIds.includes(post.uniqueId) ?? false;
+  const thumbsDownLabel = active ? "Remove thumbs down" : "Thumbs down";
+  const muteLabel = muted ? "Unmute" : "Mute";
+  const removeLabel =
+    catalogSource === undefined
+      ? ""
+      : collectionActionLabel("remove", catalogSource.kind);
 
   return (
     <li className="manage-target">
@@ -731,13 +762,15 @@ function ManageRow({
           <input name="target_key" type="hidden" value={target.key} />
           <input name="next" type="hidden" value={owner.returnPath} />
           <button
+            aria-label={thumbsDownLabel}
             aria-pressed={active}
-            className="manage-thumb"
+            className="manage-icon-control manage-thumb"
+            data-tooltip={thumbsDownLabel}
             name="intent"
             type="submit"
             value={active ? "clear" : "set"}
           >
-            {active ? "Remove thumbs down" : "Thumbs down"}
+            <ManageIcon name="thumbs-down" />
           </button>
         </form>
         <form action={muteAction}>
@@ -746,18 +779,26 @@ function ManageRow({
           <input name="target_key" type="hidden" value={target.key} />
           <input name="next" type="hidden" value={owner.returnPath} />
           <button
+            aria-label={muteLabel}
             aria-pressed={muted}
-            className="manage-mute"
+            className="manage-icon-control manage-mute"
+            data-tooltip={muteLabel}
             name="intent"
             type="submit"
             value={muted ? "unmute" : "mute"}
           >
-            {muted ? "Unmute" : "Mute"}
+            <ManageIcon name="mute" />
           </button>
         </form>
         {catalogSource?.status === "active" ? (
           <details className="manage-remove-confirm">
-            <summary>Remove from collection</summary>
+            <summary
+              aria-label={removeLabel}
+              className="manage-icon-control"
+              data-tooltip={removeLabel}
+            >
+              <ManageIcon name="trash" />
+            </summary>
             <form action={sourceCollectionAction}>
               <input name="post_unique_id" type="hidden" value={post.uniqueId} />
               <input name="target_type" type="hidden" value={target.type} />
@@ -771,6 +812,56 @@ function ManageRow({
         ) : null}
       </div>
     </li>
+  );
+}
+
+type ManageIconName = "mute" | "restore" | "thumbs-down" | "trash";
+
+function ManageIcon({ name }: { name: ManageIconName }) {
+  return (
+    <svg
+      aria-hidden="true"
+      data-icon={name}
+      fill="none"
+      focusable="false"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      {name === "thumbs-down" ? (
+        <>
+          <path d="M7 3v12" />
+          <path d="M3 5a2 2 0 0 1 2-2h2v12H5a2 2 0 0 1-2-2V5Z" />
+          <path d="M7 4h8.2a2 2 0 0 1 1.9 1.4l2.5 7A2 2 0 0 1 17.7 15H14l.6 3.1a2.4 2.4 0 0 1-4.2 2L7 15" />
+        </>
+      ) : null}
+      {name === "mute" ? (
+        <>
+          <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+          <path d="m16 9 5 5" />
+          <path d="m21 9-5 5" />
+        </>
+      ) : null}
+      {name === "trash" ? (
+        <>
+          <path d="M3 6h18" />
+          <path d="M8 6V4h8v2" />
+          <path d="m19 6-1 15H6L5 6" />
+          <path d="M10 11v5" />
+          <path d="M14 11v5" />
+        </>
+      ) : null}
+      {name === "restore" ? (
+        <>
+          <path d="M4 10a8 8 0 1 1 2 7" />
+          <path d="M4 4v6h6" />
+        </>
+      ) : null}
+    </svg>
   );
 }
 
