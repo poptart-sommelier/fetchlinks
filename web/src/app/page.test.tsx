@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { PostPage } from "../models/read-models";
+import type { CatalogSource } from "../server/catalog-sources";
 import { lookupKey } from "../server/curation";
 import { curationTargetsFor } from "../server/curation-targets";
 import { LatestPostsView, loadLatestPosts } from "./page";
@@ -286,6 +287,152 @@ describe("Home", () => {
     expect(markup).not.toContain("manage-target");
     expect(markup).not.toContain("Hidden from public");
     expect(markup).not.toContain("Unmute");
+    expect(markup).not.toContain("Remove from collection");
+    expect(markup).not.toContain("removed from collection");
+    expect(markup).not.toContain("Restore");
+  });
+
+  it("offers confirmed removal only for an active real channel source", () => {
+    const post = createRssPost();
+    const targets = curationTargetsFor(post);
+    const channel = targets.find((target) => target.type === "channel");
+    if (!channel) throw new Error("expected an RSS channel");
+    const catalogSources = new Map<string, CatalogSource>([
+      [
+        lookupKey(channel.type, channel.key),
+        {
+          id: 12,
+          kind: "rss",
+          status: "active",
+          targetKey: channel.key,
+        },
+      ],
+    ]);
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        managementByPostId={
+          new Map([
+            [
+              post.id,
+              {
+                catalogSources,
+                mutes: new Set(),
+                targets,
+                thumbsDowns: new Map(),
+              },
+            ],
+          ])
+        }
+        result={createReadyResult({
+          page: createPostPage({ posts: [post] }),
+        })}
+      />,
+    );
+
+    expect(markup).toContain(
+      '<details class="manage-remove-confirm"><summary>Remove from collection</summary>',
+    );
+    expect(markup).toContain("Remove from collection</button>");
+  });
+
+  it("shows a removed-source reason and direct restore without clearing mutes", () => {
+    const post = createRssPost();
+    const targets = curationTargetsFor(post);
+    const channel = targets.find((target) => target.type === "channel");
+    if (!channel) throw new Error("expected an RSS channel");
+    const identity = lookupKey(channel.type, channel.key);
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        managementByPostId={
+          new Map([
+            [
+              post.id,
+              {
+                catalogSources: new Map([
+                  [
+                    identity,
+                    {
+                      id: 12,
+                      kind: "rss" as const,
+                      status: "removed" as const,
+                      targetKey: channel.key,
+                    },
+                  ],
+                ]),
+                mutes: new Set([identity]),
+                targets,
+                thumbsDowns: new Map(),
+              },
+            ],
+          ])
+        }
+        result={createReadyResult({
+          page: createPostPage({ posts: [post] }),
+        })}
+      />,
+    );
+
+    expect(markup).toContain("Hidden from public.");
+    expect(markup).toContain("removed from collection — Ada");
+    expect(markup).toContain("Restore</button>");
+    expect(markup).toContain(">Unmute</button>");
+    expect(markup).not.toContain("manage-remove-confirm");
+  });
+
+  it("calls a card partly hidden when another origin remains available", () => {
+    const post = createPostPage().posts[0]!;
+    const targets = curationTargetsFor(post);
+    const redditChannel = targets.find((target) => target.type === "channel");
+    if (!redditChannel) throw new Error("expected a Reddit channel");
+    const mastodonOccurrence = {
+      ...post.occurrences[0]!,
+      id: 99,
+      sourceType: "mastodon" as const,
+      channelKey: "social.example",
+      channelLabel: "social.example",
+      actorKey: "other",
+      actorLabel: "Other",
+    };
+    const withSurvivor = {
+      ...post,
+      occurrences: [...post.occurrences, mastodonOccurrence],
+    };
+    const allTargets = curationTargetsFor(withSurvivor);
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        managementByPostId={
+          new Map([
+            [
+              post.id,
+              {
+                catalogSources: new Map([
+                  [
+                    lookupKey(redditChannel.type, redditChannel.key),
+                    {
+                      id: 3,
+                      kind: "subreddit" as const,
+                      status: "removed" as const,
+                      targetKey: redditChannel.key,
+                    },
+                  ],
+                ]),
+                mutes: new Set(),
+                targets: allTargets,
+                thumbsDowns: new Map(),
+              },
+            ],
+          ])
+        }
+        result={createReadyResult({
+          page: createPostPage({ posts: [withSurvivor] }),
+        })}
+      />,
+    );
+
+    expect(markup).toContain("Partly hidden from public.");
   });
 
   it("renders an empty state when no posts exist", () => {

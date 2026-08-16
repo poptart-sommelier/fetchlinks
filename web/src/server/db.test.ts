@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 
 import { composeTargetKey } from "./curation";
 import { getPostCount, getPosts } from "./db";
+import { restoreSubreddit, softDeleteSubreddit } from "./subreddits";
 import { describePostgres, usePostgres } from "./test-support/postgres";
 
 type SeedPost = {
@@ -408,6 +409,163 @@ describePostgres("posts read model", () => {
       "bluesky-3",
       "rss-1",
     ]);
+  });
+
+  it("filters removed catalog origins before counting and pagination", async () => {
+      await seed([
+        {
+          uniqueId: "newest-removed",
+          source: "https://removed.example/feed",
+          sourceType: "rss",
+          description: "Removed newest",
+          postedAt: "2026-01-03T00:00:00Z",
+        },
+        {
+          uniqueId: "middle-visible",
+          source: "https://middle.example/feed",
+          sourceType: "rss",
+          description: "Visible middle",
+          postedAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          uniqueId: "old-visible",
+          source: "https://old.example/feed",
+          sourceType: "rss",
+          description: "Visible old",
+          postedAt: "2026-01-01T00:00:00Z",
+        },
+      ]);
+      for (const [uniqueId, channelKey] of [
+        ["newest-removed", "https://removed.example/feed"],
+        ["middle-visible", "https://middle.example/feed"],
+        ["old-visible", "https://old.example/feed"],
+      ] as const) {
+        await addOccurrence(uniqueId, {
+          sourceType: "rss",
+          channelKey,
+          channelLabel: channelKey,
+          actorKey: "",
+          actorLabel: "",
+          source: channelKey,
+          directLink: `${channelKey}/post`,
+        });
+        await pg.exec(
+          `INSERT INTO catalog.rss_feeds
+             (feed_url, normalized_url, enabled, added_at)
+           VALUES ($1, $1, true, now())`,
+          [channelKey],
+        );
+      }
+      await pg.exec(
+        `UPDATE catalog.rss_feeds
+         SET deleted_at = now(), enabled = false
+         WHERE normalized_url = 'https://removed.example/feed'`,
+      );
+
+      await expect(getPosts(pg.sql, { pageSize: 1 })).resolves.toMatchObject({
+        totalPosts: 2,
+        totalPages: 2,
+        posts: [{ uniqueId: "middle-visible" }],
+      });
+      await expect(
+        getPosts(pg.sql, { includeMuted: true, pageSize: 5 }),
+      ).resolves.toMatchObject({
+        totalPosts: 3,
+        posts: [
+          {
+            uniqueId: "newest-removed",
+            occurrences: [{ channelKey: "https://removed.example/feed" }],
+          },
+          { uniqueId: "middle-visible" },
+          { uniqueId: "old-visible" },
+        ],
+      });
+  });
+
+  it("keeps an article public when another unmuted origin survives removal", async () => {
+      await seed([
+        {
+          uniqueId: "removed-and-live",
+          source: "https://removed.example/feed",
+          sourceType: "rss",
+          description: "Shared elsewhere",
+          postedAt: "2026-01-01T00:00:00Z",
+        },
+      ]);
+      await addOccurrence("removed-and-live", {
+        sourceType: "rss",
+        channelKey: "https://removed.example/feed",
+        channelLabel: "Removed Feed",
+        actorKey: "",
+        actorLabel: "",
+        source: "https://removed.example/feed",
+        directLink: "https://removed.example/post",
+      });
+      await addOccurrence("removed-and-live", {
+        sourceType: "mastodon",
+        channelKey: "social.example",
+        channelLabel: "social.example",
+        actorKey: "live-account",
+        actorLabel: "Live Account",
+        source: "https://social.example",
+        directLink: "https://social.example/post",
+      });
+      await pg.exec(
+        `INSERT INTO catalog.rss_feeds
+           (feed_url, normalized_url, enabled, added_at, deleted_at)
+         VALUES
+           ('https://removed.example/feed', 'https://removed.example/feed',
+            false, now(), now())`,
+      );
+
+      await expect(getPosts(pg.sql)).resolves.toMatchObject({
+        totalPosts: 1,
+        posts: [
+          {
+            sourceType: "mastodon",
+            occurrences: [{ sourceType: "mastodon" }],
+          },
+        ],
+      });
+  });
+
+  it("restoring a source leaves its explicit mute in force", async () => {
+      await seed([
+        {
+          uniqueId: "muted-restored",
+          source: "https://www.reddit.com/r/test",
+          sourceType: "reddit",
+          description: "Still muted",
+          postedAt: "2026-01-01T00:00:00Z",
+        },
+      ]);
+      await addOccurrence("muted-restored", {
+        sourceType: "reddit",
+        channelKey: "test",
+        channelLabel: "r/test",
+        actorKey: "author",
+        actorLabel: "Author",
+        source: "https://www.reddit.com/r/test",
+        directLink: "https://reddit.example/post",
+      });
+      const [subreddit] = (await pg.exec(
+        `INSERT INTO catalog.subreddits
+           (name, normalized_name, enabled, added_at)
+         VALUES ('Test', 'test', true, now())
+         RETURNING subreddit_id::int AS id`,
+      )) as { id: number }[];
+      if (!subreddit) throw new Error("expected a subreddit");
+      await softDeleteSubreddit(pg.sql, subreddit.id);
+      await mute("channel", composeTargetKey("reddit", "test"));
+      await restoreSubreddit(pg.sql, subreddit.id);
+
+      await expect(getPosts(pg.sql)).resolves.toMatchObject({ totalPosts: 0 });
+      await expect(
+        getPosts(pg.sql, { includeMuted: true }),
+      ).resolves.toMatchObject({
+        totalPosts: 1,
+        posts: [{ uniqueId: "muted-restored", occurrences: [{}] }],
+      });
   });
 
   it("does not search text that exists only in a muted link", async () => {

@@ -8,6 +8,11 @@ const setMute = vi.fn();
 const clearMute = vi.fn();
 const setThumbsDown = vi.fn();
 const clearThumbsDown = vi.fn();
+const resolveCatalogSource = vi.fn();
+const softDeleteRssFeed = vi.fn();
+const restoreRssFeed = vi.fn();
+const softDeleteSubreddit = vi.fn();
+const restoreSubreddit = vi.fn();
 const redirect = vi.fn();
 
 vi.mock("next/headers", () => ({
@@ -28,6 +33,17 @@ vi.mock("../server/sql", () => ({ getSqlClient: () => ({}) }));
 vi.mock("../server/db", () => ({
   getPosts: (...args: unknown[]) => getPosts(...args),
 }));
+vi.mock("../server/catalog-sources", () => ({
+  resolveCatalogSource: (...args: unknown[]) => resolveCatalogSource(...args),
+}));
+vi.mock("../server/feeds", () => ({
+  softDeleteRssFeed: (...args: unknown[]) => softDeleteRssFeed(...args),
+  restoreRssFeed: (...args: unknown[]) => restoreRssFeed(...args),
+}));
+vi.mock("../server/subreddits", () => ({
+  softDeleteSubreddit: (...args: unknown[]) => softDeleteSubreddit(...args),
+  restoreSubreddit: (...args: unknown[]) => restoreSubreddit(...args),
+}));
 vi.mock("../server/curation", async () => {
   const actual =
     await vi.importActual<typeof import("../server/curation")>(
@@ -42,7 +58,8 @@ vi.mock("../server/curation", async () => {
   };
 });
 
-const { muteAction, thumbsDownAction } = await import("./owner-actions");
+const { muteAction, sourceCollectionAction, thumbsDownAction } =
+  await import("./owner-actions");
 const { OWNER_COOKIE_NAME, createOwnerToken } = await import("../server/owner");
 
 const ENV = {
@@ -74,6 +91,43 @@ const POST: PostSummary = {
   occurrences: [],
 };
 
+const RSS_POST: PostSummary = {
+  ...POST,
+  source: "https://feed.example/rss",
+  sourceType: "rss",
+  uniqueId: "rss-1",
+  occurrences: [
+    {
+      id: 2,
+      postId: 1,
+      sourceType: "rss",
+      channelKey: "https://feed.example/rss",
+      channelLabel: "Feed Example",
+      actorKey: "",
+      actorLabel: "",
+      source: "https://feed.example/rss",
+      directLink: "https://feed.example/post",
+    },
+  ],
+};
+
+const REDDIT_POST: PostSummary = {
+  ...POST,
+  occurrences: [
+    {
+      id: 3,
+      postId: 1,
+      sourceType: "reddit",
+      channelKey: "test",
+      channelLabel: "r/test",
+      actorKey: "grace",
+      actorLabel: "Grace",
+      source: "https://www.reddit.com/r/test",
+      directLink: "https://reddit.example/post",
+    },
+  ],
+};
+
 function form(fields: Record<string, string>): FormData {
   const data = new FormData();
   for (const [key, value] of Object.entries(fields)) {
@@ -96,6 +150,10 @@ describe("owner Manage actions", () => {
     vi.clearAllMocks();
     Object.assign(process.env, ENV);
     getPosts.mockResolvedValue({ posts: [POST] });
+    softDeleteRssFeed.mockResolvedValue(true);
+    restoreRssFeed.mockResolvedValue(true);
+    softDeleteSubreddit.mockResolvedValue(true);
+    restoreSubreddit.mockResolvedValue(true);
   });
 
   async function signIn(): Promise<void> {
@@ -281,5 +339,121 @@ describe("owner Manage actions", () => {
     ).rejects.toThrow(/action/i);
     expect(setMute).not.toHaveBeenCalled();
     expect(clearMute).not.toHaveBeenCalled();
+  });
+
+  it("removes a real RSS feed after reconstructing its target", async () => {
+    await signIn();
+    getPosts.mockResolvedValue({ posts: [RSS_POST] });
+    resolveCatalogSource.mockResolvedValue({
+      id: 41,
+      kind: "rss",
+      status: "active",
+      targetKey: "rss\u001fhttps://feed.example/rss",
+    });
+
+    await sourceCollectionAction(
+      form({
+        post_unique_id: "rss-1",
+        target_type: "channel",
+        target_key: "rss\u001fhttps://feed.example/rss",
+        intent: "remove",
+        next: "/?page=2",
+      }),
+    );
+
+    expect(getPosts).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ includeMuted: true, uniqueId: "rss-1" }),
+    );
+    expect(resolveCatalogSource).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: "channel",
+        key: "rss\u001fhttps://feed.example/rss",
+        label: "Feed Example",
+      }),
+    );
+    expect(softDeleteRssFeed).toHaveBeenCalledWith(expect.anything(), 41);
+    expect(redirect).toHaveBeenCalledWith("/?page=2&managed=1#post-1");
+  });
+
+  it("removes and restores a real subreddit", async () => {
+    await signIn();
+    getPosts.mockResolvedValue({ posts: [REDDIT_POST] });
+    resolveCatalogSource
+      .mockResolvedValueOnce({
+        id: 7,
+        kind: "subreddit",
+        status: "active",
+        targetKey: "reddit\u001ftest",
+      })
+      .mockResolvedValueOnce({
+        id: 7,
+        kind: "subreddit",
+        status: "removed",
+        targetKey: "reddit\u001ftest",
+      });
+    const target = {
+      post_unique_id: "reddit-2",
+      target_type: "channel",
+      target_key: "reddit\u001ftest",
+      next: "/",
+    };
+
+    await sourceCollectionAction(form({ ...target, intent: "remove" }));
+    await sourceCollectionAction(form({ ...target, intent: "restore" }));
+
+    expect(softDeleteSubreddit).toHaveBeenCalledWith(expect.anything(), 7);
+    expect(restoreSubreddit).toHaveBeenCalledWith(expect.anything(), 7);
+    expect(clearMute).not.toHaveBeenCalled();
+  });
+
+  it("refuses source changes without owner mode or with a forged target", async () => {
+    getPosts.mockResolvedValue({ posts: [REDDIT_POST] });
+    const target = {
+      post_unique_id: "reddit-2",
+      target_type: "channel",
+      target_key: "reddit\u001ftest",
+      intent: "remove",
+      next: "/",
+    };
+
+    await expect(sourceCollectionAction(form(target))).rejects.toThrow(
+      /owner mode/i,
+    );
+    await signIn();
+    await expect(
+      sourceCollectionAction(
+        form({ ...target, target_key: "reddit\u001fforged" }),
+      ),
+    ).rejects.toThrow(/belong/i);
+    expect(resolveCatalogSource).not.toHaveBeenCalled();
+    expect(softDeleteSubreddit).not.toHaveBeenCalled();
+  });
+
+  it("enforces active removal and removed restoration states", async () => {
+    await signIn();
+    getPosts.mockResolvedValue({ posts: [REDDIT_POST] });
+    resolveCatalogSource.mockResolvedValue({
+      id: 7,
+      kind: "subreddit",
+      status: "disabled",
+      targetKey: "reddit\u001ftest",
+    });
+    const target = {
+      post_unique_id: "reddit-2",
+      target_type: "channel",
+      target_key: "reddit\u001ftest",
+      next: "/",
+    };
+
+    await expect(
+      sourceCollectionAction(form({ ...target, intent: "remove" })),
+    ).rejects.toThrow(/active/i);
+    await expect(
+      sourceCollectionAction(form({ ...target, intent: "restore" })),
+    ).rejects.toThrow(/removed/i);
+    expect(softDeleteSubreddit).not.toHaveBeenCalled();
+    expect(restoreSubreddit).not.toHaveBeenCalled();
   });
 });
