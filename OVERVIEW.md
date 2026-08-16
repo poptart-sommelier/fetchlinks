@@ -60,19 +60,21 @@ no repeated health increments and no checkpoint regression, so a crash between
 
 ## Schemas and roles
 
-Three schemas, and the split matters:
+Four application schemas, and the split matters:
 
 - **`catalog`** — feed and subreddit identity, and their on/off state. Owned by
   the web admin. The Publisher reads it and exports it to the Pi.
 - **`content`** — everything collection produces: posts, URLs, feed health,
   source checkpoints, follows snapshots, and the published-batch ledger.
-- **`app`** — schema migration bookkeeping.
+- **`curation`** — private owner evidence and explicit mutes. The web app alone
+  reads and writes it; the Publisher cannot even inspect it.
+- **`public`** — schema migration bookkeeping.
 
 Two runtime roles, neither of which is the database owner and neither of which
 can perform DDL:
 
-- `fetchlinks_web` — used by Vercel. Reads everything; writes only the catalog
-  tables the admin UI manages.
+- `fetchlinks_web` — used by Vercel. Reads content; writes the catalog tables
+  and private curation the owner UI manages.
 - `fetchlinks_publisher` — used by the Pi. Writes `content`, reads `catalog`.
 
 Migrations live in `db/migrations/` and are applied by the owner role, never by

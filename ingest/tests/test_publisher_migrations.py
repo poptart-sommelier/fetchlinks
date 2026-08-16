@@ -165,6 +165,9 @@ class ShippedSchemaTests(PostgresTestCase):
             ('content', 'follows_snapshots'),
             ('content', 'published_batches'),
             ('content', 'operation_runs'),
+            ('curation', 'ratings'),
+            ('curation', 'thumbs_downs'),
+            ('curation', 'mutes'),
         ]
         missing = [f'{s}.{t}' for s, t in expected if not self.table_exists(s, t)]
         self.assertEqual(missing, [])
@@ -175,7 +178,7 @@ class ShippedSchemaTests(PostgresTestCase):
         rows = self.rows(
             "SELECT table_name, column_name, data_type "
             "FROM information_schema.columns "
-            "WHERE table_schema IN ('catalog', 'content') "
+            "WHERE table_schema IN ('catalog', 'content', 'curation') "
             "AND data_type LIKE 'timestamp%'"
         )
         naive = [r for r in rows if r[2] != 'timestamp with time zone']
@@ -189,6 +192,202 @@ class ShippedSchemaTests(PostgresTestCase):
             roles,
             {'fetchlinks_owner', 'fetchlinks_web', 'fetchlinks_publisher'},
         )
+
+
+class CurationControlsTableTests(PostgresTestCase):
+    """0007 keeps evidence cumulative and mutes explicit."""
+
+    def insert_thumb(self, post: str, target_type='channel',
+                     target_key='rss\x1fhttps://example.com/feed'):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO curation.thumbs_downs '
+                '(post_unique_id, target_type, target_key) '
+                'VALUES (%s, %s, %s)',
+                (post, target_type, target_key),
+            )
+        self.conn.commit()
+
+    def test_one_target_accumulates_evidence_from_distinct_articles(self):
+        self.insert_thumb('post-1')
+        self.insert_thumb('post-2')
+
+        self.assertEqual(self.count('curation.thumbs_downs'), 2)
+
+    def test_one_article_cannot_inflate_a_target_count(self):
+        self.insert_thumb('post-1')
+
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            self.insert_thumb('post-1')
+        self.conn.rollback()
+
+        self.assertEqual(self.count('curation.thumbs_downs'), 1)
+
+    def test_evidence_survives_the_prompting_post(self):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO content.posts '
+                '(unique_id, source_type, posted_at) '
+                "VALUES ('post-1', 'rss', now())"
+            )
+        self.conn.commit()
+        self.insert_thumb('post-1')
+
+        with self.conn.cursor() as cur:
+            cur.execute("DELETE FROM content.posts WHERE unique_id = 'post-1'")
+        self.conn.commit()
+
+        self.assertEqual(self.count('curation.thumbs_downs'), 1)
+
+    def test_unknown_or_blank_evidence_is_rejected(self):
+        for values in (
+            ('post-1', 'everything', 'key'),
+            ('', 'channel', 'key'),
+            ('post-1', 'channel', ''),
+        ):
+            with self.subTest(values=values):
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    self.insert_thumb(*values)
+                self.conn.rollback()
+
+    def test_one_explicit_mute_per_target(self):
+        values = ('channel', 'rss\x1fhttps://example.com/feed', 'Example')
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO curation.mutes '
+                '(target_type, target_key, target_label) VALUES (%s, %s, %s)',
+                values,
+            )
+        self.conn.commit()
+
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    'INSERT INTO curation.mutes '
+                    '(target_type, target_key, target_label) '
+                    'VALUES (%s, %s, %s)',
+                    values,
+                )
+            self.conn.commit()
+        self.conn.rollback()
+
+        self.assertEqual(self.count('curation.mutes'), 1)
+
+    def test_unknown_or_blank_mutes_are_rejected(self):
+        for target_type, target_key in (
+            ('everything', 'key'),
+            ('channel', ''),
+        ):
+            with self.subTest(
+                target_type=target_type, target_key=target_key
+            ):
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    with self.conn.cursor() as cur:
+                        cur.execute(
+                            'INSERT INTO curation.mutes '
+                            '(target_type, target_key) VALUES (%s, %s)',
+                            (target_type, target_key),
+                        )
+                    self.conn.commit()
+                self.conn.rollback()
+
+    def test_unmuting_is_deleting_the_decision(self):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO curation.mutes (target_type, target_key) '
+                "VALUES ('domain', 'example.com')"
+            )
+            cur.execute(
+                "DELETE FROM curation.mutes WHERE target_type = 'domain' "
+                "AND target_key = 'example.com'"
+            )
+        self.conn.commit()
+
+        self.assertEqual(self.count('curation.mutes'), 0)
+
+    def test_existing_noise_is_copied_but_good_is_not(self):
+        # Re-run the additive migration after arranging the state 0005 would
+        # have left. The recreated tables remain the correct current schema for
+        # the rest of the suite.
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'DROP TRIGGER sync_legacy_rating_thumb '
+                'ON curation.ratings'
+            )
+            cur.execute(
+                'DROP FUNCTION curation.sync_legacy_rating_thumb()'
+            )
+            cur.execute('DROP TABLE curation.mutes')
+            cur.execute('DROP TABLE curation.thumbs_downs')
+            cur.execute(
+                'INSERT INTO curation.ratings '
+                '(target_type, target_key, target_label, verdict, post_unique_id) '
+                'VALUES '
+                "('channel', 'rss\x1fnoise', 'Noise feed', 'noise', 'post-1'), "
+                "('channel', 'rss\x1fgood', 'Good feed', 'good', 'post-2')"
+            )
+            migration = (
+                default_migrations_dir() / '0007_curation_controls.sql'
+            ).read_text(encoding='utf-8')
+            cur.execute(migration)
+        self.conn.commit()
+
+        self.assertEqual(
+            self.rows(
+                'SELECT post_unique_id, target_key, target_label '
+                'FROM curation.thumbs_downs'
+            ),
+            [('post-1', 'rss\x1fnoise', 'Noise feed')],
+        )
+
+    def test_legacy_rating_changes_stay_synced_during_cutover(self):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO curation.ratings '
+                '(target_type, target_key, verdict, post_unique_id) '
+                "VALUES ('channel', 'rss\x1ffeed', 'good', 'post-1') "
+                'RETURNING rating_id'
+            )
+            rating_id = cur.fetchone()[0]
+        self.conn.commit()
+        self.assertEqual(self.count('curation.thumbs_downs'), 0)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE curation.ratings SET verdict = 'noise' "
+                'WHERE rating_id = %s',
+                (rating_id,),
+            )
+        self.conn.commit()
+        self.assertEqual(
+            self.rows(
+                'SELECT post_unique_id, legacy_rating_id '
+                'FROM curation.thumbs_downs'
+            ),
+            [('post-1', rating_id)],
+        )
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE curation.ratings SET verdict = 'good' "
+                'WHERE rating_id = %s',
+                (rating_id,),
+            )
+        self.conn.commit()
+        self.assertEqual(self.count('curation.thumbs_downs'), 0)
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE curation.ratings SET verdict = 'noise' "
+                'WHERE rating_id = %s',
+                (rating_id,),
+            )
+            cur.execute(
+                'DELETE FROM curation.ratings WHERE rating_id = %s',
+                (rating_id,),
+            )
+        self.conn.commit()
+        self.assertEqual(self.count('curation.thumbs_downs'), 0)
 
 
 class OperationRunsTableTests(PostgresTestCase):

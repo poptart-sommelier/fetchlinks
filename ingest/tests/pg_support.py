@@ -39,6 +39,9 @@ TEST_DATABASE = 'fetchlinks_test'
 TEST_ROLE_PASSWORD = 'test-only-password'
 
 _ALL_TABLES = (
+    'curation.mutes',
+    'curation.thumbs_downs',
+    'curation.ratings',
     'content.post_urls',
     'content.post_occurrences',
     'content.posts',
