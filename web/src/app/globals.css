@@ -1134,21 +1134,6 @@ a.post-source:hover .post-source-type {
   color: var(--muted);
 }
 
-.mute-notice button {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--foreground);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.mute-notice button:hover {
-  border-color: var(--accent);
-}
-
 .post-manage > summary {
   display: flex;
   gap: 8px;
@@ -1224,21 +1209,66 @@ a.post-source:hover .post-source-type {
   min-width: 0;
 }
 
-.manage-actions button,
-.manage-remove-confirm summary {
-  padding: 3px 10px;
+.manage-icon-control {
+  position: relative;
+  display: inline-flex;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--panel);
   color: var(--foreground);
   font: inherit;
-  font-size: 12px;
   cursor: pointer;
+  list-style: none;
 }
 
-.manage-actions button:hover,
-.manage-remove-confirm summary:hover {
+.manage-icon-control::-webkit-details-marker {
+  display: none;
+}
+
+.manage-icon-control:hover,
+.manage-icon-control:focus-visible {
   border-color: var(--accent);
+}
+
+.manage-icon-control::after {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  width: max-content;
+  max-width: min(220px, calc(100vw - 24px));
+  padding: 5px 7px;
+  border-radius: 4px;
+  background: var(--foreground);
+  color: var(--background);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  opacity: 0;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  text-align: center;
+  transform: translateX(-50%);
+  transition: opacity 100ms ease;
+}
+
+.manage-icon-control:hover::after,
+.manage-icon-control:focus-visible::after {
+  opacity: 1;
+}
+
+.manage-actions > :last-child .manage-icon-control::after,
+.manage-actions > :last-child.manage-icon-control::after {
+  right: 0;
+  left: auto;
+  transform: none;
 }
 
 .manage-remove-confirm {
@@ -1247,8 +1277,6 @@ a.post-source:hover .post-source-type {
 
 .manage-remove-confirm summary {
   color: var(--danger);
-  font-size: 13px;
-  list-style-position: inside;
 }
 
 .manage-remove-confirm[open] {
@@ -1263,12 +1291,17 @@ a.post-source:hover .post-source-type {
 }
 
 .manage-remove-confirm button {
+  width: auto;
+  min-width: 0;
+  height: 42px;
+  padding: 0 10px;
   border-color: var(--danger);
+  border-radius: 999px;
   color: var(--danger);
+  font-size: 12px;
 }
 
-/* The current article's feedback is a pressed control, not another increment
-   button. Text and aria-pressed carry that fact without depending on colour. */
+/* The current article's feedback is a pressed control, not another increment. */
 .manage-thumb[aria-pressed="true"] {
   border-color: var(--danger);
   background: var(--danger);
