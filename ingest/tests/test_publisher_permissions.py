@@ -46,6 +46,8 @@ class RolePermissionTests(PostgresTestCase):
         # role -- a condition nothing else would notice breaking.
         self.assertAllowed(conn, 'SELECT count(*) FROM content.post_occurrences')
         self.assertAllowed(conn, 'SELECT count(*) FROM content.operation_runs')
+        self.assertAllowed(conn, 'SELECT count(*) FROM curation.thumbs_downs')
+        self.assertAllowed(conn, 'SELECT count(*) FROM curation.mutes')
 
     def test_web_can_curate_the_catalog(self):
         conn = self.as_role('fetchlinks_web')
@@ -78,6 +80,39 @@ class RolePermissionTests(PostgresTestCase):
         # Removal is a soft delete, and the grant is what enforces it.
         conn = self.as_role('fetchlinks_web')
         self.assertDenied(conn, 'DELETE FROM catalog.rss_feeds')
+
+    def test_web_owns_curation_but_the_publisher_cannot_read_it(self):
+        web = self.as_role('fetchlinks_web')
+        self.assertAllowed(
+            web,
+            'INSERT INTO curation.thumbs_downs '
+            '(post_unique_id, target_type, target_key) '
+            "VALUES ('post-1', 'domain', 'example.com')",
+        )
+        self.assertAllowed(
+            web,
+            'INSERT INTO curation.mutes (target_type, target_key) '
+            "VALUES ('domain', 'example.com')",
+        )
+        # The old Rate form remains live during the additive migration. Its
+        # trigger must be able to mirror Noise into the new table under the web
+        # role, not merely when migrations run as the owner.
+        self.assertAllowed(
+            web,
+            'INSERT INTO curation.ratings '
+            '(target_type, target_key, verdict, post_unique_id) '
+            "VALUES ('domain', 'legacy.example', 'noise', 'post-1')",
+        )
+        self.assertAllowed(web, 'DELETE FROM curation.thumbs_downs')
+        self.assertAllowed(web, 'DELETE FROM curation.mutes')
+
+        publisher = self.as_role('fetchlinks_publisher')
+        self.assertDenied(publisher, 'SELECT count(*) FROM curation.thumbs_downs')
+        self.assertDenied(
+            publisher,
+            'INSERT INTO curation.mutes (target_type, target_key) '
+            "VALUES ('domain', 'example.com')",
+        )
 
     # -- publisher ----------------------------------------------------------
 
@@ -117,8 +152,10 @@ class RolePermissionTests(PostgresTestCase):
             with self.subTest(role=role):
                 self.assertDenied(conn, 'CREATE TABLE content.sneaky (id int)')
                 self.assertDenied(conn, 'CREATE TABLE catalog.sneaky (id int)')
+                self.assertDenied(conn, 'CREATE TABLE curation.sneaky (id int)')
                 self.assertDenied(conn, 'DROP TABLE content.posts')
                 self.assertDenied(conn, 'ALTER TABLE content.posts ADD COLUMN x int')
+                self.assertDenied(conn, 'DROP TABLE curation.mutes')
 
     def test_no_runtime_role_can_create_objects_in_public(self):
         for role in ('fetchlinks_web', 'fetchlinks_publisher'):

@@ -1,15 +1,17 @@
 # Database
 
 The PostgreSQL schema for Fetchlinks. Shared by both components, owned by
-neither: the Publisher writes `content`, the web admin writes `catalog`.
+neither: the Publisher writes `content`; the web app writes `catalog` and the
+owner's private `curation`.
 
 ## Layout
 
-| Schema    | Owner            | Contents                                          |
-| --------- | ---------------- | ------------------------------------------------- |
-| `catalog` | web admin        | RSS feed and subreddit identity plus on/off state  |
-| `content` | Publisher        | posts, origins, URLs, feed health, checkpoints, follows |
-| `public`  | migrations       | `schema_migrations` only                          |
+| Schema     | Owner      | Contents                                                |
+| ---------- | ---------- | ------------------------------------------------------- |
+| `catalog`  | web admin  | RSS feed and subreddit identity plus on/off state       |
+| `content`  | Publisher  | posts, origins, URLs, feed health, checkpoints, follows |
+| `curation` | web owner  | private thumbs-down evidence and explicit mutes         |
+| `public`   | migrations | `schema_migrations` only                                |
 
 ## Migrations
 
@@ -22,6 +24,7 @@ db/migrations/0003_roles_and_grants.sql
 db/migrations/0004_post_occurrences.sql
 db/migrations/0005_curation_ratings.sql
 db/migrations/0006_operation_runs.sql
+db/migrations/0007_curation_controls.sql
 ```
 
 Rules:
@@ -56,7 +59,7 @@ ALTER ROLE fetchlinks_publisher WITH PASSWORD '...';
 | Role                   | Used by    | Can do                                              |
 | ---------------------- | ---------- | --------------------------------------------------- |
 | `fetchlinks_owner`     | migrations | everything; never used at runtime                   |
-| `fetchlinks_web`       | Vercel     | read everything; insert/update `catalog` only        |
+| `fetchlinks_web`       | Vercel     | read everything; write `catalog` and `curation`      |
 | `fetchlinks_publisher` | the Pi     | read `catalog`; insert/update/delete `content`       |
 
 Two properties are enforced by grants rather than by code, because that is the

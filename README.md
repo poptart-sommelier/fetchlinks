@@ -14,9 +14,10 @@ The project is organized as a small monorepo with two runtime apps:
 The shared boundary between the two ingest halves is the on-disk batch contract
 in `ingest/pipeline/schemas/`; the boundary between ingest and web is
 PostgreSQL. Both apps take a `DATABASE_URL`, but different ones: the publisher
-connects as `fetchlinks_publisher` (writes content, cannot touch the catalog)
-and the web app as `fetchlinks_web` (writes feed and subreddit identity, cannot
-touch content). See [db/README.md](db/README.md).
+connects as `fetchlinks_publisher` (writes content, cannot touch the catalog or
+private curation) and the web app as `fetchlinks_web` (writes feed and subreddit
+identity plus owner curation, and cannot touch content). See
+[db/README.md](db/README.md).
 
 The production target is Neon PostgreSQL with the web app on Vercel and the
 collector on a home Raspberry Pi, so requests to sources originate from a
