@@ -561,15 +561,15 @@ function VisibilityNotice({
   const mutedTargets = management.targets.filter((target) =>
     management.mutes.has(lookupKey(target.type, target.key)),
   );
-  const removedSources = management.targets.flatMap((target) => {
+  const unavailableSources = management.targets.flatMap((target) => {
     const source = management.catalogSources?.get(
       lookupKey(target.type, target.key),
     );
 
-    return source?.status === "removed" ? [{ source, target }] : [];
+    return source && source.status !== "active" ? [{ source, target }] : [];
   });
 
-  if (mutedTargets.length === 0 && removedSources.length === 0) {
+  if (mutedTargets.length === 0 && unavailableSources.length === 0) {
     return null;
   }
 
@@ -602,18 +602,25 @@ function VisibilityNotice({
             </form>
           </li>
         ))}
-        {removedSources.map(({ source, target }) => (
-          <li key={`removed-${target.key}`}>
-            <span>removed from collection — {target.label}</span>
-            <form action={sourceCollectionAction}>
-              <input name="post_unique_id" type="hidden" value={post.uniqueId} />
-              <input name="target_type" type="hidden" value={target.type} />
-              <input name="target_key" type="hidden" value={source.targetKey} />
-              <input name="next" type="hidden" value={owner.returnPath} />
-              <button name="intent" type="submit" value="restore">
-                Restore
-              </button>
-            </form>
+        {unavailableSources.map(({ source, target }) => (
+          <li key={`${source.status}-${target.key}`}>
+            <span>
+              {source.status === "removed"
+                ? "removed from collection"
+                : "disabled in collection"}{" "}
+              — {target.label}
+            </span>
+            {source.status === "removed" ? (
+              <form action={sourceCollectionAction}>
+                <input name="post_unique_id" type="hidden" value={post.uniqueId} />
+                <input name="target_type" type="hidden" value={target.type} />
+                <input name="target_key" type="hidden" value={source.targetKey} />
+                <input name="next" type="hidden" value={owner.returnPath} />
+                <button name="intent" type="submit" value="restore">
+                  Restore
+                </button>
+              </form>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -660,7 +667,14 @@ function isHiddenFromPublic(
           ),
         );
 
-      return channelMuted || actorMuted || channelSource?.status === "removed";
+      const requiresCatalogSource =
+        occurrence.sourceType === "rss" || occurrence.sourceType === "reddit";
+
+      return (
+        channelMuted ||
+        actorMuted ||
+        (requiresCatalogSource && channelSource?.status !== "active")
+      );
     });
   const allUrlsMuted =
     post.urls.length > 0 &&

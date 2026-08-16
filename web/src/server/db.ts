@@ -488,22 +488,27 @@ function visibleOriginMatches(
 
 function originIsPublic(alias: string): string {
   return `
-    NOT EXISTS (
-      SELECT 1
-      FROM catalog.rss_feeds removed_feed
-      WHERE ${alias}.source_type = 'rss'
-        AND removed_feed.normalized_url = ${alias}.channel_key
-        AND removed_feed.deleted_at IS NOT NULL
+    (
+      ${alias}.source_type IS DISTINCT FROM 'rss'
+      OR EXISTS (
+        SELECT 1
+        FROM catalog.rss_feeds active_feed
+        WHERE active_feed.normalized_url = ${alias}.channel_key
+          AND active_feed.enabled = true
+          AND active_feed.deleted_at IS NULL
+      )
+    )
+    AND (
+      ${alias}.source_type IS DISTINCT FROM 'reddit'
+      OR EXISTS (
+        SELECT 1
+        FROM catalog.subreddits active_subreddit
+        WHERE active_subreddit.normalized_name = ${alias}.channel_key
+          AND active_subreddit.enabled = true
+          AND active_subreddit.deleted_at IS NULL
+      )
     )
     AND NOT EXISTS (
-      SELECT 1
-      FROM catalog.subreddits removed_subreddit
-      WHERE ${alias}.source_type = 'reddit'
-        AND removed_subreddit.normalized_name = ${alias}.channel_key
-        AND removed_subreddit.deleted_at IS NOT NULL
-    )
-    AND
-    NOT EXISTS (
       SELECT 1
       FROM curation.mutes origin_mute
       WHERE (
