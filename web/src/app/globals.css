@@ -1083,12 +1083,9 @@ a.post-source:hover .post-source-type {
   border-color: var(--accent);
 }
 
-/* Both of these release the automatic minimum size that `.post-item` warns
-   about. The Manage rows contain `nowrap` labels, so their min-content width is
-   a whole feed title or hostname; as grid items that minimum propagates up and
-   sets the card's column width, pushing the entire card off the side of a
-   phone. It only showed once a panel was open, because a closed <details>
-   hides its children from sizing entirely. */
+/* Release the automatic minimum size that `.post-item` warns about. A closed
+   <details> hides its children from sizing, so long Manage labels otherwise
+   only push the card wide once the panel opens. */
 .post-manage {
   min-width: 0;
   margin-top: 10px;
@@ -1161,11 +1158,10 @@ a.post-source:hover .post-source-type {
 }
 
 .manage-target {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   min-width: 0;
   padding: 6px 8px;
   border-radius: 6px;
@@ -1189,6 +1185,8 @@ a.post-source:hover .post-source-type {
 }
 
 .manage-target-label {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   max-width: 46ch;
   text-overflow: ellipsis;
@@ -1205,8 +1203,8 @@ a.post-source:hover .post-source-type {
 .manage-actions {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
-  min-width: 0;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
 }
 
 .manage-icon-control {

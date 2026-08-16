@@ -170,7 +170,9 @@ describe("Home", () => {
   it("shows Manage only in owner mode, with cumulative feedback", () => {
     const post = createPostPage().posts[0];
     const targets = curationTargetsFor(post);
+    const postTarget = targets.find((target) => target.type === "post");
     const marked = targets.find((target) => target.type === "actor");
+    if (!postTarget) throw new Error("expected a post target");
     if (!marked) throw new Error("expected an actor target");
     const markup = renderToStaticMarkup(
       <LatestPostsView
@@ -180,9 +182,19 @@ describe("Home", () => {
             [
               post.id,
               {
-                mutes: new Set([lookupKey(marked.type, marked.key)]),
+                mutes: new Set([
+                  lookupKey(postTarget.type, postTarget.key),
+                  lookupKey(marked.type, marked.key),
+                ]),
                 targets,
                 thumbsDowns: new Map([
+                  [
+                    lookupKey(postTarget.type, postTarget.key),
+                    {
+                      count: 11,
+                      activePostUniqueIds: [post.uniqueId],
+                    },
+                  ],
                   [
                     lookupKey(marked.type, marked.key),
                     {
@@ -203,8 +215,22 @@ describe("Home", () => {
     expect(markup).toContain("Manage");
     expect(markup).toContain("r/test");
     expect(markup).toContain("example.com");
+    expect(markup).not.toContain('class="manage-target-type">this post</span>');
     expect(markup).toContain('title="Distinct articles marked down"');
     expect(markup).toContain(">👎</span> 7");
+    expect(markup).not.toContain(">👎</span> 11");
+    expect(markup).toContain(
+      '<span class="post-manage-count">1 marked</span>',
+    );
+    expect(markup).toContain(
+      '<span class="post-manage-count">1 muted</span>',
+    );
+    expect(markup).not.toContain(
+      '<span class="post-manage-count">2 marked</span>',
+    );
+    expect(markup).not.toContain(
+      '<span class="post-manage-count">2 muted</span>',
+    );
     expect(markup).toContain(
       'aria-label="Remove thumbs down" aria-pressed="true" class="manage-icon-control manage-thumb" data-tooltip="Remove thumbs down"',
     );
@@ -221,6 +247,110 @@ describe("Home", () => {
     expect(markup).not.toContain(">Thumbs down</button>");
     expect(markup).not.toContain(">Remove thumbs down</button>");
     expect(markup).toContain('value="reddit-2"');
+  });
+
+  it("keeps long target labels and their actions in separate row columns", () => {
+    const longDomain = `${"very-long-subdomain-".repeat(8)}example.com`;
+    const post = createPostPage().posts[0]!;
+    const withLongDomain = {
+      ...post,
+      urls: post.urls.map((url) => ({
+        ...url,
+        urlHost: longDomain,
+      })),
+    };
+    const markup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        managementByPostId={
+          new Map([
+            [
+              post.id,
+              {
+                mutes: new Set<string>(),
+                targets: curationTargetsFor(withLongDomain),
+                thumbsDowns: new Map(),
+              },
+            ],
+          ])
+        }
+        result={createReadyResult({
+          page: createPostPage({ posts: [withLongDomain] }),
+        })}
+      />,
+    );
+    const domainRow = markup.match(
+      new RegExp(
+        `<li class="manage-target"><div class="manage-target-name"><span class="manage-target-type">domain</span><span class="manage-target-label">${longDomain}</span>.*?</div><div class="manage-actions">(.*?)</div></li>`,
+      ),
+    );
+
+    expect(domainRow).not.toBeNull();
+    expect(domainRow?.[1]).toContain('data-icon="thumbs-down"');
+    expect(domainRow?.[1]).toContain('data-icon="mute"');
+  });
+
+  it("keeps legacy post-mute recovery out of the ordinary Manage rows", () => {
+    const post = createPostPage().posts[0]!;
+    const targets = curationTargetsFor(post);
+    const postTarget = targets.find((target) => target.type === "post");
+    if (!postTarget) throw new Error("expected a post target");
+    const managementByPostId = new Map([
+      [
+        post.id,
+        {
+          mutes: new Set([lookupKey(postTarget.type, postTarget.key)]),
+          targets,
+          thumbsDowns: new Map([
+            [
+              lookupKey(postTarget.type, postTarget.key),
+              {
+                count: 4,
+                activePostUniqueIds: [post.uniqueId],
+              },
+            ],
+          ]),
+        },
+      ],
+    ]);
+    const result = createReadyResult();
+    const ownerMarkup = renderToStaticMarkup(
+      <LatestPostsView
+        owner={{ isOwner: true, returnPath: "/" }}
+        managementByPostId={managementByPostId}
+        result={result}
+      />,
+    );
+    const publicMarkup = renderToStaticMarkup(
+      <LatestPostsView
+        managementByPostId={managementByPostId}
+        result={result}
+      />,
+    );
+
+    expect(ownerMarkup).toContain("Hidden from public.");
+    expect(ownerMarkup).toContain("this post — Newest post");
+    expect(ownerMarkup).toContain(
+      'aria-label="Unmute" aria-pressed="true" class="manage-icon-control manage-mute" data-tooltip="Unmute"',
+    );
+    expect(
+      ownerMarkup.match(
+        /<input(?=[^>]*name="target_type")(?=[^>]*value="post")[^>]*>/g,
+      ),
+    ).toHaveLength(1);
+    expect(ownerMarkup).not.toContain(
+      '<span class="post-manage-count">1 marked</span>',
+    );
+    expect(ownerMarkup).not.toContain(
+      '<span class="post-manage-count">1 muted</span>',
+    );
+    expect(ownerMarkup).not.toContain(
+      'class="manage-target-type">this post</span>',
+    );
+    expect(publicMarkup).not.toContain("Hidden from public.");
+    expect(publicMarkup).not.toContain("this post — Newest post");
+    expect(publicMarkup).not.toContain('value="post"');
+    expect(publicMarkup).not.toContain("Unmute");
   });
 
   it("gives every card an anchor so Manage can come back to it", () => {

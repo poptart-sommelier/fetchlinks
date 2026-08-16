@@ -502,16 +502,20 @@ function ManagePanel({
   owner: OwnerState;
   post: PostSummary;
 }) {
-  if (management.targets.length === 0) {
+  const displayedTargets = management.targets.filter(
+    (target) => target.type !== "post",
+  );
+
+  if (displayedTargets.length === 0) {
     return null;
   }
 
-  const marked = management.targets.filter((target) =>
+  const marked = displayedTargets.filter((target) =>
     management.thumbsDowns
       .get(lookupKey(target.type, target.key))
       ?.activePostUniqueIds.includes(post.uniqueId),
   ).length;
-  const muted = management.targets.filter((target) =>
+  const muted = displayedTargets.filter((target) =>
     management.mutes.has(lookupKey(target.type, target.key)),
   ).length;
 
@@ -527,7 +531,7 @@ function ManagePanel({
         ) : null}
       </summary>
       <ul className="manage-target-list">
-        {management.targets.map((target) => (
+        {displayedTargets.map((target) => (
           <ManageRow
             catalogSource={management.catalogSources?.get(
               lookupKey(target.type, target.key),
