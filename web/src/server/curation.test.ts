@@ -1,10 +1,13 @@
 import { expect, it } from "vitest";
 
 import {
+  clearMute,
   clearThumbsDown,
   composeTargetKey,
+  getMutesFor,
   getThumbsDownsFor,
   lookupKey,
+  setMute,
   setThumbsDown,
 } from "./curation";
 import { describePostgres, usePostgres } from "./test-support/postgres";
@@ -226,5 +229,42 @@ describePostgres("owner thumbs down", () => {
 
   it("asks for no rows when given no targets", async () => {
     await expect(getThumbsDownsFor(pg.sql, [], [])).resolves.toEqual(new Map());
+  });
+
+  it("sets one explicit mute idempotently and reads it back", async () => {
+    await setMute(pg.sql, CHANNEL);
+    await setMute(pg.sql, { ...CHANNEL, label: "r/netsec renamed" });
+
+    await expect(getMutesFor(pg.sql, [CHANNEL, ACTOR])).resolves.toEqual(
+      new Set([lookupKey(CHANNEL.type, CHANNEL.key)]),
+    );
+    const rows = (await pg.exec(
+      `SELECT count(*)::int AS count, target_label AS label
+       FROM curation.mutes
+       GROUP BY target_label`,
+    )) as { count: number; label: string }[];
+    expect(rows).toEqual([{ count: 1, label: "r/netsec renamed" }]);
+  });
+
+  it("unmutes only the requested target and treats absence as a no-op", async () => {
+    await setMute(pg.sql, CHANNEL);
+    await setMute(pg.sql, ACTOR);
+
+    await clearMute(pg.sql, CHANNEL);
+    await clearMute(pg.sql, CHANNEL);
+
+    await expect(getMutesFor(pg.sql, [CHANNEL, ACTOR])).resolves.toEqual(
+      new Set([lookupKey(ACTOR.type, ACTOR.key)]),
+    );
+  });
+
+  it("validates mute targets and skips an empty lookup", async () => {
+    await expect(
+      setMute(pg.sql, { ...CHANNEL, type: "everything" as never }),
+    ).rejects.toThrow(/target type/i);
+    await expect(clearMute(pg.sql, { ...CHANNEL, key: "" })).rejects.toThrow(
+      /key/i,
+    );
+    await expect(getMutesFor(pg.sql, [])).resolves.toEqual(new Set());
   });
 });

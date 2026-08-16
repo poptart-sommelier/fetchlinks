@@ -110,11 +110,53 @@ export async function clearThumbsDown(
   );
 }
 
+/** Apply one explicit owner decision. Repeating it only refreshes the label. */
+export async function setMute(
+  sql: SqlClient,
+  target: CurationTarget,
+): Promise<void> {
+  assertTarget(target);
+
+  await sql.query(
+    `
+      INSERT INTO curation.mutes (target_type, target_key, target_label)
+      VALUES ($1, $2, $3)
+      ON CONFLICT ON CONSTRAINT mutes_target_identity DO UPDATE SET
+        target_label = EXCLUDED.target_label
+      RETURNING mute_id
+    `,
+    [target.type, target.key, target.label],
+  );
+}
+
+/** Remove one explicit mute without changing its thumbs-down evidence. */
+export async function clearMute(
+  sql: SqlClient,
+  target: Pick<CurationTarget, "type" | "key">,
+): Promise<void> {
+  assertTarget(target);
+
+  await sql.query(
+    `
+      DELETE FROM curation.mutes
+      WHERE target_type = $1
+        AND target_key = $2
+      RETURNING mute_id
+    `,
+    [target.type, target.key],
+  );
+}
+
 type ThumbsDownRow = {
   targetType: CurationTargetType;
   targetKey: string;
   count: number;
   activePostUniqueIds: unknown;
+};
+
+type MuteRow = {
+  targetType: CurationTargetType;
+  targetKey: string;
 };
 
 /**
@@ -164,6 +206,40 @@ export async function getThumbsDownsFor(
       count: row.count,
       activePostUniqueIds: asTextArray(row.activePostUniqueIds),
     });
+  }
+
+  return result;
+}
+
+/** The active decisions among the targets rendered on this owner page. */
+export async function getMutesFor(
+  sql: SqlClient,
+  targets: readonly Pick<CurationTarget, "type" | "key">[],
+): Promise<Set<string>> {
+  const result = new Set<string>();
+
+  if (targets.length === 0) {
+    return result;
+  }
+
+  const rows = await sql.query<MuteRow>(
+    `
+      SELECT
+        target_type AS "targetType",
+        target_key AS "targetKey"
+      FROM curation.mutes
+      WHERE (target_type, target_key) IN (
+        SELECT * FROM unnest($1::text[], $2::text[])
+      )
+    `,
+    [
+      targets.map((target) => target.type),
+      targets.map((target) => target.key),
+    ],
+  );
+
+  for (const row of rows) {
+    result.add(lookupKey(row.targetType, row.targetKey));
   }
 
   return result;
