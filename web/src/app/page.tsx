@@ -11,6 +11,10 @@ import type {
   SourceType,
 } from "../models/read-models";
 import {
+  getCatalogSourcesFor,
+  type CatalogSource,
+} from "../server/catalog-sources";
+import {
   composeTargetKey,
   getMutesFor,
   getThumbsDownsFor,
@@ -31,6 +35,7 @@ import {
 import {
   exitOwnerModeAction,
   muteAction,
+  sourceCollectionAction,
   thumbsDownAction,
 } from "./owner-actions";
 
@@ -72,6 +77,7 @@ type OwnerState = {
 
 /** What the owner may manage on one card, plus accumulated private feedback. */
 type PostManagement = {
+  catalogSources?: Map<string, CatalogSource>;
   mutes: Set<string>;
   targets: CurationTarget[];
   thumbsDowns: Map<string, ThumbsDownState>;
@@ -156,7 +162,8 @@ async function loadManagement(
   }
 
   const sql = getSqlClient(process.env);
-  const [thumbsDowns, mutes] = await Promise.all([
+  const [catalogSources, thumbsDowns, mutes] = await Promise.all([
+    getCatalogSourcesFor(sql, allTargets),
     getThumbsDownsFor(
       sql,
       allTargets,
@@ -166,7 +173,7 @@ async function loadManagement(
   ]);
 
   for (const [postId, targets] of targetsByPostId) {
-    byPostId.set(postId, { mutes, targets, thumbsDowns });
+    byPostId.set(postId, { catalogSources, mutes, targets, thumbsDowns });
   }
 
   return byPostId;
@@ -469,7 +476,7 @@ function PostListItem({
       ) : null}
       {owner.isOwner ? (
         <>
-          <MuteNotice management={management} owner={owner} post={post} />
+          <VisibilityNotice management={management} owner={owner} post={post} />
           <ManagePanel management={management} owner={owner} post={post} />
         </>
       ) : null}
@@ -522,6 +529,9 @@ function ManagePanel({
       <ul className="manage-target-list">
         {management.targets.map((target) => (
           <ManageRow
+            catalogSource={management.catalogSources?.get(
+              lookupKey(target.type, target.key),
+            )}
             key={`${target.type}-${target.key}`}
             owner={owner}
             post={post}
@@ -539,7 +549,7 @@ function ManagePanel({
   );
 }
 
-function MuteNotice({
+function VisibilityNotice({
   management,
   owner,
   post,
@@ -551,12 +561,23 @@ function MuteNotice({
   const mutedTargets = management.targets.filter((target) =>
     management.mutes.has(lookupKey(target.type, target.key)),
   );
+  const removedSources = management.targets.flatMap((target) => {
+    const source = management.catalogSources?.get(
+      lookupKey(target.type, target.key),
+    );
 
-  if (mutedTargets.length === 0) {
+    return source?.status === "removed" ? [{ source, target }] : [];
+  });
+
+  if (mutedTargets.length === 0 && removedSources.length === 0) {
     return null;
   }
 
-  const hidden = isHiddenFromPublic(post, management.mutes);
+  const hidden = isHiddenFromPublic(
+    post,
+    management.mutes,
+    management.catalogSources,
+  );
 
   return (
     <section
@@ -581,6 +602,20 @@ function MuteNotice({
             </form>
           </li>
         ))}
+        {removedSources.map(({ source, target }) => (
+          <li key={`removed-${target.key}`}>
+            <span>removed from collection — {target.label}</span>
+            <form action={sourceCollectionAction}>
+              <input name="post_unique_id" type="hidden" value={post.uniqueId} />
+              <input name="target_type" type="hidden" value={target.type} />
+              <input name="target_key" type="hidden" value={source.targetKey} />
+              <input name="next" type="hidden" value={owner.returnPath} />
+              <button name="intent" type="submit" value="restore">
+                Restore
+              </button>
+            </form>
+          </li>
+        ))}
       </ul>
     </section>
   );
@@ -589,6 +624,7 @@ function MuteNotice({
 function isHiddenFromPublic(
   post: PostSummary,
   mutes: ReadonlySet<string>,
+  catalogSources: ReadonlyMap<string, CatalogSource> | undefined,
 ): boolean {
   if (mutes.has(lookupKey("post", post.uniqueId))) {
     return true;
@@ -606,6 +642,15 @@ function isHiddenFromPublic(
             composeTargetKey(sourceType, occurrence.channelKey),
           ),
         );
+      const channelSource =
+        occurrence.channelKey === ""
+          ? undefined
+          : catalogSources?.get(
+              lookupKey(
+                "channel",
+                composeTargetKey(sourceType, occurrence.channelKey),
+              ),
+            );
       const actorMuted =
         occurrence.actorKey !== "" &&
         mutes.has(
@@ -615,7 +660,7 @@ function isHiddenFromPublic(
           ),
         );
 
-      return channelMuted || actorMuted;
+      return channelMuted || actorMuted || channelSource?.status === "removed";
     });
   const allUrlsMuted =
     post.urls.length > 0 &&
@@ -635,12 +680,14 @@ const TARGET_TYPE_LABELS: Record<CurationTargetType, string> = {
 };
 
 function ManageRow({
+  catalogSource,
   muted,
   owner,
   post,
   state,
   target,
 }: {
+  catalogSource: CatalogSource | undefined;
   muted: boolean;
   owner: OwnerState;
   post: PostSummary;
@@ -694,6 +741,20 @@ function ManageRow({
             {muted ? "Unmute" : "Mute"}
           </button>
         </form>
+        {catalogSource?.status === "active" ? (
+          <details className="manage-remove-confirm">
+            <summary>Remove from collection</summary>
+            <form action={sourceCollectionAction}>
+              <input name="post_unique_id" type="hidden" value={post.uniqueId} />
+              <input name="target_type" type="hidden" value={target.type} />
+              <input name="target_key" type="hidden" value={target.key} />
+              <input name="next" type="hidden" value={owner.returnPath} />
+              <button name="intent" type="submit" value="remove">
+                Remove from collection
+              </button>
+            </form>
+          </details>
+        ) : null}
       </div>
     </li>
   );

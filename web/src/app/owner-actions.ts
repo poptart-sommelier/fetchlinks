@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import type { PostSummary } from "../models/read-models";
+import { resolveCatalogSource } from "../server/catalog-sources";
 import {
   clearMute,
   clearThumbsDown,
@@ -14,12 +15,17 @@ import {
 } from "../server/curation";
 import { curationTargetsFor } from "../server/curation-targets";
 import { getPosts } from "../server/db";
+import { restoreRssFeed, softDeleteRssFeed } from "../server/feeds";
 import {
   OWNER_COOKIE_NAME,
   isValidOwnerToken,
   safeReturnPath,
 } from "../server/owner";
 import { getSqlClient, type SqlClient } from "../server/sql";
+import {
+  restoreSubreddit,
+  softDeleteSubreddit,
+} from "../server/subreddits";
 import { withManagedAnchor } from "./manage-anchor";
 
 /**
@@ -115,6 +121,62 @@ export async function muteAction(formData: FormData): Promise<void> {
     await clearMute(sql, target);
   } else {
     throw new Error(`Unknown Manage action: ${intent}`);
+  }
+
+  revalidatePath("/");
+  redirect(withManagedAnchor(next, post.id));
+}
+
+/** Remove or restore a catalog source after rebuilding its channel target. */
+export async function sourceCollectionAction(formData: FormData): Promise<void> {
+  const store = await cookies();
+
+  if (!(await isValidOwnerToken(store.get(OWNER_COOKIE_NAME)?.value))) {
+    throw new Error("Owner mode is required to manage collection sources.");
+  }
+
+  const uniqueId = String(formData.get("post_unique_id") ?? "").trim();
+  const targetType = String(formData.get("target_type") ?? "");
+  const targetKey = String(formData.get("target_key") ?? "");
+  const intent = String(formData.get("intent") ?? "");
+  const next = safeReturnPath(String(formData.get("next") ?? "/"));
+
+  if (!uniqueId) {
+    throw new Error("Source management needs the article it came from.");
+  }
+
+  const sql = getSqlClient(process.env);
+  const { post, target } = await resolveTarget(
+    sql,
+    uniqueId,
+    targetType,
+    targetKey,
+  );
+  const source = await resolveCatalogSource(sql, target);
+  let changed: boolean;
+
+  if (intent === "remove") {
+    if (source.status !== "active") {
+      throw new Error("Only an active catalog source can be removed.");
+    }
+    changed =
+      source.kind === "rss"
+        ? await softDeleteRssFeed(sql, source.id)
+        : await softDeleteSubreddit(sql, source.id);
+  } else if (intent === "restore") {
+    if (source.status !== "removed") {
+      throw new Error("Only a removed catalog source can be restored.");
+    }
+    changed =
+      source.kind === "rss"
+        ? await restoreRssFeed(sql, source.id)
+        : await restoreSubreddit(sql, source.id);
+  } else {
+    throw new Error(`Unknown source collection action: ${intent}`);
+  }
+
+  if (!changed) {
+    throw new Error("The catalog source changed before this action completed.");
   }
 
   revalidatePath("/");

@@ -490,6 +490,21 @@ function originIsPublic(alias: string): string {
   return `
     NOT EXISTS (
       SELECT 1
+      FROM catalog.rss_feeds removed_feed
+      WHERE ${alias}.source_type = 'rss'
+        AND removed_feed.normalized_url = ${alias}.channel_key
+        AND removed_feed.deleted_at IS NOT NULL
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM catalog.subreddits removed_subreddit
+      WHERE ${alias}.source_type = 'reddit'
+        AND removed_subreddit.normalized_name = ${alias}.channel_key
+        AND removed_subreddit.deleted_at IS NOT NULL
+    )
+    AND
+    NOT EXISTS (
+      SELECT 1
       FROM curation.mutes origin_mute
       WHERE (
         origin_mute.target_type = 'channel'
