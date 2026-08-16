@@ -1096,6 +1096,59 @@ a.post-source:hover .post-source-type {
   border-top: 1px solid var(--border);
 }
 
+.mute-notice {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 7px 9px;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: var(--subtle);
+  font-size: 12px;
+}
+
+.mute-notice-hidden {
+  border-left-color: var(--danger);
+}
+
+.mute-notice ul {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mute-notice li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.mute-notice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.mute-notice button {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mute-notice button:hover {
+  border-color: var(--accent);
+}
+
 .post-manage > summary {
   display: flex;
   gap: 8px;
@@ -1167,6 +1220,7 @@ a.post-source:hover .post-source-type {
 .manage-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .manage-actions button {
@@ -1187,6 +1241,13 @@ a.post-source:hover .post-source-type {
 /* The current article's feedback is a pressed control, not another increment
    button. Text and aria-pressed carry that fact without depending on colour. */
 .manage-thumb[aria-pressed="true"] {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--panel);
+  font-weight: 700;
+}
+
+.manage-mute[aria-pressed="true"] {
   border-color: var(--danger);
   background: var(--danger);
   color: var(--panel);

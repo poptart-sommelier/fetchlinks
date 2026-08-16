@@ -42,6 +42,7 @@ type PostUrlRow = {
   urlHash: string;
   unshortenedUrl: string | null;
   urlHost: string | null;
+  muted: boolean;
 };
 
 type PostOccurrenceRow = {
@@ -67,6 +68,9 @@ export type PostFilters = {
 };
 
 export type GetPostsOptions = PostFilters & {
+  /** Owner mode keeps muted posts, origins and links so each decision can be
+   * explained and undone. Public reads always leave this false. */
+  includeMuted?: boolean;
   page?: number;
   pageSize?: number;
 };
@@ -109,7 +113,8 @@ export async function getPosts(
     "pageSize",
   );
   const filters = normalizePostFilters(options);
-  const filterQuery = buildPostFilterQuery(filters);
+  const includeMuted = options.includeMuted === true;
+  const filterQuery = buildPostFilterQuery(filters, includeMuted);
   const whereSql = toWhereSql(filterQuery.clauses);
   const totalPosts = await getFilteredPostCount(sql, filterQuery, whereSql);
   const totalPages = Math.ceil(totalPosts / pageSize);
@@ -125,21 +130,46 @@ export async function getPosts(
     `,
     filterQuery.params.toArray(),
   );
-  const urlsByPostId = await getUrlsByPostId(
+  const { mutedDomainsByPostId, urlsByPostId } = await getUrlsByPostId(
     sql,
     postRows.map((post) => post.id),
+    includeMuted,
   );
   const occurrencesByPostId = await getOccurrencesByPostId(
     sql,
     postRows.map((post) => post.id),
+    includeMuted,
   );
 
   return {
-    posts: postRows.map((post) => ({
-      ...post,
-      urls: urlsByPostId.get(post.id) ?? [],
-      occurrences: occurrencesByPostId.get(post.id) ?? [],
-    })),
+    posts: postRows.map((post) => {
+      const urls = urlsByPostId.get(post.id) ?? [];
+      const occurrences = occurrencesByPostId.get(post.id) ?? [];
+      const representative = includeMuted ? undefined : occurrences[0];
+
+      return {
+        ...post,
+        // If the first-arrival origin is muted, name the first origin a public
+        // reader can actually see rather than leaking the suppressed one.
+        ...(representative
+          ? {
+              source: representative.source,
+              sourceType: representative.sourceType,
+              author:
+                representative.actorLabel || representative.channelLabel || "",
+              directLink: representative.directLink,
+            }
+          : {}),
+        description: includeMuted
+          ? post.description
+          : redactMutedDomains(
+              post.description,
+              mutedDomainsByPostId.get(post.id) ?? [],
+            ),
+        urls,
+        occurrences,
+      };
+    }),
     page,
     pageSize,
     totalPosts,
@@ -169,9 +199,16 @@ async function getFilteredPostCount(
 async function getUrlsByPostId(
   sql: SqlClient,
   postIds: number[],
-): Promise<Map<number, PostUrl[]>> {
+  includeMuted: boolean,
+): Promise<{
+  mutedDomainsByPostId: Map<number, string[]>;
+  urlsByPostId: Map<number, PostUrl[]>;
+}> {
   if (postIds.length === 0) {
-    return new Map();
+    return {
+      mutedDomainsByPostId: new Map(),
+      urlsByPostId: new Map(),
+    };
   }
 
   const urlRows = await sql.query<PostUrlRow>(
@@ -183,7 +220,8 @@ async function getUrlsByPostId(
         url                AS "originalUrl",
         url_hash           AS "urlHash",
         unshortened_url    AS "unshortenedUrl",
-        url_host           AS "urlHost"
+        url_host           AS "urlHost",
+        ${includeMuted ? "FALSE" : urlIsMuted("post_urls")} AS muted
       FROM content.post_urls
       WHERE post_id = ANY($1::bigint[])
       ORDER BY post_id ASC, position ASC, post_url_id ASC
@@ -191,8 +229,19 @@ async function getUrlsByPostId(
     [postIds],
   );
   const urlsByPostId = new Map<number, PostUrl[]>();
+  const mutedDomainsByPostId = new Map<number, string[]>();
 
   for (const url of urlRows) {
+    if (url.muted) {
+      if (url.urlHost) {
+        const domains = mutedDomainsByPostId.get(url.postId) ?? [];
+
+        domains.push(url.urlHost);
+        mutedDomainsByPostId.set(url.postId, domains);
+      }
+      continue;
+    }
+
     const postUrls = urlsByPostId.get(url.postId) ?? [];
 
     postUrls.push({
@@ -203,7 +252,7 @@ async function getUrlsByPostId(
     urlsByPostId.set(url.postId, postUrls);
   }
 
-  return urlsByPostId;
+  return { mutedDomainsByPostId, urlsByPostId };
 }
 
 /**
@@ -214,6 +263,7 @@ async function getUrlsByPostId(
 async function getOccurrencesByPostId(
   sql: SqlClient,
   postIds: number[],
+  includeMuted: boolean,
 ): Promise<Map<number, PostOccurrence[]>> {
   if (postIds.length === 0) {
     return new Map();
@@ -233,6 +283,7 @@ async function getOccurrencesByPostId(
         direct_link        AS "directLink"
       FROM content.post_occurrences
       WHERE post_id = ANY($1::bigint[])
+        ${includeMuted ? "" : `AND ${originIsPublic("post_occurrences")}`}
       ORDER BY post_id ASC, first_seen_at ASC, occurrence_id ASC
     `,
     [postIds],
@@ -251,20 +302,53 @@ async function getOccurrencesByPostId(
 
 function buildPostFilterQuery(
   filters: NormalizedPostFilters,
+  includeMuted: boolean,
 ): PostFilterQuery {
   const clauses: string[] = [];
   const params = new SqlParams();
 
+  if (!includeMuted) {
+    clauses.push(publicPostIsVisible());
+  }
+
   if (filters.source) {
-    clauses.push(`posts.source = ${params.next(filters.source)}`);
+    const source = params.next(filters.source);
+    clauses.push(
+      includeMuted
+        ? `posts.source = ${source}`
+        : visibleOriginMatches(
+            `filter_origin.source = ${source}`,
+            `posts.source = ${source}`,
+          ),
+    );
   }
 
   if (filters.sourceType) {
-    clauses.push(`posts.source_type = ${params.next(filters.sourceType)}`);
+    const sourceType = params.next(filters.sourceType);
+    clauses.push(
+      includeMuted
+        ? `posts.source_type = ${sourceType}`
+        : visibleOriginMatches(
+            `filter_origin.source_type = ${sourceType}`,
+            `posts.source_type = ${sourceType}`,
+          ),
+    );
   }
 
   if (filters.author) {
-    clauses.push(`posts.author = ${params.next(filters.author)}`);
+    const author = params.next(filters.author);
+    clauses.push(
+      includeMuted
+        ? `posts.author = ${author}`
+        : visibleOriginMatches(
+            `(filter_origin.actor_label = ${author}
+              OR (
+                filter_origin.actor_label = ''
+                AND filter_origin.channel_label = ${author}
+              ))`,
+            `COALESCE(posts.author, '') = ${author}`,
+          ),
+    );
   }
 
   if (filters.uniqueId) {
@@ -273,17 +357,61 @@ function buildPostFilterQuery(
 
   if (filters.q) {
     const pattern = params.next(`%${escapeLikeValue(filters.q.toLowerCase())}%`);
-
-    clauses.push(`
-      (
-        LOWER(COALESCE(posts.description, '')) LIKE ${pattern} ESCAPE '\\'
+    const descriptionMatches = includeMuted
+      ? `LOWER(COALESCE(posts.description, '')) LIKE ${pattern} ESCAPE '\\'`
+      : `
+        (
+          LOWER(COALESCE(posts.description, '')) LIKE ${pattern} ESCAPE '\\'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM content.post_urls muted_description_url
+            WHERE muted_description_url.post_id = posts.post_id
+              AND ${urlIsMuted("muted_description_url")}
+          )
+        )
+      `;
+    const sourceFields = includeMuted
+      ? `
         OR LOWER(posts.source) LIKE ${pattern} ESCAPE '\\'
         OR LOWER(COALESCE(posts.author, '')) LIKE ${pattern} ESCAPE '\\'
         OR LOWER(COALESCE(posts.direct_link, '')) LIKE ${pattern} ESCAPE '\\'
+      `
+      : `
+        OR EXISTS (
+          SELECT 1
+          FROM content.post_occurrences search_origins
+          WHERE search_origins.post_id = posts.post_id
+            AND ${originIsPublic("search_origins")}
+            AND (
+              LOWER(search_origins.source) LIKE ${pattern} ESCAPE '\\'
+              OR LOWER(search_origins.channel_label) LIKE ${pattern} ESCAPE '\\'
+              OR LOWER(search_origins.actor_label) LIKE ${pattern} ESCAPE '\\'
+              OR LOWER(search_origins.direct_link) LIKE ${pattern} ESCAPE '\\'
+            )
+        )
+        OR (
+          NOT EXISTS (
+            SELECT 1
+            FROM content.post_occurrences any_search_origin
+            WHERE any_search_origin.post_id = posts.post_id
+          )
+          AND (
+            LOWER(posts.source) LIKE ${pattern} ESCAPE '\\'
+            OR LOWER(COALESCE(posts.author, '')) LIKE ${pattern} ESCAPE '\\'
+            OR LOWER(COALESCE(posts.direct_link, '')) LIKE ${pattern} ESCAPE '\\'
+          )
+        )
+      `;
+
+    clauses.push(`
+      (
+        ${descriptionMatches}
+        ${sourceFields}
         OR EXISTS (
           SELECT 1
           FROM content.post_urls search_urls
           WHERE search_urls.post_id = posts.post_id
+            ${includeMuted ? "" : `AND ${urlIsPublic("search_urls")}`}
             AND (
               LOWER(search_urls.url) LIKE ${pattern} ESCAPE '\\'
               OR LOWER(COALESCE(search_urls.unshortened_url, '')) LIKE ${pattern} ESCAPE '\\'
@@ -294,6 +422,129 @@ function buildPostFilterQuery(
   }
 
   return { clauses, params };
+}
+
+function publicPostIsVisible(): string {
+  return `
+    NOT EXISTS (
+      SELECT 1
+      FROM curation.mutes post_mute
+      WHERE post_mute.target_type = 'post'
+        AND post_mute.target_key = posts.unique_id
+    )
+    AND (
+      NOT EXISTS (
+        SELECT 1
+        FROM content.post_occurrences any_origin
+        WHERE any_origin.post_id = posts.post_id
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM content.post_occurrences visible_origin
+        WHERE visible_origin.post_id = posts.post_id
+          AND ${originIsPublic("visible_origin")}
+      )
+    )
+    AND (
+      NOT EXISTS (
+        SELECT 1
+        FROM content.post_urls any_url
+        WHERE any_url.post_id = posts.post_id
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM content.post_urls visible_url
+        WHERE visible_url.post_id = posts.post_id
+          AND ${urlIsPublic("visible_url")}
+      )
+    )
+  `;
+}
+
+function visibleOriginMatches(
+  occurrencePredicate: string,
+  fallbackPredicate: string,
+): string {
+  return `
+    (
+      EXISTS (
+        SELECT 1
+        FROM content.post_occurrences filter_origin
+        WHERE filter_origin.post_id = posts.post_id
+          AND ${originIsPublic("filter_origin")}
+        AND ${occurrencePredicate}
+      )
+      OR (
+        NOT EXISTS (
+          SELECT 1
+          FROM content.post_occurrences any_filter_origin
+          WHERE any_filter_origin.post_id = posts.post_id
+        )
+        AND ${fallbackPredicate}
+      )
+    )
+  `;
+}
+
+function originIsPublic(alias: string): string {
+  return `
+    NOT EXISTS (
+      SELECT 1
+      FROM curation.mutes origin_mute
+      WHERE (
+        origin_mute.target_type = 'channel'
+        AND ${alias}.channel_key <> ''
+        AND origin_mute.target_key =
+          ${alias}.source_type || chr(31) || ${alias}.channel_key
+      )
+      OR (
+        origin_mute.target_type = 'actor'
+        AND ${alias}.actor_key <> ''
+        AND origin_mute.target_key =
+          ${alias}.source_type || chr(31) || ${alias}.actor_key
+      )
+    )
+  `;
+}
+
+function urlIsPublic(alias: string): string {
+  return `NOT (${urlIsMuted(alias)})`;
+}
+
+function urlIsMuted(alias: string): string {
+  return `
+    EXISTS (
+      SELECT 1
+      FROM curation.mutes domain_mute
+      WHERE domain_mute.target_type = 'domain'
+        AND domain_mute.target_key = ${alias}.url_host
+    )
+  `;
+}
+
+function redactMutedDomains(
+  description: string | null,
+  mutedDomains: readonly string[],
+): string | null {
+  if (!description || mutedDomains.length === 0) {
+    return description;
+  }
+
+  let redacted = description;
+
+  for (const domain of [...new Set(mutedDomains)].sort(
+    (left, right) => right.length - left.length,
+  )) {
+    const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const domainUrl = new RegExp(
+      `(^|[^a-z0-9.-])(?:https?://)?(?:www\\.)?${escaped}(?::\\d+)?(?:[/?#][^\\s<>"']*)?`,
+      "gim",
+    );
+
+    redacted = redacted.replace(domainUrl, "$1");
+  }
+
+  return redacted.replace(/[ \t]{2,}/g, " ").trim();
 }
 
 const VALID_SOURCE_TYPES: readonly SourceType[] = [

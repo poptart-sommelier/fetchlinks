@@ -11,6 +11,8 @@ import type {
   SourceType,
 } from "../models/read-models";
 import {
+  composeTargetKey,
+  getMutesFor,
   getThumbsDownsFor,
   lookupKey,
   type CurationTarget,
@@ -26,7 +28,11 @@ import {
   managedPostIdFrom,
   postAnchorId,
 } from "./manage-anchor";
-import { exitOwnerModeAction, thumbsDownAction } from "./owner-actions";
+import {
+  exitOwnerModeAction,
+  muteAction,
+  thumbsDownAction,
+} from "./owner-actions";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -66,11 +72,13 @@ type OwnerState = {
 
 /** What the owner may manage on one card, plus accumulated private feedback. */
 type PostManagement = {
+  mutes: Set<string>;
   targets: CurationTarget[];
   thumbsDowns: Map<string, ThumbsDownState>;
 };
 
 const NO_MANAGEMENT: PostManagement = {
+  mutes: new Set(),
   targets: [],
   thumbsDowns: new Map(),
 };
@@ -100,7 +108,11 @@ export default async function Home({ searchParams }: HomeProps = {}) {
   const isOwner = await isValidOwnerToken(
     cookieStore.get(OWNER_COOKIE_NAME)?.value,
   );
-  const result = await loadLatestPosts({ page, filters });
+  const result = await loadLatestPosts({
+    includeMuted: isOwner,
+    page,
+    filters,
+  });
 
   return (
     <LatestPostsView
@@ -126,8 +138,8 @@ export default async function Home({ searchParams }: HomeProps = {}) {
  * rather than one per card. Anonymous renders never call this, so a visitor
  * costs exactly what they did before owner curation existed.
  *
- * A failure degrades to an unmarked Manage panel rather than losing the feed.
- * Not knowing private feedback is a worse owner page, not a broken public one.
+ * Failure is not hidden: once mutes affect the public feed, an owner page that
+ * shows content without its reasons or Undo controls would be actively false.
  */
 async function loadManagement(
   posts: readonly PostSummary[],
@@ -143,21 +155,18 @@ async function loadManagement(
     allTargets.push(...targets);
   }
 
-  try {
-    const sql = getSqlClient(process.env);
-    const thumbsDowns = await getThumbsDownsFor(
+  const sql = getSqlClient(process.env);
+  const [thumbsDowns, mutes] = await Promise.all([
+    getThumbsDownsFor(
       sql,
       allTargets,
       posts.map((post) => post.uniqueId),
-    );
+    ),
+    getMutesFor(sql, allTargets),
+  ]);
 
-    for (const [postId, targets] of targetsByPostId) {
-      byPostId.set(postId, { targets, thumbsDowns });
-    }
-  } catch {
-    for (const [postId, targets] of targetsByPostId) {
-      byPostId.set(postId, { ...NO_MANAGEMENT, targets });
-    }
+  for (const [postId, targets] of targetsByPostId) {
+    byPostId.set(postId, { mutes, targets, thumbsDowns });
   }
 
   return byPostId;
@@ -166,10 +175,12 @@ async function loadManagement(
 export async function loadLatestPosts({
   env = process.env,
   filters = {},
+  includeMuted = false,
   page = 1,
 }: {
   env?: Env;
   filters?: PostFilters;
+  includeMuted?: boolean;
   page?: number;
 } = {}): Promise<LatestPostsResult> {
   const activeFilters = normalizeFilters(filters);
@@ -178,6 +189,7 @@ export async function loadLatestPosts({
     const sql = getSqlClient(env);
     const requested = await getPosts(sql, {
       ...activeFilters,
+      includeMuted,
       page,
       pageSize: POSTS_PER_PAGE,
     });
@@ -190,6 +202,7 @@ export async function loadLatestPosts({
       page > lastPage && requested.totalPosts > 0
         ? await getPosts(sql, {
             ...activeFilters,
+            includeMuted,
             page: lastPage,
             pageSize: POSTS_PER_PAGE,
           })
@@ -455,7 +468,10 @@ function PostListItem({
         </div>
       ) : null}
       {owner.isOwner ? (
-        <ManagePanel management={management} owner={owner} post={post} />
+        <>
+          <MuteNotice management={management} owner={owner} post={post} />
+          <ManagePanel management={management} owner={owner} post={post} />
+        </>
       ) : null}
     </article>
   );
@@ -488,6 +504,9 @@ function ManagePanel({
       .get(lookupKey(target.type, target.key))
       ?.activePostUniqueIds.includes(post.uniqueId),
   ).length;
+  const muted = management.targets.filter((target) =>
+    management.mutes.has(lookupKey(target.type, target.key)),
+  ).length;
 
   return (
     <details className="post-manage" open={owner.managedPostId === post.id}>
@@ -496,6 +515,9 @@ function ManagePanel({
         {marked > 0 ? (
           <span className="post-manage-count">{marked} marked</span>
         ) : null}
+        {muted > 0 ? (
+          <span className="post-manage-count">{muted} muted</span>
+        ) : null}
       </summary>
       <ul className="manage-target-list">
         {management.targets.map((target) => (
@@ -503,6 +525,9 @@ function ManagePanel({
             key={`${target.type}-${target.key}`}
             owner={owner}
             post={post}
+            muted={management.mutes.has(
+              lookupKey(target.type, target.key),
+            )}
             state={management.thumbsDowns.get(
               lookupKey(target.type, target.key),
             )}
@@ -514,6 +539,94 @@ function ManagePanel({
   );
 }
 
+function MuteNotice({
+  management,
+  owner,
+  post,
+}: {
+  management: PostManagement;
+  owner: OwnerState;
+  post: PostSummary;
+}) {
+  const mutedTargets = management.targets.filter((target) =>
+    management.mutes.has(lookupKey(target.type, target.key)),
+  );
+
+  if (mutedTargets.length === 0) {
+    return null;
+  }
+
+  const hidden = isHiddenFromPublic(post, management.mutes);
+
+  return (
+    <section
+      aria-label="Public visibility"
+      className={`mute-notice${hidden ? " mute-notice-hidden" : ""}`}
+    >
+      <strong>{hidden ? "Hidden from public." : "Partly hidden from public."}</strong>
+      <ul>
+        {mutedTargets.map((target) => (
+          <li key={`${target.type}-${target.key}`}>
+            <span>
+              {TARGET_TYPE_LABELS[target.type]} — {target.label}
+            </span>
+            <form action={muteAction}>
+              <input name="post_unique_id" type="hidden" value={post.uniqueId} />
+              <input name="target_type" type="hidden" value={target.type} />
+              <input name="target_key" type="hidden" value={target.key} />
+              <input name="next" type="hidden" value={owner.returnPath} />
+              <button name="intent" type="submit" value="unmute">
+                Unmute
+              </button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function isHiddenFromPublic(
+  post: PostSummary,
+  mutes: ReadonlySet<string>,
+): boolean {
+  if (mutes.has(lookupKey("post", post.uniqueId))) {
+    return true;
+  }
+
+  const allOriginsMuted =
+    post.occurrences.length > 0 &&
+    post.occurrences.every((occurrence) => {
+      const sourceType = occurrence.sourceType ?? "";
+      const channelMuted =
+        occurrence.channelKey !== "" &&
+        mutes.has(
+          lookupKey(
+            "channel",
+            composeTargetKey(sourceType, occurrence.channelKey),
+          ),
+        );
+      const actorMuted =
+        occurrence.actorKey !== "" &&
+        mutes.has(
+          lookupKey(
+            "actor",
+            composeTargetKey(sourceType, occurrence.actorKey),
+          ),
+        );
+
+      return channelMuted || actorMuted;
+    });
+  const allUrlsMuted =
+    post.urls.length > 0 &&
+    post.urls.every(
+      (url) =>
+        url.urlHost !== "" && mutes.has(lookupKey("domain", url.urlHost)),
+    );
+
+  return allOriginsMuted || allUrlsMuted;
+}
+
 const TARGET_TYPE_LABELS: Record<CurationTargetType, string> = {
   post: "this post",
   channel: "feed",
@@ -522,11 +635,13 @@ const TARGET_TYPE_LABELS: Record<CurationTargetType, string> = {
 };
 
 function ManageRow({
+  muted,
   owner,
   post,
   state,
   target,
 }: {
+  muted: boolean;
   owner: OwnerState;
   post: PostSummary;
   state: ThumbsDownState | undefined;
@@ -548,21 +663,38 @@ function ManageRow({
           <span aria-hidden="true">👎</span> {state?.count ?? 0}
         </span>
       </div>
-      <form action={thumbsDownAction} className="manage-actions">
-        <input name="post_unique_id" type="hidden" value={post.uniqueId} />
-        <input name="target_type" type="hidden" value={target.type} />
-        <input name="target_key" type="hidden" value={target.key} />
-        <input name="next" type="hidden" value={owner.returnPath} />
-        <button
-          aria-pressed={active}
-          className="manage-thumb"
-          name="intent"
-          type="submit"
-          value={active ? "clear" : "set"}
-        >
-          {active ? "Remove thumbs down" : "Thumbs down"}
-        </button>
-      </form>
+      <div className="manage-actions">
+        <form action={thumbsDownAction}>
+          <input name="post_unique_id" type="hidden" value={post.uniqueId} />
+          <input name="target_type" type="hidden" value={target.type} />
+          <input name="target_key" type="hidden" value={target.key} />
+          <input name="next" type="hidden" value={owner.returnPath} />
+          <button
+            aria-pressed={active}
+            className="manage-thumb"
+            name="intent"
+            type="submit"
+            value={active ? "clear" : "set"}
+          >
+            {active ? "Remove thumbs down" : "Thumbs down"}
+          </button>
+        </form>
+        <form action={muteAction}>
+          <input name="post_unique_id" type="hidden" value={post.uniqueId} />
+          <input name="target_type" type="hidden" value={target.type} />
+          <input name="target_key" type="hidden" value={target.key} />
+          <input name="next" type="hidden" value={owner.returnPath} />
+          <button
+            aria-pressed={muted}
+            className="manage-mute"
+            name="intent"
+            type="submit"
+            value={muted ? "unmute" : "mute"}
+          >
+            {muted ? "Unmute" : "Mute"}
+          </button>
+        </form>
+      </div>
     </li>
   );
 }

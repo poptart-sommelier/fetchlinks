@@ -4,6 +4,8 @@ import type { PostSummary } from "../models/read-models";
 
 const cookieStore = new Map<string, string>();
 const getPosts = vi.fn();
+const setMute = vi.fn();
+const clearMute = vi.fn();
 const setThumbsDown = vi.fn();
 const clearThumbsDown = vi.fn();
 const redirect = vi.fn();
@@ -33,12 +35,14 @@ vi.mock("../server/curation", async () => {
     );
   return {
     ...actual,
+    setMute: (...args: unknown[]) => setMute(...args),
+    clearMute: (...args: unknown[]) => clearMute(...args),
     setThumbsDown: (...args: unknown[]) => setThumbsDown(...args),
     clearThumbsDown: (...args: unknown[]) => clearThumbsDown(...args),
   };
 });
 
-const { thumbsDownAction } = await import("./owner-actions");
+const { muteAction, thumbsDownAction } = await import("./owner-actions");
 const { OWNER_COOKIE_NAME, createOwnerToken } = await import("../server/owner");
 
 const ENV = {
@@ -86,7 +90,7 @@ const VALID_TARGET = {
   next: "/",
 };
 
-describe("thumbsDownAction", () => {
+describe("owner Manage actions", () => {
   beforeEach(async () => {
     cookieStore.clear();
     vi.clearAllMocks();
@@ -221,5 +225,61 @@ describe("thumbsDownAction", () => {
     await thumbsDownAction(form({ ...VALID_TARGET, intent: "clear" }));
 
     expect(redirect).toHaveBeenCalledWith("/?managed=1#post-1");
+  });
+
+  it("refuses to mute without owner mode", async () => {
+    await expect(
+      muteAction(form({ ...VALID_TARGET, intent: "mute" })),
+    ).rejects.toThrow(/owner mode/i);
+    expect(setMute).not.toHaveBeenCalled();
+  });
+
+  it("mutes a real target and keeps the hidden article resolvable", async () => {
+    await signIn();
+    await muteAction(form({ ...VALID_TARGET, intent: "mute" }));
+
+    expect(getPosts).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ includeMuted: true, uniqueId: "reddit-2" }),
+    );
+    expect(setMute).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: "domain",
+        key: "example.com",
+        label: "example.com",
+      }),
+    );
+    expect(redirect).toHaveBeenCalledWith("/?managed=1#post-1");
+  });
+
+  it("unmutes only the target requested", async () => {
+    await signIn();
+    await muteAction(form({ ...VALID_TARGET, intent: "unmute" }));
+
+    expect(clearMute).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: "domain", key: "example.com" }),
+    );
+    expect(setMute).not.toHaveBeenCalled();
+  });
+
+  it("refuses to mute a forged target or unknown intent", async () => {
+    await signIn();
+
+    await expect(
+      muteAction(
+        form({
+          ...VALID_TARGET,
+          intent: "mute",
+          target_key: "forged.example",
+        }),
+      ),
+    ).rejects.toThrow(/belong/i);
+    await expect(
+      muteAction(form({ ...VALID_TARGET, intent: "toggle" })),
+    ).rejects.toThrow(/action/i);
+    expect(setMute).not.toHaveBeenCalled();
+    expect(clearMute).not.toHaveBeenCalled();
   });
 });

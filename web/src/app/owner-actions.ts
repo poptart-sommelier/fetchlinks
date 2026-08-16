@@ -6,7 +6,9 @@ import { redirect } from "next/navigation";
 
 import type { PostSummary } from "../models/read-models";
 import {
+  clearMute,
   clearThumbsDown,
+  setMute,
   setThumbsDown,
   type CurationTarget,
 } from "../server/curation";
@@ -81,13 +83,55 @@ export async function thumbsDownAction(formData: FormData): Promise<void> {
   redirect(withManagedAnchor(next, post.id));
 }
 
+/** Apply or remove one explicit mute after rebuilding its target server-side. */
+export async function muteAction(formData: FormData): Promise<void> {
+  const store = await cookies();
+
+  if (!(await isValidOwnerToken(store.get(OWNER_COOKIE_NAME)?.value))) {
+    throw new Error("Owner mode is required to manage articles.");
+  }
+
+  const uniqueId = String(formData.get("post_unique_id") ?? "").trim();
+  const targetType = String(formData.get("target_type") ?? "");
+  const targetKey = String(formData.get("target_key") ?? "");
+  const intent = String(formData.get("intent") ?? "");
+  const next = safeReturnPath(String(formData.get("next") ?? "/"));
+
+  if (!uniqueId) {
+    throw new Error("Muting needs the article the target came from.");
+  }
+
+  const sql = getSqlClient(process.env);
+  const { post, target } = await resolveTarget(
+    sql,
+    uniqueId,
+    targetType,
+    targetKey,
+  );
+
+  if (intent === "mute") {
+    await setMute(sql, target);
+  } else if (intent === "unmute") {
+    await clearMute(sql, target);
+  } else {
+    throw new Error(`Unknown Manage action: ${intent}`);
+  }
+
+  revalidatePath("/");
+  redirect(withManagedAnchor(next, post.id));
+}
+
 async function resolveTarget(
   sql: SqlClient,
   uniqueId: string,
   targetType: string,
   targetKey: string,
 ): Promise<{ post: PostSummary; target: CurationTarget }> {
-  const { posts } = await getPosts(sql, { uniqueId, pageSize: 1 });
+  const { posts } = await getPosts(sql, {
+    includeMuted: true,
+    uniqueId,
+    pageSize: 1,
+  });
   const post = posts[0];
 
   if (!post) {
