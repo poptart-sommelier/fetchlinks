@@ -381,6 +381,78 @@ describe("Home", () => {
     expect(markup).not.toContain("manage-remove-confirm");
   });
 
+  it.each([
+    {
+      kind: "RSS",
+      post: createRssPost(),
+      source: {
+        id: 12,
+        kind: "rss" as const,
+        status: "disabled" as const,
+      },
+      reason: "disabled in collection — Ada",
+    },
+    {
+      kind: "subreddit",
+      post: createPostPage().posts[0]!,
+      source: {
+        id: 13,
+        kind: "subreddit" as const,
+        status: "disabled" as const,
+      },
+      reason: "disabled in collection — r/test",
+    },
+  ])(
+    "explains a disabled $kind origin to the owner without collection controls",
+    ({ post, reason, source }) => {
+      const targets = curationTargetsFor(post);
+      const channel = targets.find((target) => target.type === "channel");
+      if (!channel) throw new Error("expected a channel target");
+      const catalogSources = new Map<string, CatalogSource>([
+        [
+          lookupKey(channel.type, channel.key),
+          { ...source, targetKey: channel.key },
+        ],
+      ]);
+      const managementByPostId = new Map([
+        [
+          post.id,
+          {
+            catalogSources,
+            mutes: new Set<string>(),
+            targets,
+            thumbsDowns: new Map(),
+          },
+        ],
+      ]);
+      const result = createReadyResult({
+        page: createPostPage({ posts: [post] }),
+      });
+      const ownerMarkup = renderToStaticMarkup(
+        <LatestPostsView
+          owner={{ isOwner: true, returnPath: "/" }}
+          managementByPostId={managementByPostId}
+          result={result}
+        />,
+      );
+      const publicMarkup = renderToStaticMarkup(
+        <LatestPostsView
+          managementByPostId={managementByPostId}
+          result={result}
+        />,
+      );
+
+      expect(ownerMarkup).toContain("Hidden from public.");
+      expect(ownerMarkup).toContain(reason);
+      expect(ownerMarkup).not.toContain("manage-remove-confirm");
+      expect(ownerMarkup).not.toContain("Restore</button>");
+      expect(publicMarkup).not.toContain("Hidden from public.");
+      expect(publicMarkup).not.toContain("disabled in collection");
+      expect(publicMarkup).not.toContain("Remove from collection");
+      expect(publicMarkup).not.toContain("Restore");
+    },
+  );
+
   it("calls a card partly hidden when another origin remains available", () => {
     const post = createPostPage().posts[0]!;
     const targets = curationTargetsFor(post);

@@ -482,6 +482,132 @@ describePostgres("posts read model", () => {
       });
   });
 
+  it.each([
+    {
+      kind: "RSS",
+      sourceType: "rss",
+      channelKey: "https://disabled.example/feed",
+      source: "https://disabled.example/feed",
+      catalogSql: `INSERT INTO catalog.rss_feeds
+        (feed_url, normalized_url, enabled, added_at)
+        VALUES ('https://disabled.example/feed', 'https://disabled.example/feed',
+          false, now())`,
+    },
+    {
+      kind: "subreddit",
+      sourceType: "reddit",
+      channelKey: "disabled",
+      source: "https://www.reddit.com/r/disabled",
+      catalogSql: `INSERT INTO catalog.subreddits
+        (name, normalized_name, enabled, added_at)
+        VALUES ('Disabled', 'disabled', false, now())`,
+    },
+  ])(
+    "filters a disabled $kind origin before counting and pagination",
+    async ({ catalogSql, channelKey, source, sourceType }) => {
+      await seed([
+        {
+          uniqueId: "newest-disabled",
+          source,
+          sourceType,
+          description: "Disabled newest",
+          postedAt: "2026-01-03T00:00:00Z",
+        },
+        {
+          uniqueId: "middle-visible",
+          source: "https://social.example/@middle",
+          sourceType: "mastodon",
+          description: "Visible middle",
+          postedAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          uniqueId: "old-visible",
+          source: "https://social.example/@old",
+          sourceType: "mastodon",
+          description: "Visible old",
+          postedAt: "2026-01-01T00:00:00Z",
+        },
+      ]);
+      await addOccurrence("newest-disabled", {
+        sourceType,
+        channelKey,
+        channelLabel: channelKey,
+        actorKey: "",
+        actorLabel: "",
+        source,
+        directLink: `${source}/post`,
+      });
+      await pg.exec(catalogSql);
+
+      await expect(getPosts(pg.sql, { pageSize: 1 })).resolves.toMatchObject({
+        totalPosts: 2,
+        totalPages: 2,
+        posts: [{ uniqueId: "middle-visible" }],
+      });
+      await expect(
+        getPosts(pg.sql, { includeMuted: true, pageSize: 5 }),
+      ).resolves.toMatchObject({
+        totalPosts: 3,
+        posts: [{ uniqueId: "newest-disabled" }, {}, {}],
+      });
+    },
+  );
+
+  it("keeps an article public when another active unmuted catalog origin survives", async () => {
+    await seed([
+      {
+        uniqueId: "disabled-and-live",
+        source: "https://disabled.example/feed",
+        sourceType: "rss",
+        description: "Shared by active source",
+        postedAt: "2026-01-01T00:00:00Z",
+      },
+    ]);
+    await addOccurrence("disabled-and-live", {
+      sourceType: "rss",
+      channelKey: "https://disabled.example/feed",
+      channelLabel: "Disabled Feed",
+      actorKey: "",
+      actorLabel: "",
+      source: "https://disabled.example/feed",
+      directLink: "https://disabled.example/post",
+    });
+    await addOccurrence("disabled-and-live", {
+      sourceType: "reddit",
+      channelKey: "active",
+      channelLabel: "r/active",
+      actorKey: "active-author",
+      actorLabel: "Active Author",
+      source: "https://www.reddit.com/r/active",
+      directLink: "https://reddit.example/active",
+    });
+    await pg.exec(
+      `INSERT INTO catalog.rss_feeds
+         (feed_url, normalized_url, enabled, added_at)
+       VALUES ('https://disabled.example/feed', 'https://disabled.example/feed',
+         false, now())`,
+    );
+    await pg.exec(
+      `INSERT INTO catalog.subreddits
+         (name, normalized_name, enabled, added_at)
+       VALUES ('Active', 'active', true, now())`,
+    );
+
+    await expect(getPosts(pg.sql)).resolves.toMatchObject({
+      totalPosts: 1,
+      posts: [
+        {
+          sourceType: "reddit",
+          occurrences: [{ sourceType: "reddit", channelKey: "active" }],
+        },
+      ],
+    });
+
+    await mute("channel", composeTargetKey("reddit", "active"));
+
+    await expect(getPosts(pg.sql)).resolves.toMatchObject({ totalPosts: 0 });
+  });
+
   it("keeps an article public when another unmuted origin survives removal", async () => {
       await seed([
         {
