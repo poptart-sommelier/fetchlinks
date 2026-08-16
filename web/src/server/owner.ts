@@ -1,6 +1,6 @@
 /**
  * Owner mode: a short-lived signed cookie that marks the reader as the site's
- * one curator, so rating controls can appear on the main page without exposing
+ * one curator, so Manage controls can appear on the main page without exposing
  * them, or the evidence behind them, to anonymous visitors.
  *
  * The signing key is derived from the Flightdeck credentials rather than being

@@ -422,7 +422,7 @@ p {
      the phone layout overflows by a factor of five. Every flex or grid
      ancestor between here and .post-link-path needs the same release. */
   min-width: 0;
-  /* Rating a post returns the browser to this card by fragment. Without this
+  /* Managing a post returns the browser to this card by fragment. Without this
      it lands flush against the top edge, which reads as the card being cut
      off rather than as the one you just judged. */
   scroll-margin-top: 12px;
@@ -1084,19 +1084,19 @@ a.post-source:hover .post-source-type {
 }
 
 /* Both of these release the automatic minimum size that `.post-item` warns
-   about. The rating rows contain `nowrap` labels, so their min-content width is
+   about. The Manage rows contain `nowrap` labels, so their min-content width is
    a whole feed title or hostname; as grid items that minimum propagates up and
    sets the card's column width, pushing the entire card off the side of a
    phone. It only showed once a panel was open, because a closed <details>
    hides its children from sizing entirely. */
-.post-rating {
+.post-manage {
   min-width: 0;
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
-.post-rating > summary {
+.post-manage > summary {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -1106,7 +1106,7 @@ a.post-source:hover .post-source-type {
   cursor: pointer;
 }
 
-.post-rating-count {
+.post-manage-count {
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--subtle);
@@ -1114,7 +1114,7 @@ a.post-source:hover .post-source-type {
   font-weight: 700;
 }
 
-.rating-target-list {
+.manage-target-list {
   display: grid;
   gap: 6px;
   margin: 8px 0 0;
@@ -1122,7 +1122,7 @@ a.post-source:hover .post-source-type {
   list-style: none;
 }
 
-.rating-target {
+.manage-target {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -1134,7 +1134,7 @@ a.post-source:hover .post-source-type {
   background: var(--subtle);
 }
 
-.rating-target-name {
+.manage-target-name {
   display: flex;
   gap: 8px;
   align-items: baseline;
@@ -1142,32 +1142,34 @@ a.post-source:hover .post-source-type {
   font-size: 13px;
 }
 
-.rating-target-type {
+.manage-target-type {
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.rating-target-label {
+.manage-target-label {
   overflow: hidden;
   max-width: 46ch;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rating-target-score {
+.manage-target-count {
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-.rating-actions {
+.manage-actions {
   display: flex;
   gap: 6px;
 }
 
-.rating-actions button {
+.manage-actions button {
   padding: 3px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1178,20 +1180,13 @@ a.post-source:hover .post-source-type {
   cursor: pointer;
 }
 
-.rating-actions button:hover {
+.manage-actions button:hover {
   border-color: var(--accent);
 }
 
-/* The current verdict has to be obvious at a glance, and colour alone would
-   not say so to a screen reader, hence aria-pressed carrying the same fact. */
-.rating-good[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 700;
-}
-
-.rating-noise[aria-pressed="true"] {
+/* The current article's feedback is a pressed control, not another increment
+   button. Text and aria-pressed carry that fact without depending on colour. */
+.manage-thumb[aria-pressed="true"] {
   border-color: var(--danger);
   background: var(--danger);
   color: var(--panel);

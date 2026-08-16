@@ -10,21 +10,23 @@ import type {
   PostUrl,
   SourceType,
 } from "../models/read-models";
+import {
+  getThumbsDownsFor,
+  lookupKey,
+  type CurationTarget,
+  type CurationTargetType,
+  type ThumbsDownState,
+} from "../server/curation";
+import { curationTargetsFor } from "../server/curation-targets";
 import { getPosts, type PostFilters } from "../server/db";
 import { OWNER_COOKIE_NAME, isValidOwnerToken } from "../server/owner";
-import { ratingTargetsFor } from "../server/rating-targets";
-import {
-  getRatingsFor,
-  getScoresFor,
-  lookupKey,
-  type RatingTarget,
-  type RatingTargetType,
-  type RatingVerdict,
-  type TargetScore,
-} from "../server/ratings";
 import { getSqlClient } from "../server/sql";
-import { exitOwnerModeAction, rateAction } from "./owner-actions";
-import { RATED_PARAM, postAnchorId, ratedPostIdFrom } from "./post-anchor";
+import {
+  MANAGED_PARAM,
+  managedPostIdFrom,
+  postAnchorId,
+} from "./manage-anchor";
+import { exitOwnerModeAction, thumbsDownAction } from "./owner-actions";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -56,23 +58,21 @@ type OwnerState = {
   /** Where "Owner mode" and "Exit owner mode" return to, so a filtered,
    * paginated view survives the round trip through authentication. */
   returnPath: string;
-  /** The card just rated, if the reader has come back from a rating. Its panel
-   * is reopened so judging several things about one post does not mean
+  /** The card just managed, if the reader has come back from an action. Its
+   * panel is reopened so judging several things about one article does not mean
    * reopening it between every click. */
-  ratedPostId?: number;
+  managedPostId?: number;
 };
 
-/** What the owner may rate on one card, and what they already think. */
-type PostRatings = {
-  targets: RatingTarget[];
-  verdicts: Map<string, RatingVerdict>;
-  scores: Map<string, TargetScore>;
+/** What the owner may manage on one card, plus accumulated private feedback. */
+type PostManagement = {
+  targets: CurationTarget[];
+  thumbsDowns: Map<string, ThumbsDownState>;
 };
 
-const NO_RATINGS: PostRatings = {
+const NO_MANAGEMENT: PostManagement = {
   targets: [],
-  verdicts: new Map(),
-  scores: new Map(),
+  thumbsDowns: new Map(),
 };
 
 const POSTS_PER_PAGE = 50;
@@ -107,11 +107,13 @@ export default async function Home({ searchParams }: HomeProps = {}) {
       owner={{
         isOwner,
         returnPath: buildPageHref(page, filters),
-        ratedPostId: ratedPostIdFrom(resolvedSearchParams?.[RATED_PARAM]),
+        managedPostId: managedPostIdFrom(
+          resolvedSearchParams?.[MANAGED_PARAM],
+        ),
       }}
-      ratingsByPostId={
+      managementByPostId={
         isOwner && result.status === "ready"
-          ? await loadRatings(result.page.posts)
+          ? await loadManagement(result.page.posts)
           : undefined
       }
       result={result}
@@ -120,22 +122,22 @@ export default async function Home({ searchParams }: HomeProps = {}) {
 }
 
 /**
- * Everything the owner has said about everything on this page, in two queries
- * rather than two per card. Anonymous renders never call this, so a visitor
- * costs exactly what they did before ratings existed.
+ * The owner's accumulated feedback for every target on this page, in one query
+ * rather than one per card. Anonymous renders never call this, so a visitor
+ * costs exactly what they did before owner curation existed.
  *
- * A failure here degrades to an unrated page instead of an error one: not
- * knowing the previous verdicts is a worse page, not a broken one.
+ * A failure degrades to an unmarked Manage panel rather than losing the feed.
+ * Not knowing private feedback is a worse owner page, not a broken public one.
  */
-async function loadRatings(
+async function loadManagement(
   posts: readonly PostSummary[],
-): Promise<Map<number, PostRatings>> {
-  const byPostId = new Map<number, PostRatings>();
-  const targetsByPostId = new Map<number, RatingTarget[]>();
-  const allTargets: RatingTarget[] = [];
+): Promise<Map<number, PostManagement>> {
+  const byPostId = new Map<number, PostManagement>();
+  const targetsByPostId = new Map<number, CurationTarget[]>();
+  const allTargets: CurationTarget[] = [];
 
   for (const post of posts) {
-    const targets = ratingTargetsFor(post);
+    const targets = curationTargetsFor(post);
 
     targetsByPostId.set(post.id, targets);
     allTargets.push(...targets);
@@ -143,17 +145,18 @@ async function loadRatings(
 
   try {
     const sql = getSqlClient(process.env);
-    const [verdicts, scores] = await Promise.all([
-      getRatingsFor(sql, allTargets),
-      getScoresFor(sql, allTargets),
-    ]);
+    const thumbsDowns = await getThumbsDownsFor(
+      sql,
+      allTargets,
+      posts.map((post) => post.uniqueId),
+    );
 
     for (const [postId, targets] of targetsByPostId) {
-      byPostId.set(postId, { targets, verdicts, scores });
+      byPostId.set(postId, { targets, thumbsDowns });
     }
   } catch {
     for (const [postId, targets] of targetsByPostId) {
-      byPostId.set(postId, { ...NO_RATINGS, targets });
+      byPostId.set(postId, { ...NO_MANAGEMENT, targets });
     }
   }
 
@@ -204,11 +207,11 @@ export async function loadLatestPosts({
 
 export function LatestPostsView({
   owner = { isOwner: false, returnPath: "/" },
-  ratingsByPostId,
+  managementByPostId,
   result,
 }: {
   owner?: OwnerState;
-  ratingsByPostId?: Map<number, PostRatings>;
+  managementByPostId?: Map<number, PostManagement>;
   result: LatestPostsResult;
 }) {
   if (result.status === "error") {
@@ -239,9 +242,11 @@ export function LatestPostsView({
             <PostListItem
               key={post.id}
               filters={result.filters}
+              management={
+                managementByPostId?.get(post.id) ?? NO_MANAGEMENT
+              }
               owner={owner}
               post={post}
-              ratings={ratingsByPostId?.get(post.id) ?? NO_RATINGS}
             />
           ))}
         </section>
@@ -263,7 +268,7 @@ function OwnerBar({ owner }: { owner: OwnerState }) {
 
   return (
     <section aria-label="Owner mode" className="owner-banner">
-      <p>Owner mode. Ratings you make here are private.</p>
+      <p>Owner mode. Management controls and feedback are visible only to you.</p>
       <form action={exitOwnerModeAction}>
         <input name="next" type="hidden" value={owner.returnPath} />
         <button type="submit">Exit owner mode</button>
@@ -367,14 +372,14 @@ function EmptyPostsState({ filters, page }: { filters: ActiveFilters; page: Post
 
 function PostListItem({
   filters,
+  management,
   owner,
   post,
-  ratings,
 }: {
   filters: ActiveFilters;
+  management: PostManagement;
   owner: OwnerState;
   post: PostSummary;
-  ratings: PostRatings;
 }) {
   const primary = pickPrimaryLink(post);
   const extraUrls = post.urls.filter((url) => url.id !== primary?.urlId);
@@ -450,7 +455,7 @@ function PostListItem({
         </div>
       ) : null}
       {owner.isOwner ? (
-        <RatingPanel owner={owner} post={post} ratings={ratings} />
+        <ManagePanel management={management} owner={owner} post={post} />
       ) : null}
     </article>
   );
@@ -458,47 +463,50 @@ function PostListItem({
 
 /**
  * Collapsed until asked for. A `<details>` element rather than a script,
- * because the page has no client JavaScript and a rating that only works once
+ * because the page has no client JavaScript and a control that only works once
  * a bundle has loaded is worse than one that always works.
  *
- * Reopened server-side for the card the reader just rated. A fragment alone
+ * Reopened server-side for the card the reader just managed. A fragment alone
  * could not do this: fragments never reach the server, so the render would
  * have no idea which panel had been open.
  */
-function RatingPanel({
+function ManagePanel({
+  management,
   owner,
   post,
-  ratings,
 }: {
+  management: PostManagement;
   owner: OwnerState;
   post: PostSummary;
-  ratings: PostRatings;
 }) {
-  if (ratings.targets.length === 0) {
+  if (management.targets.length === 0) {
     return null;
   }
 
-  const rated = ratings.targets.filter(
-    (target) => ratings.verdicts.get(lookupKey(target.type, target.key)),
+  const marked = management.targets.filter((target) =>
+    management.thumbsDowns
+      .get(lookupKey(target.type, target.key))
+      ?.activePostUniqueIds.includes(post.uniqueId),
   ).length;
 
   return (
-    <details className="post-rating" open={owner.ratedPostId === post.id}>
+    <details className="post-manage" open={owner.managedPostId === post.id}>
       <summary>
-        Rate
-        {rated > 0 ? (
-          <span className="post-rating-count">{rated} rated</span>
+        Manage this article
+        {marked > 0 ? (
+          <span className="post-manage-count">{marked} marked</span>
         ) : null}
       </summary>
-      <ul className="rating-target-list">
-        {ratings.targets.map((target) => (
-          <RatingRow
+      <ul className="manage-target-list">
+        {management.targets.map((target) => (
+          <ManageRow
             key={`${target.type}-${target.key}`}
             owner={owner}
             post={post}
-            score={ratings.scores.get(lookupKey(target.type, target.key))}
+            state={management.thumbsDowns.get(
+              lookupKey(target.type, target.key),
+            )}
             target={target}
-            verdict={ratings.verdicts.get(lookupKey(target.type, target.key))}
           />
         ))}
       </ul>
@@ -506,72 +514,54 @@ function RatingPanel({
   );
 }
 
-const TARGET_TYPE_LABELS: Record<RatingTargetType, string> = {
+const TARGET_TYPE_LABELS: Record<CurationTargetType, string> = {
   post: "this post",
   channel: "feed",
   actor: "account",
   domain: "domain",
 };
 
-function RatingRow({
+function ManageRow({
   owner,
   post,
-  score,
+  state,
   target,
-  verdict,
 }: {
   owner: OwnerState;
   post: PostSummary;
-  score: TargetScore | undefined;
-  target: RatingTarget;
-  verdict: RatingVerdict | undefined;
+  state: ThumbsDownState | undefined;
+  target: CurationTarget;
 }) {
+  const active = state?.activePostUniqueIds.includes(post.uniqueId) ?? false;
+
   return (
-    <li className="rating-target">
-      <div className="rating-target-name">
-        <span className="rating-target-type">
+    <li className="manage-target">
+      <div className="manage-target-name">
+        <span className="manage-target-type">
           {TARGET_TYPE_LABELS[target.type]}
         </span>
-        <span className="rating-target-label">{target.label}</span>
-        {score ? (
-          <span className="rating-target-score" title="Quality score, 0-100">
-            {score.score}
-          </span>
-        ) : null}
+        <span className="manage-target-label">{target.label}</span>
+        <span
+          className="manage-target-count"
+          title="Distinct articles marked down"
+        >
+          <span aria-hidden="true">👎</span> {state?.count ?? 0}
+        </span>
       </div>
-      <form action={rateAction} className="rating-actions">
+      <form action={thumbsDownAction} className="manage-actions">
         <input name="post_unique_id" type="hidden" value={post.uniqueId} />
         <input name="target_type" type="hidden" value={target.type} />
         <input name="target_key" type="hidden" value={target.key} />
         <input name="next" type="hidden" value={owner.returnPath} />
         <button
-          aria-pressed={verdict === "good"}
-          className="rating-good"
-          name="verdict"
+          aria-pressed={active}
+          className="manage-thumb"
+          name="intent"
           type="submit"
-          value="good"
+          value={active ? "clear" : "set"}
         >
-          Good
+          {active ? "Remove thumbs down" : "Thumbs down"}
         </button>
-        <button
-          aria-pressed={verdict === "noise"}
-          className="rating-noise"
-          name="verdict"
-          type="submit"
-          value="noise"
-        >
-          Noise
-        </button>
-        {verdict ? (
-          <button
-            className="rating-clear"
-            name="verdict"
-            type="submit"
-            value="clear"
-          >
-            Clear
-          </button>
-        ) : null}
       </form>
     </li>
   );

@@ -45,7 +45,7 @@ const SECTIONS: AdminSection[] = [
     href: "/flightdeck/owner?next=%2F",
     title: "Owner mode",
     description:
-      "Rate sources as Good or Noise from the main feed. Lasts a week.",
+      "Manage articles and sources from the main feed. Lasts a week.",
     status: "available",
   },
 ];
