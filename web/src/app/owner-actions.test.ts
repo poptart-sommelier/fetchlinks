@@ -4,8 +4,8 @@ import type { PostSummary } from "../models/read-models";
 
 const cookieStore = new Map<string, string>();
 const getPosts = vi.fn();
-const rateTarget = vi.fn();
-const clearRating = vi.fn();
+const setThumbsDown = vi.fn();
+const clearThumbsDown = vi.fn();
 const redirect = vi.fn();
 
 vi.mock("next/headers", () => ({
@@ -23,20 +23,22 @@ vi.mock("next/navigation", () => ({
   redirect: (path: string) => redirect(path),
 }));
 vi.mock("../server/sql", () => ({ getSqlClient: () => ({}) }));
-vi.mock("../server/db", () => ({ getPosts: (...args: unknown[]) => getPosts(...args) }));
-vi.mock("../server/ratings", async () => {
+vi.mock("../server/db", () => ({
+  getPosts: (...args: unknown[]) => getPosts(...args),
+}));
+vi.mock("../server/curation", async () => {
   const actual =
-    await vi.importActual<typeof import("../server/ratings")>(
-      "../server/ratings",
+    await vi.importActual<typeof import("../server/curation")>(
+      "../server/curation",
     );
   return {
     ...actual,
-    rateTarget: (...args: unknown[]) => rateTarget(...args),
-    clearRating: (...args: unknown[]) => clearRating(...args),
+    setThumbsDown: (...args: unknown[]) => setThumbsDown(...args),
+    clearThumbsDown: (...args: unknown[]) => clearThumbsDown(...args),
   };
 });
 
-const { rateAction } = await import("./owner-actions");
+const { thumbsDownAction } = await import("./owner-actions");
 const { OWNER_COOKIE_NAME, createOwnerToken } = await import("../server/owner");
 
 const ENV = {
@@ -80,11 +82,11 @@ const VALID_TARGET = {
   post_unique_id: "reddit-2",
   target_type: "domain",
   target_key: "example.com",
-  verdict: "good",
+  intent: "set",
   next: "/",
 };
 
-describe("rateAction", () => {
+describe("thumbsDownAction", () => {
   beforeEach(async () => {
     cookieStore.clear();
     vi.clearAllMocks();
@@ -103,27 +105,26 @@ describe("rateAction", () => {
   }
 
   it("refuses a caller with no owner cookie", async () => {
-    await expect(rateAction(form(VALID_TARGET))).rejects.toThrow(
+    await expect(thumbsDownAction(form(VALID_TARGET))).rejects.toThrow(
       /owner mode/i,
     );
-    expect(rateTarget).not.toHaveBeenCalled();
+    expect(setThumbsDown).not.toHaveBeenCalled();
   });
 
   it("refuses a forged owner cookie", async () => {
     cookieStore.set(OWNER_COOKIE_NAME, "9999999999.deadbeef");
 
-    await expect(rateAction(form(VALID_TARGET))).rejects.toThrow();
-    expect(rateTarget).not.toHaveBeenCalled();
+    await expect(thumbsDownAction(form(VALID_TARGET))).rejects.toThrow();
+    expect(setThumbsDown).not.toHaveBeenCalled();
   });
 
-  it("records a verdict for a target the post really has", async () => {
+  it("records feedback for a target the article really has", async () => {
     await signIn();
-    await rateAction(form(VALID_TARGET));
+    await thumbsDownAction(form(VALID_TARGET));
 
-    expect(rateTarget).toHaveBeenCalledWith(
+    expect(setThumbsDown).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        verdict: "good",
         postUniqueId: "reddit-2",
         target: expect.objectContaining({
           type: "domain",
@@ -131,80 +132,94 @@ describe("rateAction", () => {
         }),
       }),
     );
-    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
+    expect(redirect).toHaveBeenCalledWith("/?managed=1#post-1");
   });
 
-  it("refuses a target the post does not have", async () => {
+  it("refuses a target the article does not have", async () => {
     await signIn();
 
     await expect(
-      rateAction(form({ ...VALID_TARGET, target_key: "evil.example" })),
-    ).rejects.toThrow(/rated by/i);
-    expect(rateTarget).not.toHaveBeenCalled();
+      thumbsDownAction(
+        form({ ...VALID_TARGET, target_key: "evil.example" }),
+      ),
+    ).rejects.toThrow(/belong/i);
+    expect(setThumbsDown).not.toHaveBeenCalled();
   });
 
-  it("ignores a submitted label and uses the one derived from the post", async () => {
+  it("ignores a submitted label and derives the stored one", async () => {
     await signIn();
-    await rateAction(
+    await thumbsDownAction(
       form({ ...VALID_TARGET, target_label: "<script>alert(1)</script>" }),
     );
 
-    const [, call] = rateTarget.mock.calls[0] as [
+    const [, call] = setThumbsDown.mock.calls[0] as [
       unknown,
       { target: { label?: string } },
     ];
-
     expect(call.target.label).toBe("example.com");
   });
 
-  it("refuses a verdict it does not recognise", async () => {
+  it("refuses an action it does not recognise", async () => {
     await signIn();
 
     await expect(
-      rateAction(form({ ...VALID_TARGET, verdict: "excellent" })),
-    ).rejects.toThrow(/verdict/i);
+      thumbsDownAction(form({ ...VALID_TARGET, intent: "erase-everything" })),
+    ).rejects.toThrow(/action/i);
   });
 
-  it("clears a rating when asked to", async () => {
+  it("clears only this article's feedback when asked", async () => {
     await signIn();
-    await rateAction(form({ ...VALID_TARGET, verdict: "clear" }));
+    await thumbsDownAction(form({ ...VALID_TARGET, intent: "clear" }));
 
-    expect(clearRating).toHaveBeenCalled();
-    expect(rateTarget).not.toHaveBeenCalled();
+    expect(clearThumbsDown).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ postUniqueId: "reddit-2" }),
+    );
+    expect(setThumbsDown).not.toHaveBeenCalled();
   });
 
-  it("refuses a rating for a post that no longer exists", async () => {
+  it("refuses feedback for an article that no longer exists", async () => {
     await signIn();
     getPosts.mockResolvedValue({ posts: [] });
 
-    await expect(rateAction(form(VALID_TARGET))).rejects.toThrow(/exists/i);
+    await expect(thumbsDownAction(form(VALID_TARGET))).rejects.toThrow(
+      /exists/i,
+    );
   });
 
-  it("sends the visitor to a safe path, never to another site", async () => {
+  it("returns only to a safe local path", async () => {
     await signIn();
-    await rateAction(form({ ...VALID_TARGET, next: "https://evil.example/" }));
+    await thumbsDownAction(
+      form({ ...VALID_TARGET, next: "https://evil.example/" }),
+    );
 
-    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
+    expect(redirect).toHaveBeenCalledWith("/?managed=1#post-1");
   });
 
-  it("returns to the rated card, keeping the filters and page it came from", async () => {
+  it("returns to the card with filters and pagination intact", async () => {
     await signIn();
-    await rateAction(form({ ...VALID_TARGET, next: "/?q=AI&page=3" }));
+    await thumbsDownAction(
+      form({ ...VALID_TARGET, next: "/?q=AI&page=3" }),
+    );
 
-    expect(redirect).toHaveBeenCalledWith("/?q=AI&page=3&rated=1#post-1");
+    expect(redirect).toHaveBeenCalledWith(
+      "/?q=AI&page=3&managed=1#post-1",
+    );
   });
 
-  it("does not stack up a rated marker over repeated ratings", async () => {
+  it("replaces an old marker instead of stacking them", async () => {
     await signIn();
-    await rateAction(form({ ...VALID_TARGET, next: "/?rated=9#post-9" }));
+    await thumbsDownAction(
+      form({ ...VALID_TARGET, next: "/?managed=9#post-9" }),
+    );
 
-    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
+    expect(redirect).toHaveBeenCalledWith("/?managed=1#post-1");
   });
 
-  it("returns to the card after clearing, not just after rating", async () => {
+  it("returns to the card after clearing too", async () => {
     await signIn();
-    await rateAction(form({ ...VALID_TARGET, verdict: "clear" }));
+    await thumbsDownAction(form({ ...VALID_TARGET, intent: "clear" }));
 
-    expect(redirect).toHaveBeenCalledWith("/?rated=1#post-1");
+    expect(redirect).toHaveBeenCalledWith("/?managed=1#post-1");
   });
 });

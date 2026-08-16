@@ -1,20 +1,19 @@
 import type { PostSummary } from "../models/read-models";
-import { composeTargetKey, type RatingTarget } from "./ratings";
+import { composeTargetKey, type CurationTarget } from "./curation";
 
 /**
- * What the owner may rate about one post.
+ * What the owner may manage from one article.
  *
- * Derived from the post rather than accepted from the browser. The rating
- * action rebuilds this list server-side and refuses anything not in it, so a
- * hand-crafted form cannot invent a target or attach a label of its choosing
- * to someone else's.
+ * Derived from the post rather than accepted from the browser. Every action
+ * rebuilds this list server-side, so a hand-crafted form cannot invent a target
+ * or attach an attacker-chosen label to a real one.
  *
- * Targets with an empty key are skipped. An empty key means the dimension does
- * not exist for that source -- RSS feeds have no author -- or that the origin
- * predates identity capture. Neither is a thing anyone can meaningfully judge.
+ * Empty keys are skipped. They mean that dimension does not exist for the
+ * source -- RSS feeds have no actor -- or that the origin predates identity
+ * capture. Neither is something the owner can act on reliably.
  */
-export function ratingTargetsFor(post: PostSummary): RatingTarget[] {
-  const targets: RatingTarget[] = [
+export function curationTargetsFor(post: PostSummary): CurationTarget[] {
+  const targets: CurationTarget[] = [
     {
       type: "post",
       key: post.uniqueId,
@@ -52,11 +51,10 @@ export function ratingTargetsFor(post: PostSummary): RatingTarget[] {
 }
 
 /**
- * The same domain usually appears on several of a post's URLs, and a link that
- * arrived twice from one subreddit shares its channel. Rating it twice on one
- * card would be two controls for one opinion.
+ * The same domain often appears on several URLs, and one origin can be recorded
+ * more than once. One card must never offer two controls for one decision.
  */
-function dedupe(targets: readonly RatingTarget[]): RatingTarget[] {
+function dedupe(targets: readonly CurationTarget[]): CurationTarget[] {
   const seen = new Set<string>();
 
   return targets.filter((target) => {
@@ -67,7 +65,6 @@ function dedupe(targets: readonly RatingTarget[]): RatingTarget[] {
     }
 
     seen.add(identity);
-
     return true;
   });
 }

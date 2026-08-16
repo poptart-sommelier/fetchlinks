@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { PostPage } from "../models/read-models";
-import { ratingTargetsFor } from "../server/rating-targets";
+import { lookupKey } from "../server/curation";
+import { curationTargetsFor } from "../server/curation-targets";
 import { LatestPostsView, loadLatestPosts } from "./page";
 
 describe("Home", () => {
@@ -165,23 +166,29 @@ describe("Home", () => {
     expect(markup).not.toContain("owner-banner");
   });
 
-  it("shows rating controls only in owner mode, with what is already rated", () => {
+  it("shows Manage only in owner mode, with cumulative feedback", () => {
     const post = createPostPage().posts[0];
-    const targets = ratingTargetsFor(post);
-    const rated = targets.find((target) => target.type === "actor");
+    const targets = curationTargetsFor(post);
+    const marked = targets.find((target) => target.type === "actor");
+    if (!marked) throw new Error("expected an actor target");
     const markup = renderToStaticMarkup(
       <LatestPostsView
         owner={{ isOwner: true, returnPath: "/" }}
-        ratingsByPostId={
+        managementByPostId={
           new Map([
             [
               post.id,
               {
                 targets,
-                verdicts: new Map([
-                  [`${rated?.type}\u001f${rated?.key}`, "noise" as const],
+                thumbsDowns: new Map([
+                  [
+                    lookupKey(marked.type, marked.key),
+                    {
+                      count: 7,
+                      activePostUniqueIds: [post.uniqueId],
+                    },
+                  ],
                 ]),
-                scores: new Map(),
               },
             ],
           ])
@@ -190,17 +197,19 @@ describe("Home", () => {
       />,
     );
 
-    expect(markup).toContain("post-rating");
+    expect(markup).toContain("post-manage");
+    expect(markup).toContain("Manage");
     expect(markup).toContain("r/test");
     expect(markup).toContain("example.com");
-    // The recorded verdict has to be visible without relying on colour alone.
-    expect(markup).toContain('aria-pressed="true" class="rating-noise"');
-    // Clearing is only offered where there is something to clear.
-    expect(markup).toContain("Clear");
+    expect(markup).toContain('title="Distinct articles marked down"');
+    expect(markup).toContain(">👎</span> 7");
+    // Pressed state and text both say this article contributes to the count.
+    expect(markup).toContain('aria-pressed="true" class="manage-thumb"');
+    expect(markup).toContain("Remove thumbs down");
     expect(markup).toContain('value="reddit-2"');
   });
 
-  it("gives every card an anchor so a rating can come back to it", () => {
+  it("gives every card an anchor so Manage can come back to it", () => {
     const post = createPostPage().posts[0];
     const markup = renderToStaticMarkup(
       <LatestPostsView result={createReadyResult()} />,
@@ -209,47 +218,45 @@ describe("Home", () => {
     expect(markup).toContain(`id="post-${post.id}"`);
   });
 
-  it("reopens the panel on the card just rated, and only that one", () => {
+  it("reopens Manage on the card just changed, and only that one", () => {
     const page = createPostPage();
     const [first, second] = page.posts;
-    const ratingsByPostId = new Map(
+    const managementByPostId = new Map(
       page.posts.map((post) => [
         post.id,
         {
-          targets: ratingTargetsFor(post),
-          verdicts: new Map(),
-          scores: new Map(),
+          targets: curationTargetsFor(post),
+          thumbsDowns: new Map(),
         },
       ]),
     );
     const markup = renderToStaticMarkup(
       <LatestPostsView
-        owner={{ isOwner: true, returnPath: "/", ratedPostId: first.id }}
-        ratingsByPostId={ratingsByPostId}
+        owner={{ isOwner: true, returnPath: "/", managedPostId: first.id }}
+        managementByPostId={managementByPostId}
         result={createReadyResult({ page })}
       />,
     );
 
-    expect(markup).toContain('<details class="post-rating" open="">');
+    expect(markup).toContain('<details class="post-manage" open="">');
     // A second card must not be dragged open with it.
     if (second) {
-      expect(markup).toContain('<details class="post-rating">');
+      expect(markup).toContain('<details class="post-manage">');
     }
   });
 
-  it("leaves every panel shut when no rating has just happened", () => {
+  it("leaves every panel shut when no Manage action just happened", () => {
     const page = createPostPage();
     const markup = renderToStaticMarkup(
       <LatestPostsView
         owner={{ isOwner: true, returnPath: "/" }}
-        ratingsByPostId={
+        managementByPostId={
           new Map(
             page.posts.map((post) => [
               post.id,
               {
-                targets: ratingTargetsFor(post),
-                verdicts: new Map(),
-                scores: new Map(),
+                targets: curationTargetsFor(post),
+                thumbsDowns: new Map(),
               },
             ]),
           )
@@ -261,15 +268,15 @@ describe("Home", () => {
     expect(markup).not.toContain("open=");
   });
 
-  it("shows no rating controls to an anonymous visitor", () => {
+  it("shows no management controls to an anonymous visitor", () => {
     const markup = renderToStaticMarkup(
       <LatestPostsView result={createReadyResult()} />,
     );
 
-    expect(markup).not.toContain("post-rating");
-    expect(markup).not.toContain("Noise");
+    expect(markup).not.toContain("post-manage");
+    expect(markup).not.toContain("Thumbs down");
     // Nothing about the owner's judgments may reach a page they did not ask for.
-    expect(markup).not.toContain("rating-target");
+    expect(markup).not.toContain("manage-target");
   });
 
   it("renders an empty state when no posts exist", () => {
