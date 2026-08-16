@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 
+import { composeTargetKey } from "./curation";
 import { getPostCount, getPosts } from "./db";
 import { describePostgres, usePostgres } from "./test-support/postgres";
 
@@ -44,6 +45,57 @@ describePostgres("posts read model", () => {
         );
       }
     }
+  }
+
+  async function addOccurrence(
+    uniqueId: string,
+    {
+      sourceType,
+      channelKey,
+      channelLabel,
+      actorKey,
+      actorLabel,
+      source,
+      directLink,
+    }: {
+      sourceType: string;
+      channelKey: string;
+      channelLabel: string;
+      actorKey: string;
+      actorLabel: string;
+      source: string;
+      directLink: string;
+    },
+  ): Promise<void> {
+    await pg.exec(
+      `INSERT INTO content.post_occurrences
+         (post_id, source_type, channel_key, channel_label, actor_key,
+          actor_label, source, direct_link, posted_at)
+       SELECT post_id, $2, $3, $4, $5, $6, $7, $8, posted_at
+       FROM content.posts
+       WHERE unique_id = $1`,
+      [
+        uniqueId,
+        sourceType,
+        channelKey,
+        channelLabel,
+        actorKey,
+        actorLabel,
+        source,
+        directLink,
+      ],
+    );
+  }
+
+  async function mute(
+    type: "post" | "channel" | "actor" | "domain",
+    key: string,
+  ): Promise<void> {
+    await pg.exec(
+      `INSERT INTO curation.mutes (target_type, target_key, target_label)
+       VALUES ($1, $2, $2)`,
+      [type, key],
+    );
   }
 
   const FOUR_POSTS: SeedPost[] = [
@@ -225,6 +277,168 @@ describePostgres("posts read model", () => {
       ["https://a.example"],
       ["https://b.example"],
     ]);
+  });
+
+  it("hides a muted post publicly but keeps it available to owner mode", async () => {
+    await seed([FOUR_POSTS[0]!]);
+    await mute("post", "rss-1");
+
+    await expect(getPosts(pg.sql)).resolves.toMatchObject({
+      totalPosts: 0,
+      posts: [],
+    });
+    await expect(
+      getPosts(pg.sql, { includeMuted: true }),
+    ).resolves.toMatchObject({
+      totalPosts: 1,
+      posts: [{ uniqueId: "rss-1" }],
+    });
+  });
+
+  it("keeps a post while one origin survives and names that visible origin", async () => {
+    await seed([
+      {
+        uniqueId: "two-origins",
+        source: "https://www.reddit.com/r/muted",
+        sourceType: "reddit",
+        author: "Muted author",
+        description: "Shared article",
+        directLink: "https://reddit.example/muted",
+        postedAt: "2026-01-01T00:00:00Z",
+        urls: ["https://article.example/story"],
+      },
+    ]);
+    await addOccurrence("two-origins", {
+      sourceType: "reddit",
+      channelKey: "muted",
+      channelLabel: "r/muted",
+      actorKey: "muted-author",
+      actorLabel: "Muted author",
+      source: "https://www.reddit.com/r/muted",
+      directLink: "https://reddit.example/muted",
+    });
+    await addOccurrence("two-origins", {
+      sourceType: "mastodon",
+      channelKey: "social.example",
+      channelLabel: "social.example",
+      actorKey: "visible-author",
+      actorLabel: "Visible author",
+      source: "https://social.example/@visible-author",
+      directLink: "https://social.example/@visible-author/1",
+    });
+    await mute("channel", composeTargetKey("reddit", "muted"));
+
+    const publicPage = await getPosts(pg.sql);
+
+    expect(publicPage.totalPosts).toBe(1);
+    expect(publicPage.posts[0]).toMatchObject({
+      sourceType: "mastodon",
+      source: "https://social.example/@visible-author",
+      author: "Visible author",
+      directLink: "https://social.example/@visible-author/1",
+    });
+    expect(publicPage.posts[0]?.occurrences).toHaveLength(1);
+    await expect(
+      getPosts(pg.sql, { source: "https://www.reddit.com/r/muted" }),
+    ).resolves.toMatchObject({ totalPosts: 0 });
+    await expect(
+      getPosts(pg.sql, { author: "Muted author" }),
+    ).resolves.toMatchObject({ totalPosts: 0 });
+    await expect(
+      getPosts(pg.sql, { q: "reddit.example/muted" }),
+    ).resolves.toMatchObject({ totalPosts: 0 });
+    await expect(
+      getPosts(pg.sql, { sourceType: "mastodon" }),
+    ).resolves.toMatchObject({ totalPosts: 1 });
+
+    await mute("actor", composeTargetKey("mastodon", "visible-author"));
+
+    await expect(getPosts(pg.sql)).resolves.toMatchObject({ totalPosts: 0 });
+    await expect(
+      getPosts(pg.sql, { includeMuted: true }),
+    ).resolves.toMatchObject({
+      totalPosts: 1,
+      posts: [{ occurrences: [{}, {}] }],
+    });
+  });
+
+  it("removes muted domains from a card and hides it when no link survives", async () => {
+    await seed([
+      {
+        uniqueId: "two-links",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        postedAt: "2026-01-01T00:00:00Z",
+        urls: ["https://a.example/story", "https://b.example/story"],
+      },
+    ]);
+    await mute("domain", "a.example");
+
+    const publicPage = await getPosts(pg.sql);
+
+    expect(publicPage.totalPosts).toBe(1);
+    expect(publicPage.posts[0]?.urls.map((url) => url.urlHost)).toEqual([
+      "b.example",
+    ]);
+
+    await mute("domain", "b.example");
+
+    await expect(getPosts(pg.sql)).resolves.toMatchObject({ totalPosts: 0 });
+    await expect(
+      getPosts(pg.sql, { includeMuted: true }),
+    ).resolves.toMatchObject({
+      totalPosts: 1,
+      posts: [{ urls: [{}, {}] }],
+    });
+  });
+
+  it("filters mutes before counting and filling a page", async () => {
+    await seed(FOUR_POSTS);
+    await mute("post", "reddit-2");
+    await mute("post", "rss-4");
+
+    const page = await getPosts(pg.sql, { page: 1, pageSize: 2 });
+
+    expect(page).toMatchObject({
+      totalPosts: 2,
+      totalPages: 1,
+      hasNextPage: false,
+    });
+    expect(page.posts.map((post) => post.uniqueId)).toEqual([
+      "bluesky-3",
+      "rss-1",
+    ]);
+  });
+
+  it("does not search text that exists only in a muted link", async () => {
+    await seed([
+      {
+        uniqueId: "search-links",
+        source: "https://example.com/feed",
+        sourceType: "rss",
+        description: "Read muted.example/… and discuss the result",
+        postedAt: "2026-01-01T00:00:00Z",
+        urls: [
+          "https://muted.example/secret-needle",
+          "https://visible.example/story",
+        ],
+      },
+    ]);
+    await mute("domain", "muted.example");
+
+    const publicPage = await getPosts(pg.sql);
+    expect(publicPage.posts[0]?.description).toBe("Read and discuss the result");
+    expect(publicPage.posts[0]?.description).not.toContain("muted.example");
+
+    await expect(getPosts(pg.sql, { q: "muted.example" })).resolves.toMatchObject(
+      { totalPosts: 0 },
+    );
+    await expect(
+      getPosts(pg.sql, { includeMuted: true, q: "muted.example" }),
+    ).resolves.toMatchObject({
+      totalPosts: 1,
+      posts: [{ description: expect.stringContaining("muted.example") }],
+    });
   });
 
   it("filters by source type", async () => {

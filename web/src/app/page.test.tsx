@@ -179,6 +179,7 @@ describe("Home", () => {
             [
               post.id,
               {
+                mutes: new Set([lookupKey(marked.type, marked.key)]),
                 targets,
                 thumbsDowns: new Map([
                   [
@@ -206,6 +207,10 @@ describe("Home", () => {
     // Pressed state and text both say this article contributes to the count.
     expect(markup).toContain('aria-pressed="true" class="manage-thumb"');
     expect(markup).toContain("Remove thumbs down");
+    expect(markup).toContain("Hidden from public.");
+    expect(markup).toContain("account — Grace");
+    expect(markup).toContain('aria-pressed="true" class="manage-mute"');
+    expect(markup).toContain(">Unmute</button>");
     expect(markup).toContain('value="reddit-2"');
   });
 
@@ -225,6 +230,7 @@ describe("Home", () => {
       page.posts.map((post) => [
         post.id,
         {
+          mutes: new Set<string>(),
           targets: curationTargetsFor(post),
           thumbsDowns: new Map(),
         },
@@ -255,6 +261,7 @@ describe("Home", () => {
             page.posts.map((post) => [
               post.id,
               {
+                mutes: new Set<string>(),
                 targets: curationTargetsFor(post),
                 thumbsDowns: new Map(),
               },
@@ -277,6 +284,8 @@ describe("Home", () => {
     expect(markup).not.toContain("Thumbs down");
     // Nothing about the owner's judgments may reach a page they did not ask for.
     expect(markup).not.toContain("manage-target");
+    expect(markup).not.toContain("Hidden from public");
+    expect(markup).not.toContain("Unmute");
   });
 
   it("renders an empty state when no posts exist", () => {
