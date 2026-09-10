@@ -35,6 +35,6 @@
     "eslint-config-next": "^16.2.6",
     "pg": "^8.22.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.11"
   }
 }
