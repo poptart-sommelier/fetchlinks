@@ -44,7 +44,7 @@ that opens a database. Drains queued batches, exports the catalog snapshot the
 Collector reads, applies migrations and enforces retention.
 
 They meet at a versioned on-disk batch contract (`ingest/pipeline/`, schemas in
-`ingest/schemas/`), not at a function call. That buys three things:
+`ingest/pipeline/schemas/`), not at a function call. That buys three things:
 
 - The Pi holds no database credential in the process that contacts several
   hundred untrusted websites. The boundary is enforced by which systemd unit
@@ -158,8 +158,10 @@ or roll back a cursor.
 - Neither runtime role can perform DDL or write outside its own surface. This
   is asserted against a real instance, not assumed.
 - Source credentials are `0600` under `runtime/config/`, never in the repo.
-- `/flightdeck/*` is gated by HTTP Basic with a constant-time compare. If either
-  credential variable is unset the route returns 503 rather than opening.
+- `/flightdeck/*` is gated by HTTP Basic. Equal-length credentials are compared
+  without content-dependent early exits; length mismatches are rejected first.
+  If either credential variable is unset the route returns 503 rather than
+  opening.
 - The admin route is not called `/admin` so that drive-by scanners probing that
   path find nothing. This is noise reduction and not a security control: the
   name is visible in this public repository, and HTTP Basic remains the thing
