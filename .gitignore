@@ -31,6 +31,4 @@ __pycache__/
 *.py[cod]
 links.txt
 REVIEW_PLAN.md
-PLAN.md
-PLAN_DONE.md
 /security_fixes.md
