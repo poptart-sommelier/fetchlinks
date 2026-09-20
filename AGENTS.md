@@ -36,29 +36,23 @@ already said they don't care about. If so, don't.
 Prefer the boring, small solution. Complexity that would pay for itself across a
 team of ten is pure cost here.
 
-## plan.md is the source of truth
+## Planning work
 
-`plan.md` in the repo root holds the numbered architecture decisions and the
-outstanding work. It outranks your own reasoning: where it contradicts what
-seems sensible now, the decision wins until it is explicitly revisited.
+[OVERVIEW.md](OVERVIEW.md) describes the current architecture. `plan.md` and
+`plan_done.md` are optional working documents and may not exist until a piece
+of work needs them. Do not infer decisions from a missing planning file.
 
-It is **gitignored**, so a fresh clone will not have it. If it is missing, say
-so rather than guessing at the decisions it holds.
+Use `plan.md` in the repo root when substantial work benefits from a persistent
+plan. Keep it to outstanding questions, decisions and tasks only; it describes
+work still to be done rather than overriding the architecture or the invariants
+in this file. When work settles an architectural question, update
+[OVERVIEW.md](OVERVIEW.md) or the relevant component documentation.
 
-Write back to it when work settles a question. A decision discovered and not
-recorded is one that gets re-litigated in a month.
-
-**Keep `plan.md` to outstanding work only.** When something is finished, move
-its section out to `plan_done.md` rather than marking it DONE in place. A plan
-that lists mostly finished work stops being readable as a plan, and the answer
-to "what needs doing?" should be visible without scrolling past a year of
-history.
-
-Move the *reasoning*, not a one-line summary. `plan_done.md` exists because the
-why behind a change is not recoverable from the code, and several entries there
-were learned by breaking something first. Consult it before changing anything
-that looks arbitrary — the odds are good it is load-bearing and the note says
-why. Both files are gitignored.
+When a planned section is finished, move it from `plan.md` to `plan_done.md`
+rather than marking it DONE in place. Move the reasoning, not a one-line
+summary: the history is useful when code that looks arbitrary is carrying a
+constraint learned through earlier work. If `plan_done.md` exists, consult it
+before changing such code.
 
 ## Invariants that must not be quietly undone
 
